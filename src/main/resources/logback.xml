@@ -1,0 +1,38 @@
+<configuration>
+    <appender name="STDOUT-INFO" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>INFO</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>{"level":"INFO", "message": "%replace(%m){'[\r\n]+', ' '}", "message-origin": "sdk_destination"}%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="STDOUT-WARN" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>WARN</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>{"level":"WARNING", "message": "%replace(%m){'[\r\n]+', ' '}", "message-origin": "sdk_destination"}%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="STDOUT-SEVERE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>{"level":"SEVERE", "message": "%replace(%m){'[\r\n]+', ' '}", "message-origin": "sdk_destination"}%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="STDOUT-INFO" />
+        <appender-ref ref="STDOUT-WARN" />
+        <appender-ref ref="STDOUT-SEVERE" />
+    </root>
+</configuration>
