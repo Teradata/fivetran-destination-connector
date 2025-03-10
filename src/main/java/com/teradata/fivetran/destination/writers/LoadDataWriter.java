@@ -10,10 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -81,8 +83,22 @@ public class LoadDataWriter<T> extends Writer {
 
                 if (type == DataType.BOOLEAN) {
                     preparedStatement.setBoolean(i + 1, value.equalsIgnoreCase("true"));
-                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME) {
+                } else if (type == DataType.SHORT) {
+                    preparedStatement.setShort(i + 1, Short.parseShort(value));
+                } else if (type == DataType.INT) {
+                    preparedStatement.setInt(i + 1, Integer.parseInt(value));
+                } else if (type == DataType.LONG) {
+                    preparedStatement.setLong(i + 1, Long.parseLong(value));
+                } else if (type == DataType.DECIMAL) {
+                    preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
+                } else if (type == DataType.FLOAT) {
+                    preparedStatement.setFloat(i + 1, Float.parseFloat(value));
+                } else if (type == DataType.DOUBLE) {
+                    preparedStatement.setDouble(i + 1, Double.parseDouble(value));
+                } else if (type == DataType.NAIVE_TIME || type == DataType.NAIVE_DATE || type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME) {
                     preparedStatement.setString(i + 1, TeradataJDBCUtil.formatISODateTime(value));
+                } else if (type == DataType.BINARY) {
+                    preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
                 } else {
                     preparedStatement.setString(i + 1, value);
                 }

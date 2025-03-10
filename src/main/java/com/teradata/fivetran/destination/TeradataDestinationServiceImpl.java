@@ -1,6 +1,7 @@
 package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.warning_util.AlterTableWarningHandler;
+import com.teradata.fivetran.destination.warning_util.DescribeTableWarningHandler;
 import com.teradata.fivetran.destination.warning_util.WriteBatchWarningHandler;
 import com.teradata.fivetran.destination.writers.DeleteWriter;
 import com.teradata.fivetran.destination.writers.LoadDataWriter;
@@ -115,7 +116,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         logMessage(INFO, String.format("Database: %s, Table: %s", database, table));
 
         try {
-            Table t = TeradataJDBCUtil.getTable(conf, database, table, table);
+            Table t = TeradataJDBCUtil.getTable(conf, database, table, table, new DescribeTableWarningHandler(responseObserver));
             logMessage(INFO, String.format("Table metadata: %s", t));
             responseObserver.onNext(DescribeTableResponse.newBuilder().setTable(t).build());
         } catch (TeradataJDBCUtil.TableNotExistException e) {
@@ -157,13 +158,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         responseObserver.onCompleted();
     }
 
+    @Override
     public void alterTable(AlterTableRequest request,
                            StreamObserver<AlterTableResponse> responseObserver) {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
-            conn.setAutoCommit(false); // Start transaction
+
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, new AlterTableWarningHandler(responseObserver));
             // query is null when table is not changed
             if (query != null) {
@@ -176,7 +178,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     }
                 }
             }
-            conn.commit();
+
             responseObserver.onNext(AlterTableResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
@@ -191,6 +193,44 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             .setMessage(e.getMessage()).build())
                     .build());
             responseObserver.onNext(AlterTableResponse.newBuilder()
+                    .setSuccess(false)
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void truncate(TruncateRequest request,
+                         StreamObserver<TruncateResponse> responseObserver) {
+        TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
+        String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
+        String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            if (!TeradataJDBCUtil.checkTableExists(stmt, database, table)) {
+                logger.warn(String.format("Table %s doesn't exist",
+                        TeradataJDBCUtil.escapeTable(database, table)));
+                responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
+                responseObserver.onCompleted();
+                return;
+            }
+
+            String query = TeradataJDBCUtil.generateTruncateTableQuery(conf, request);
+            logger.info(String.format("Executing SQL:\n %s", query));
+            stmt.execute(query);
+
+            responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            logger.warn(String.format("TruncateTable failed for %s",
+                    TeradataJDBCUtil.escapeTable(database, table)), e);
+
+            responseObserver.onNext(TruncateResponse.newBuilder()
+                    .setTask(Task.newBuilder()
+                            .setMessage(e.getMessage()).build())
+                    .build());
+            responseObserver.onNext(TruncateResponse.newBuilder()
                     .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
