@@ -10,13 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -24,14 +23,10 @@ import java.util.stream.Collectors;
 public class LoadDataWriter<T> extends Writer {
     private static final Logger logger = LoggerFactory.getLogger(TeradataJDBCUtil.class);
     private static final int BUFFER_SIZE = 524288;
-
     private List<Column> headerColumns;
-    private PipedOutputStream outputStream;
-    private PipedInputStream inputStream;
-    private Thread t;
-    private final SQLException[] queryException = new SQLException[1];
-    private Statement stmt;
+    private PreparedStatement preparedStatement;
     private final WarningHandler<T> warningHandler;
+    private int currentBatchSize = 0;
 
     /**
      * Constructor for LoadDataWriter.
@@ -51,154 +46,89 @@ public class LoadDataWriter<T> extends Writer {
                           WarningHandler<T> warningHandler) throws IOException {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         this.warningHandler = warningHandler;
-    }
-
-    /**
-     * Generates a temporary column name.
-     *
-     * @param name The original column name.
-     * @return The temporary column name.
-     */
-    private String tmpColumnName(String name) {
-        return String.format("@%s", name);
+        logger.info("LoadDataWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
     }
 
     @Override
-    public void setHeader(List<String> header) throws SQLException, IOException {
-        outputStream = new PipedOutputStream();
-        inputStream = new PipedInputStream(outputStream, BUFFER_SIZE);
+    public void setHeader(List<String> header) throws SQLException {
+        logger.info("Setting header with columns: {}", header);
         headerColumns = new ArrayList<>();
-        queryException[0] = null;
-
-        Map<String, Column> nameToColumn = new HashMap<>();
-        for (Column column : columns) {
-            nameToColumn.put(column.getName(), column);
-        }
+        Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, col -> col));
 
         for (String name : header) {
             headerColumns.add(nameToColumn.get(name));
         }
 
-        List<Column> binaryColumns = headerColumns.stream()
-                .filter(column -> column.getType() == DataType.BINARY).collect(Collectors.toList());
+        String columnNames = headerColumns.stream()
+                .map(Column::getName)
+                .map(TeradataJDBCUtil::escapeIdentifier)
+                .collect(Collectors.joining(", "));
 
-        // TODO: PLAT-6898 add compression
-        String query = String.format(
-                "LOAD DATA LOCAL INFILE '###.tsv' REPLACE INTO TABLE %s (%s) NULL DEFINED BY %s %s",
-                TeradataJDBCUtil.escapeTable(database, table), headerColumns.stream().map(c -> {
-                    String escapedName = TeradataJDBCUtil.escapeIdentifier(c.getName());
-                    if (c.getType() == DataType.BINARY) {
-                        return tmpColumnName(escapedName);
-                    }
-                    return escapedName;
-                }).collect(Collectors.joining(", ")), TeradataJDBCUtil.escapeString(params.getNullString()),
-                binaryColumns.isEmpty() ? "" : "SET " + binaryColumns.stream().map(column -> {
-                    String escapedName = TeradataJDBCUtil.escapeIdentifier(column.getName());
-                    return String.format("%s = FROM_BASE64(%s)", escapedName,
-                            tmpColumnName(escapedName));
-                }).collect(Collectors.joining(", ")));
+        String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
 
-        stmt = conn.createStatement();
-        // ((com.teradata.jdbc.Statement) stmt).setNextLocalInfileInputStream(inputStream);
+        String query = String.format("INSERT INTO %s (%s) VALUES (%s)",
+                TeradataJDBCUtil.escapeTable(database, table), columnNames, placeholders);
 
-        t = new Thread(() -> {
-            try {
-                stmt.executeUpdate(query);
-                stmt.close();
-            } catch (SQLException e) {
-                warningHandler.handle("Failed to execute LOAD DATA query", e);
-                queryException[0] = e;
-            }
-        });
-        t.start();
+        logger.info("Prepared SQL statement: {}", query);
+        preparedStatement = conn.prepareStatement(query);
     }
 
     @Override
     public void writeRow(List<String> row) throws Exception {
+        logger.info("Writing row: {}", row);
         try {
             for (int i = 0; i < row.size(); i++) {
+                DataType type = headerColumns.get(i).getType();
                 String value = row.get(i);
 
-                DataType type = headerColumns.get(i).getType();
                 if (type == DataType.BOOLEAN) {
-                    if (value.equalsIgnoreCase("true")) {
-                        value = "1";
-                    } else if (value.equalsIgnoreCase("false")) {
-                        value = "0";
-                    }
-                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME) {
-                    value = TeradataJDBCUtil.formatISODateTime(value);
-                }
-
-                if (value.indexOf('\\') != -1) {
-                    value = value.replace("\\", "\\\\");
-                }
-                if (value.indexOf('\n') != -1) {
-                    value = value.replace("\n", "\\n");
-                }
-                if (value.indexOf('\t') != -1) {
-                    value = value.replace("\t", "\\t");
-                }
-
-                outputStream.write(value.getBytes());
-
-                if (i != row.size() - 1) {
-                    outputStream.write('\t');
+                    preparedStatement.setBoolean(i + 1, value.equalsIgnoreCase("true"));
+                } else if (type == DataType.SHORT) {
+                    preparedStatement.setShort(i + 1, Short.parseShort(value));
+                } else if (type == DataType.INT) {
+                    preparedStatement.setInt(i + 1, Integer.parseInt(value));
+                } else if (type == DataType.LONG) {
+                    preparedStatement.setLong(i + 1, Long.parseLong(value));
+                } else if (type == DataType.DECIMAL) {
+                    preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
+                } else if (type == DataType.FLOAT) {
+                    preparedStatement.setFloat(i + 1, Float.parseFloat(value));
+                } else if (type == DataType.DOUBLE) {
+                    preparedStatement.setDouble(i + 1, Double.parseDouble(value));
+                } else if (type == DataType.NAIVE_TIME || type == DataType.NAIVE_DATE || type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME) {
+                    preparedStatement.setString(i + 1, TeradataJDBCUtil.formatISODateTime(value));
+                } else if (type == DataType.BINARY) {
+                    preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
                 } else {
-                    outputStream.write('\n');
+                    preparedStatement.setString(i + 1, value);
                 }
             }
+
+            preparedStatement.addBatch();
+            currentBatchSize++;
+            logger.info("Added row to batch. Current batch size: {}", currentBatchSize);
+
+            if (currentBatchSize >= batchSize) {
+                logger.info("Batch size limit reached. Committing batch.");
+                commit();
+            }
         } catch (Exception e) {
-            warningHandler.handle("Failed to write TSV data to stream", e);
-            abort(e);
+            warningHandler.handle("Failed to write row to batch", e);
+            logger.error("Failed to write row to batch", e);
+            throw e;
         }
     }
 
     @Override
-    public void commit() throws InterruptedException, IOException, SQLException {
-        if (t == null) {
-            // nothing is written
-            return;
-        }
-
-        outputStream.close();
-        t.join();
-
-        if (queryException[0] != null) {
-            throw queryException[0];
-        }
-    }
-
-    /**
-     * Aborts the current operation and handles the exception.
-     *
-     * @param writerException The exception that occurred.
-     * @throws Exception If an error occurs during the abort.
-     */
-    private void abort(Exception writerException) throws Exception {
-        try {
-            outputStream.close();
-        } catch (Exception e) {
-            warningHandler.handle("Failed to close the stream during the abort", e);
-        } finally {
-            try {
-                stmt.cancel();
-            } catch (Exception e) {
-                warningHandler.handle("Failed to cancel the statement during the abort", e);
-            } finally {
-                try {
-                    t.interrupt();
-                } catch (Exception e) {
-                    warningHandler.handle("Failed to interrupt the thread during the abort", e);
-                }
-            }
-        }
-
-        if (writerException instanceof IOException && writerException.getMessage().contains("Pipe closed")) {
-            // The actual exception occurred in the query thread
-            throw queryException[0];
+    public void commit() throws SQLException {
+        if (currentBatchSize > 0) {
+            logger.info("Committing batch of size: {}", currentBatchSize);
+            preparedStatement.executeBatch();
+            preparedStatement.clearBatch();
+            currentBatchSize = 0;
+            logger.info("Batch committed successfully.");
         } else {
-            throw writerException;
+            logger.info("No rows to commit.");
         }
     }
 }

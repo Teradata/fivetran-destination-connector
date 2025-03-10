@@ -7,6 +7,7 @@ public class TeradataConfiguration {
     private final String database;
     private final String user;
     private final String password;
+    private final Integer batchSize;
 
     /**
      * Constructs a TeradataConfiguration object using the provided configuration map.
@@ -18,6 +19,7 @@ public class TeradataConfiguration {
         this.database = getOrDefault(conf.get("database"), null);
         this.user = conf.get("user");
         this.password = conf.get("password");
+        this.batchSize = Integer.valueOf(getOrDefault(conf.get("batch.size"), "10000"));
     }
 
     /**
@@ -65,5 +67,9 @@ public class TeradataConfiguration {
      */
     public String password() {
         return password;
+    }
+
+    public Integer batchSize() {
+        return batchSize;
     }
 }

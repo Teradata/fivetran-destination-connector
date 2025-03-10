@@ -1,5 +1,6 @@
 package com.teradata.fivetran.destination;
 
+import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import fivetran_sdk.v2.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.function.Function;
 
 public class TeradataJDBCUtil {
     private static final Logger logger = LoggerFactory.getLogger(TeradataJDBCUtil.class);
@@ -74,7 +76,7 @@ public class TeradataJDBCUtil {
      * @throws ClassNotFoundException If the JDBC driver class is not found.
      * @throws TableNotExistException If the table does not exist.
      */
-    static Table getTable(TeradataConfiguration conf, String database, String table, String originalTableName) throws SQLException, ClassNotFoundException, TableNotExistException {
+    static <T> Table getTable(TeradataConfiguration conf, String database, String table, String originalTableName, WarningHandler<T> warningHandler) throws SQLException, ClassNotFoundException, TableNotExistException {
         try (Connection conn = createConnection(conf)) {
             DatabaseMetaData metadata = conn.getMetaData();
 
@@ -307,7 +309,7 @@ public class TeradataJDBCUtil {
                 }
                 return "DECIMAL";
             case FLOAT:
-                return "FLOAT PRECISION";
+                return "FLOAT";
             case DOUBLE:
                 return "DOUBLE PRECISION";
             case NAIVE_DATE:
@@ -403,6 +405,137 @@ public class TeradataJDBCUtil {
                     break;
             }
         }
+    }
+
+    static private Set<String> pkColumnNames(Table table) {
+        return table.getColumnsList().stream().filter(column -> column.getPrimaryKey())
+                .map(column -> column.getName()).collect(Collectors.toSet());
+    }
+
+    static private boolean pkEquals(Table t1, Table t2) {
+        return pkColumnNames(t1).equals(pkColumnNames(t2));
+    }
+
+    static <T> String generateAlterTableQuery(AlterTableRequest request, WarningHandler<T> warningHandler) throws Exception {
+        TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
+
+        String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
+        String table =
+                TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
+
+        Table oldTable = getTable(conf, database, table, request.getTable().getName(), warningHandler);
+        Table newTable = request.getTable();
+        boolean pkChanged = false;
+
+        if (!pkEquals(oldTable, newTable)) {
+            pkChanged = true;
+        }
+
+        Map<String, Column> oldColumns = oldTable.getColumnsList().stream()
+                .collect(Collectors.toMap(Column::getName, Function.identity()));
+
+        List<Column> columnsToAdd = new ArrayList<>();
+        List<Column> columnsToChange = new ArrayList<>();
+        List<Column> commonColumns = new ArrayList<>();
+
+        for (Column column : newTable.getColumnsList()) {
+            Column oldColumn = oldColumns.get(column.getName());
+            if (oldColumn == null) {
+                columnsToAdd.add(column);
+            } else {
+                commonColumns.add(column);
+                String oldType = mapDataTypes(oldColumn.getType(), oldColumn.getParams());
+                String newType = mapDataTypes(column.getType(), column.getParams());
+                if (!oldType.equals(newType)) {
+                    if (oldColumn.getPrimaryKey()) {
+                        pkChanged = true;
+                        continue;
+                    }
+                    columnsToChange.add(column);
+                }
+            }
+        }
+
+        if (pkChanged) {
+            warningHandler.handle("Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
+
+            return generateRecreateTableQuery(database, table, newTable, commonColumns);
+        } else {
+            return generateAlterTableQuery(database, table, columnsToAdd, columnsToChange);
+        }
+    }
+
+    static String generateRecreateTableQuery(String database, String tableName, Table table,
+                                             List<Column> commonColumns) {
+        String tmpTableName = tableName + "_alter_tmp";
+        String columns = commonColumns.stream().map(column -> escapeIdentifier(column.getName()))
+                .collect(Collectors.joining(", "));
+
+        String createTable = generateCreateTableQuery(database, tmpTableName, table);
+        String insertData = String.format("INSERT INTO %s (%s) SELECT %s FROM %s",
+                escapeTable(database, tmpTableName), columns, columns,
+                escapeTable(database, tableName));
+        String dropTable = String.format("DROP TABLE %s", escapeTable(database, tableName));
+        String renameTable = String.format("RENAME TABLE %s TO %s",
+                escapeTable(database, tmpTableName), escapeTable(database, tableName));
+
+        return String.join("; ", createTable, insertData, dropTable, renameTable);
+    }
+
+    static String generateAlterTableQuery(String database, String table, List<Column> columnsToAdd,
+                                          List<Column> columnsToChange) {
+        if (columnsToAdd.isEmpty() && columnsToChange.isEmpty()) {
+            return null;
+        }
+
+        StringBuilder query = new StringBuilder();
+
+        for (Column column : columnsToChange) {
+            String tmpColName = column.getName() + "_alter_tmp";
+            query.append(String.format("ALTER TABLE %s ADD %s %s; ",
+                    escapeTable(database, table), escapeIdentifier(tmpColName),
+                    mapDataTypes(column.getType(), column.getParams())));
+            query.append(
+                    String.format("UPDATE %s SET %s = %s; ", escapeTable(database, table),
+                            escapeIdentifier(tmpColName), escapeIdentifier(column.getName())));
+            query.append(String.format("ALTER TABLE %s DROP %s; ", escapeTable(database, table),
+                    escapeIdentifier(column.getName())));
+            query.append(String.format("ALTER TABLE %s RENAME %s TO %s; ",
+                    escapeTable(database, table), tmpColName, escapeIdentifier(column.getName())));
+        }
+
+        if (!columnsToAdd.isEmpty()) {
+            List<String> addOperations = new ArrayList<>();
+
+            columnsToAdd.forEach(column -> addOperations
+                    .add(String.format("ADD %s", getColumnDefinition(column))));
+
+            query.append(String.format("ALTER TABLE %s %s; ", escapeTable(database, table),
+                    String.join(", ", addOperations)));
+        }
+
+        return query.toString();
+    }
+
+    static String generateTruncateTableQuery(TeradataConfiguration conf,
+                                             TruncateRequest request) {
+        String query;
+        String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
+        String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
+
+        if (request.hasSoft()) {
+            query = String.format("UPDATE %s SET %s = 1 ", escapeTable(database, table),
+                    escapeIdentifier(request.getSoft().getDeletedColumn()));
+        } else {
+            query = String.format("DELETE FROM %s ", escapeTable(database, table));
+        }
+
+        query += String.format("WHERE %s < TO_TIMESTAMP(CAST('%d.%09d' as BIGINT))",
+                escapeIdentifier(request.getSyncedColumn()),
+                request.getUtcDeleteBefore().getSeconds(), request.getUtcDeleteBefore().getNanos());
+
+
+        return query;
     }
 
     /**
