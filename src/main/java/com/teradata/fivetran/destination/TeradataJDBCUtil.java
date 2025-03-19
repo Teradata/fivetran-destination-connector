@@ -172,7 +172,7 @@ public class TeradataJDBCUtil {
      */
     static DataType mapDataTypes(Integer dataType, String typeName) {
         switch (typeName) {
-            case "BOOLEAN":
+            case "BYTEINT":
                 return DataType.BOOLEAN;
             case "SMALLINT":
                 return DataType.SHORT;
@@ -345,6 +345,25 @@ public class TeradataJDBCUtil {
         return dateTime;
     }
 
+    public static Timestamp getTimestampFromObject(Object object) {
+        Timestamp obj = null;
+        if (object == null)
+            return obj;
+        if (object instanceof java.sql.Timestamp) {
+            obj = (Timestamp) object;
+        } else if (object instanceof String) {
+            obj = Timestamp.valueOf((String) object);
+        }
+        return obj;
+    }
+
+    public static final Object getLongFromTimestamp(Object object) {
+        if (object == null) {
+            return null;
+        } else
+            return (getTimestampFromObject(object)).getTime();
+    }
+
     /**
      * Sets a parameter in a prepared statement.
      *
@@ -391,7 +410,7 @@ public class TeradataJDBCUtil {
 
                 case NAIVE_DATETIME:
                 case UTC_DATETIME:
-                    stmt.setString(id, formatISODateTime(value));
+                    stmt.setTimestamp(id, TeradataJDBCUtil.getTimestampFromObject(formatISODateTime(value)));
                     break;
 
                 case DECIMAL:
@@ -457,7 +476,7 @@ public class TeradataJDBCUtil {
         }
 
         if (pkChanged) {
-            warningHandler.handle("Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
+            logger.info("Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
 
             return generateRecreateTableQuery(database, table, newTable, commonColumns);
         } else {
