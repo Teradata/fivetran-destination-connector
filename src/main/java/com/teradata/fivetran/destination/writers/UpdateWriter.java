@@ -27,7 +27,7 @@ public class UpdateWriter extends Writer {
 
     @Override
     public void setHeader(List<String> header) {
-        logger.info("Setting header with columns: {}", header);
+        //logger.info("Setting header with columns: {}", header);
         Map<String, Column> nameToColumn = new HashMap<>();
         for (Column column : columns) {
             nameToColumn.put(column.getName(), column);
@@ -93,7 +93,7 @@ public class UpdateWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());
-                logger.info("Set parameter at index {}: {}", paramIndex, value);
+                //logger.info("Set parameter at index {}: {}", paramIndex, value);
             }
 
             for (int i = 0; i < row.size(); i++) {
@@ -101,7 +101,8 @@ public class UpdateWriter extends Writer {
                 if (!headerColumns.get(i).getPrimaryKey()) {
                     continue;
                 }
-
+                if (value.equals("+1000000000-12-31T23:59:59.999999999Z"))
+                    value = "9999-12-31T23:59:59.999999999Z";
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());
@@ -118,6 +119,6 @@ public class UpdateWriter extends Writer {
 
     @Override
     public void commit() {
-        logger.info("Commit called, but no action required for UpdateWriter.");
+        //logger.info("Commit called, but no action required for UpdateWriter.");
     }
 }

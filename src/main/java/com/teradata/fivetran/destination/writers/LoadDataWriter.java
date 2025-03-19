@@ -51,7 +51,7 @@ public class LoadDataWriter<T> extends Writer {
 
     @Override
     public void setHeader(List<String> header) throws SQLException {
-        logger.info("Setting header with columns: {}", header);
+        //logger.info("Setting header with columns: {}", header);
         headerColumns = new ArrayList<>();
         Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, col -> col));
 
@@ -95,8 +95,14 @@ public class LoadDataWriter<T> extends Writer {
                     preparedStatement.setFloat(i + 1, Float.parseFloat(value));
                 } else if (type == DataType.DOUBLE) {
                     preparedStatement.setDouble(i + 1, Double.parseDouble(value));
-                } else if (type == DataType.NAIVE_TIME || type == DataType.NAIVE_DATE || type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME) {
-                    preparedStatement.setString(i + 1, TeradataJDBCUtil.formatISODateTime(value));
+                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME && !value.equals(params.getNullString())) {
+                    if (value.equals("+1000000000-12-31T23:59:59.999999999Z")) {
+                        value = "9999-12-31T23:59:59.999999999Z";
+                        //logger.info("Value after conversion: {}", TeradataJDBCUtil.formatISODateTime(value));
+                    } else {
+                        //logger.info("Value without conversion: {}", TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
+                    }
+                    preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                 } else if (type == DataType.BINARY) {
                     preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
                 } else {
@@ -106,10 +112,10 @@ public class LoadDataWriter<T> extends Writer {
 
             preparedStatement.addBatch();
             currentBatchSize++;
-            logger.info("Added row to batch. Current batch size: {}", currentBatchSize);
+            //logger.info("Added row to batch. Current batch size: {}", currentBatchSize);
 
             if (currentBatchSize >= batchSize) {
-                logger.info("Batch size limit reached. Committing batch.");
+                //logger.info("Batch size limit reached. Committing batch.");
                 commit();
             }
         } catch (Exception e) {
@@ -122,13 +128,13 @@ public class LoadDataWriter<T> extends Writer {
     @Override
     public void commit() throws SQLException {
         if (currentBatchSize > 0) {
-            logger.info("Committing batch of size: {}", currentBatchSize);
+            //logger.info("Committing batch of size: {}", currentBatchSize);
             preparedStatement.executeBatch();
             preparedStatement.clearBatch();
             currentBatchSize = 0;
-            logger.info("Batch committed successfully.");
+            //logger.info("Batch committed successfully.");
         } else {
-            logger.info("No rows to commit.");
+            //logger.info("No rows to commit.");
         }
     }
 }
