@@ -216,7 +216,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 return;
             }
 
-            String query = TeradataJDBCUtil.generateTruncateTableQuery(conf, request);
+            String queryNanosToTimestamp = String.format("SELECT TO_TIMESTAMP(CAST('%d' AS BIGINT)) + INTERVAL '0.%06d' SECOND",
+                    request.getUtcDeleteBefore().getSeconds(), request.getUtcDeleteBefore().getNanos());
+            logger.info(String.format("Executing SQL:\n %s", queryNanosToTimestamp));
+            stmt.execute(queryNanosToTimestamp);
+            String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
+
+
+            String query = TeradataJDBCUtil.generateTruncateTableQuery(conf, request, utcDeleteBefore);
             logger.info(String.format("Executing SQL:\n %s", query));
             stmt.execute(query);
 

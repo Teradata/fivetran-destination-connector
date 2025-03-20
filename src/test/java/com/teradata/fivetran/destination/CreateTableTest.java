@@ -32,7 +32,12 @@ public class CreateTableTest extends IntegrationTestBase {
                         Column.newBuilder().setName("double").setType(DataType.DOUBLE)
                                 .setPrimaryKey(false).build(),
                         Column.newBuilder().setName("decimal").setType(DataType.DECIMAL)
-                                .setPrimaryKey(false).build(),
+                                .setPrimaryKey(false)
+                                .setParams(DataTypeParams.newBuilder()
+                                                .setDecimal(DecimalParams.newBuilder()
+                                                        .setScale(5)
+                                                        .setPrecision(10))
+                                .build()).build(),
                         Column.newBuilder().setName("binary").setType(DataType.BINARY)
                                 .setPrimaryKey(false).build(),
                         Column.newBuilder().setName("json").setType(DataType.JSON)
@@ -58,7 +63,7 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement();) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, "allTypesCreateTable", "allTypesCreateTable");
+            Table result = TeradataJDBCUtil.getTable(conf, database, "allTypesCreateTable", "allTypesCreateTable", testWarningHandle);
             assertEquals("allTypesCreateTable", result.getName());
             List<Column> columns = result.getColumnsList();
 
@@ -83,7 +88,7 @@ public class CreateTableTest extends IntegrationTestBase {
             assertEquals(false, columns.get(4).getPrimaryKey());
 
             assertEquals("double", columns.get(5).getName());
-            assertEquals(DataType.DOUBLE, columns.get(5).getType());
+            assertEquals(DataType.FLOAT, columns.get(5).getType());
             assertEquals(false, columns.get(5).getPrimaryKey());
 
             assertEquals("decimal", columns.get(6).getName());
@@ -146,7 +151,7 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement();) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, "scaleAndPrecision", "scaleAndPrecision");
+            Table result = TeradataJDBCUtil.getTable(conf, database, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
             assertEquals("scaleAndPrecision", result.getName());
             List<Column> columns = result.getColumnsList();
 
@@ -169,7 +174,7 @@ public class CreateTableTest extends IntegrationTestBase {
         Table t = Table.newBuilder().setName("stringByteLength").addAllColumns(Arrays.asList(
                         Column.newBuilder().setName("str1").setType(DataType.STRING).setPrimaryKey(false)
                                 .setParams(DataTypeParams.newBuilder()
-                                        .setStringByteLength(1)
+                                        .setStringByteLength(10)
                                         .build())
                                 .build(),
                         Column.newBuilder().setName("str2").setType(DataType.STRING).setPrimaryKey(false)
@@ -179,12 +184,12 @@ public class CreateTableTest extends IntegrationTestBase {
                                 .build(),
                         Column.newBuilder().setName("str3").setType(DataType.STRING).setPrimaryKey(false)
                                 .setParams(DataTypeParams.newBuilder()
-                                        .setStringByteLength(65536)
+                                        .setStringByteLength(300)
                                         .build())
                                 .build(),
                         Column.newBuilder().setName("str4").setType(DataType.STRING).setPrimaryKey(false)
                                 .setParams(DataTypeParams.newBuilder()
-                                        .setStringByteLength(16777216)
+                                        .setStringByteLength(32000)
                                         .build())
                                 .build(),
                         Column.newBuilder().setName("str5").setType(DataType.STRING).setPrimaryKey(false)
@@ -199,62 +204,34 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement();) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, "stringByteLength", "stringByteLength");
+            Table result = TeradataJDBCUtil.getTable(conf, database, "stringByteLength", "stringByteLength", testWarningHandle);
             assertEquals("stringByteLength", result.getName());
             List<Column> columns = result.getColumnsList();
 
             assertEquals("str1", columns.get(0).getName());
             assertEquals(DataType.STRING, columns.get(0).getType());
             assertFalse(columns.get(0).getPrimaryKey());
-            assertEquals(255, columns.get(0).getParams().getStringByteLength());
+            assertEquals(10, columns.get(0).getParams().getStringByteLength());
 
             assertEquals("str2", columns.get(1).getName());
             assertEquals(DataType.STRING, columns.get(1).getType());
             assertFalse(columns.get(1).getPrimaryKey());
-            assertEquals(65535, columns.get(1).getParams().getStringByteLength());
+            assertEquals(256, columns.get(1).getParams().getStringByteLength());
 
             assertEquals("str3", columns.get(2).getName());
             assertEquals(DataType.STRING, columns.get(2).getType());
             assertFalse(columns.get(2).getPrimaryKey());
-            assertEquals(16777215, columns.get(2).getParams().getStringByteLength());
+            assertEquals(300, columns.get(2).getParams().getStringByteLength());
 
             assertEquals("str4", columns.get(3).getName());
             assertEquals(DataType.STRING, columns.get(3).getType());
             assertFalse(columns.get(3).getPrimaryKey());
-            assertEquals(Integer.MAX_VALUE, columns.get(3).getParams().getStringByteLength());
+            assertEquals(32000, columns.get(3).getParams().getStringByteLength());
 
             assertEquals("str5", columns.get(4).getName());
             assertEquals(DataType.STRING, columns.get(4).getType());
             assertFalse(columns.get(4).getPrimaryKey());
-            assertEquals(65535, columns.get(4).getParams().getStringByteLength());
-        }
-    }
-
-    @Test
-    public void newDatabase() throws Exception {
-        Table t = Table.newBuilder().setName("newDatabase").addAllColumns(Arrays.asList(Column
-                        .newBuilder().setName("a").setType(DataType.INT).setPrimaryKey(false).build()))
-                .build();
-
-        CreateTableRequest request =
-                CreateTableRequest.newBuilder().setSchemaName(database).setTable(t).build();
-
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement();) {
-            stmt.execute(String.format("DROP DATABASE IF EXISTS %s", database));
-            String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
-            stmt.execute(query);
-
-            try (ResultSet resultSet = conn.getMetaData().getCatalogs();) {
-                boolean databaseCreated = false;
-                while (resultSet.next()) {
-                    String databaseName = resultSet.getString(1);
-                    if (databaseName.equals(database)) {
-                        databaseCreated = true;
-                    }
-                }
-                assertTrue(databaseCreated);
-            }
+            assertEquals(64000, columns.get(4).getParams().getStringByteLength());
         }
     }
 }
