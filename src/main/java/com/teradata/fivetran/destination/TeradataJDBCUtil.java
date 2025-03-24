@@ -76,91 +76,55 @@ public class TeradataJDBCUtil {
      * @throws ClassNotFoundException If the JDBC driver class is not found.
      * @throws TableNotExistException If the table does not exist.
      */
-    static <T> Table getTable(TeradataConfiguration conf, String database, String table, String originalTableName, WarningHandler<T> warningHandler) throws SQLException, ClassNotFoundException, TableNotExistException {
-        try (Connection conn = createConnection(conf)) {
+    static <T> Table getTable(TeradataConfiguration conf, String database, String table,
+                              String originalTableName, WarningHandler<T> warningHandler) throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             DatabaseMetaData metadata = conn.getMetaData();
 
-            if (!tableExists(metadata, database, table)) {
-                throw new TableNotExistException();
+            try (ResultSet tables = metadata.getTables(null, database, table, null)) {
+                if (!tables.next()) {
+                    throw new TableNotExistException();
+                }
+                if (tables.next()) {
+                    warningHandler.handle(String.format("Found several tables that match %s name",
+                            TeradataJDBCUtil.escapeTable(database, table)));
+                }
             }
 
-            Set<String> primaryKeys = getPrimaryKeys(metadata, database, table);
-            List<Column> columns = getColumns(metadata, database, table, primaryKeys);
+            Set<String> primaryKeys = new HashSet<>();
+            try (ResultSet primaryKeysRS = metadata.getPrimaryKeys(database, null, table)) {
+                while (primaryKeysRS.next()) {
+                    primaryKeys.add(primaryKeysRS.getString("COLUMN_NAME"));
+                }
+            }
+
+            List<Column> columns = new ArrayList<>();
+            try (ResultSet columnsRS = metadata.getColumns(null, database, table, null)) {
+                while (columnsRS.next()) {
+                    Column.Builder c = Column.newBuilder()
+                            .setName(columnsRS.getString("COLUMN_NAME"))
+                            .setType(TeradataJDBCUtil.mapDataTypes(columnsRS.getInt("DATA_TYPE"),
+                                    columnsRS.getString("TYPE_NAME")))
+                            .setPrimaryKey(
+                                    primaryKeys.contains(columnsRS.getString("COLUMN_NAME")));
+                    if (c.getType() == DataType.DECIMAL) {
+                        c.setParams(DataTypeParams.newBuilder()
+                                .setDecimal(DecimalParams.newBuilder()
+                                        .setScale(columnsRS.getInt("DECIMAL_DIGITS"))
+                                        .setPrecision(columnsRS.getInt("COLUMN_SIZE")).build())
+                                .build());
+                    }
+                    if (c.getType() == DataType.STRING) {
+                        c.setParams(DataTypeParams.newBuilder()
+                                .setStringByteLength(columnsRS.getInt("CHAR_OCTET_LENGTH"))
+                                .build());
+                    }
+                    columns.add(c.build());
+                }
+            }
 
             return Table.newBuilder().setName(originalTableName).addAllColumns(columns).build();
         }
-    }
-
-    /**
-     * Checks if a table exists in the database metadata.
-     *
-     * @param metadata The database metadata.
-     * @param database The database name.
-     * @param table The table name.
-     * @return True if the table exists, false otherwise.
-     * @throws SQLException If a database access error occurs.
-     */
-    private static boolean tableExists(DatabaseMetaData metadata, String database, String table) throws SQLException {
-        try (ResultSet tables = metadata.getTables(database, null, table, null)) {
-            if (!tables.next()) {
-                return false;
-            }
-            if (tables.next()) {
-                logger.warn(String.format("Found several tables that match %s name", escapeTable(database, table)));
-            }
-            return true;
-        }
-    }
-
-    /**
-     * Retrieves the primary keys of a table.
-     *
-     * @param metadata The database metadata.
-     * @param database The database name.
-     * @param table The table name.
-     * @return A set of primary key column names.
-     * @throws SQLException If a database access error occurs.
-     */
-    private static Set<String> getPrimaryKeys(DatabaseMetaData metadata, String database, String table) throws SQLException {
-        Set<String> primaryKeys = new HashSet<>();
-        try (ResultSet primaryKeysRS = metadata.getPrimaryKeys(database, null, table)) {
-            while (primaryKeysRS.next()) {
-                primaryKeys.add(primaryKeysRS.getString("COLUMN_NAME"));
-            }
-        }
-        return primaryKeys;
-    }
-
-    /**
-     * Retrieves the columns of a table.
-     *
-     * @param metadata The database metadata.
-     * @param database The database name.
-     * @param table The table name.
-     * @param primaryKeys The set of primary key column names.
-     * @return A list of columns.
-     * @throws SQLException If a database access error occurs.
-     */
-    private static List<Column> getColumns(DatabaseMetaData metadata, String database, String table, Set<String> primaryKeys) throws SQLException {
-        List<Column> columns = new ArrayList<>();
-        try (ResultSet columnsRS = metadata.getColumns(database, null, table, null)) {
-            while (columnsRS.next()) {
-                Column.Builder c = Column.newBuilder()
-                        .setName(columnsRS.getString("COLUMN_NAME"))
-                        .setType(mapDataTypes(columnsRS.getInt("DATA_TYPE"), columnsRS.getString("TYPE_NAME")))
-                        .setPrimaryKey(primaryKeys.contains(columnsRS.getString("COLUMN_NAME")));
-                if (c.getType() == DataType.DECIMAL) {
-                    c.setParams(DataTypeParams.newBuilder()
-                            .setDecimal(DecimalParams.newBuilder()
-                                    .setScale(columnsRS.getInt("DECIMAL_DIGITS"))
-                                    .setPrecision(columnsRS.getInt("COLUMN_SIZE"))
-                                    .build())
-                            .build());
-                }
-                columns.add(c.build());
-            }
-        }
-        return columns;
     }
 
     /**
@@ -177,14 +141,14 @@ public class TeradataJDBCUtil {
             case "SMALLINT":
                 return DataType.SHORT;
             case "MEDIUMINT":
-            case "INT":
+            case "INTEGER":
                 return DataType.INT;
             case "BIGINT":
                 return DataType.LONG;
             case "FLOAT":
                 return DataType.FLOAT;
-            case "DOUBLE":
-                return DataType.DOUBLE;
+            case "DOUBLE PRECISION":
+                return DataType.FLOAT;
             case "DECIMAL":
                 return DataType.DECIMAL;
             case "DATE":
@@ -213,6 +177,8 @@ public class TeradataJDBCUtil {
                 return DataType.STRING;
             case "JSON":
                 return DataType.JSON;
+            case "XML":
+                return DataType.XML;
             default:
                 return DataType.UNSPECIFIED;
         }
@@ -315,16 +281,22 @@ public class TeradataJDBCUtil {
             case NAIVE_DATE:
                 return "DATE";
             case NAIVE_DATETIME:
+            case NAIVE_TIME:
             case UTC_DATETIME:
                 return "TIMESTAMP(6)";
             case BINARY:
                 return "BLOB";
             case JSON:
                 return "JSON";
-            case UNSPECIFIED:
             case XML:
+                return "XML";
+            case UNSPECIFIED:
             case STRING:
             default:
+                if (params != null && params.getStringByteLength() != 0) {
+                    int stringByteLength = params.getStringByteLength();
+                    return "VARCHAR(" + stringByteLength + ")";
+                }
                 return "VARCHAR(64000)";
         }
     }
@@ -382,9 +354,9 @@ public class TeradataJDBCUtil {
             switch (type) {
                 case BOOLEAN:
                     if (value.equalsIgnoreCase("true")) {
-                        stmt.setBoolean(id, true);
+                        stmt.setShort(id, Short.parseShort("1"));
                     } else if (value.equalsIgnoreCase("false")) {
-                        stmt.setBoolean(id, false);
+                        stmt.setShort(id, Short.parseShort("0"));
                     } else {
                         stmt.setShort(id, Short.parseShort(value));
                     }
@@ -537,7 +509,7 @@ public class TeradataJDBCUtil {
     }
 
     static String generateTruncateTableQuery(TeradataConfiguration conf,
-                                             TruncateRequest request) {
+                                             TruncateRequest request, String utcDeleteBefore) {
         String query;
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -549,9 +521,9 @@ public class TeradataJDBCUtil {
             query = String.format("DELETE FROM %s ", escapeTable(database, table));
         }
 
-        query += String.format("WHERE %s < TO_TIMESTAMP(CAST('%d.%09d' as BIGINT))",
-                escapeIdentifier(request.getSyncedColumn()),
-                request.getUtcDeleteBefore().getSeconds(), request.getUtcDeleteBefore().getNanos());
+      query += String.format("WHERE %s < TO_TIMESTAMP('%s')",
+          escapeIdentifier(request.getSyncedColumn()),
+          utcDeleteBefore);
 
 
         return query;
@@ -586,6 +558,13 @@ public class TeradataJDBCUtil {
      */
     public static String escapeTable(String database, String table) {
         return escapeIdentifier(database) + "." + escapeIdentifier(table);
+    }
+
+    public static String getSingleValue(ResultSet resultSet) throws SQLException {
+        if (resultSet.next()) {
+            return resultSet.getString(1);
+        }
+        return null;
     }
 
     /**

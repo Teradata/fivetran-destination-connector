@@ -24,6 +24,7 @@ public class TeradataDestination {
                 .addService(new TeradataDestinationServiceImpl())
                 .build();
 
+        // Start the server
         server.start();
         System.out.println("Destination gRPC server started");
 

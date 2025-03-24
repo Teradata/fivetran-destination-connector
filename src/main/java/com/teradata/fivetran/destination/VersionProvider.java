@@ -5,8 +5,10 @@ import java.util.Properties;
 
 public class VersionProvider {
 
+    // Static variable to hold the version string
     private static final String VERSION;
 
+    // Static block to initialize the VERSION variable
     static {
         VERSION = loadVersion();
     }
@@ -20,7 +22,9 @@ public class VersionProvider {
         String versionProperty = "unknown";
         try {
             Properties props = new Properties();
+            // Load the properties file from the classpath
             props.load(VersionProvider.class.getResourceAsStream("/version.properties"));
+            // Retrieve the version property, defaulting to "unknown" if not found
             versionProperty = props.getProperty("version", versionProperty).trim();
         } catch (IOException ex) {
             // Log the exception if needed

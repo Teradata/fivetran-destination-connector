@@ -69,6 +69,11 @@ public class TeradataConfiguration {
         return password;
     }
 
+    /**
+     * Returns the batch size.
+     *
+     * @return The batch size.
+     */
     public Integer batchSize() {
         return batchSize;
     }
