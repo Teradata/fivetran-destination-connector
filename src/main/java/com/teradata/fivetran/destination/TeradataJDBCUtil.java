@@ -35,7 +35,7 @@ public class TeradataJDBCUtil {
             }
         }
 
-        connectionProps.put("TMODE", conf.TMODE());
+        connectionProps.put("tmode", conf.tmode());
 
         connectionProps.put("sslMode", conf.sslMode());
         logger.info(String.format("SSLMODE:--- %s", conf.sslMode()));

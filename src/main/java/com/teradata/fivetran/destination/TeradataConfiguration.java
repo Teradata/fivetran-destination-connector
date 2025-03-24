@@ -8,7 +8,7 @@ public class TeradataConfiguration {
     private final String database;
     private final String user;
     private final String password;
-    private final String TMODE;
+    private final String tmode;
     private final String sslMode;
     private final String sslServerCert;
     private final String driverParameters;
@@ -26,7 +26,7 @@ public class TeradataConfiguration {
         this.logmech = conf.get("logmech");
         this.user = conf.get("user");
         this.password = conf.get("password");
-        this.TMODE = conf.get("TMODE");
+        this.tmode = conf.get("tmode");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
         this.driverParameters = getOrDefault(conf.get("driver.parameters"), null);
@@ -85,7 +85,7 @@ public class TeradataConfiguration {
         return password;
     }
 
-    public String TMODE() { return TMODE; }
+    public String tmode() { return tmode; }
 
     public String sslMode() {
         return sslMode;
