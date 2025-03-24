@@ -99,6 +99,11 @@ public class TeradataConfiguration {
         return driverParameters;
     }
 
+    /**
+     * Returns the batch size.
+     *
+     * @return The batch size.
+    */
     public Integer batchSize() {
         return batchSize;
     }
