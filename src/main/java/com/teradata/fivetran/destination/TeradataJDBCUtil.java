@@ -97,6 +97,7 @@ public class TeradataJDBCUtil {
         File tempFile = File.createTempFile("sslCert", ".pem");
         tempFile.deleteOnExit();
         try (FileWriter writer = new FileWriter(tempFile)) {
+            sslCert = sslCert.replace("\\n", "\n" );
             writer.write(sslCert);
         }
         return new String[]{tempFile.getParent(), tempFile.getAbsolutePath()};
