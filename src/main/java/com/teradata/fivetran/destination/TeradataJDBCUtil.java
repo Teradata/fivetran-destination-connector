@@ -177,6 +177,8 @@ public class TeradataJDBCUtil {
                 return DataType.STRING;
             case "JSON":
                 return DataType.JSON;
+            case "XML":
+                return DataType.XML;
             default:
                 return DataType.UNSPECIFIED;
         }
@@ -279,14 +281,16 @@ public class TeradataJDBCUtil {
             case NAIVE_DATE:
                 return "DATE";
             case NAIVE_DATETIME:
+            case NAIVE_TIME:
             case UTC_DATETIME:
                 return "TIMESTAMP(6)";
             case BINARY:
                 return "BLOB";
             case JSON:
                 return "JSON";
-            case UNSPECIFIED:
             case XML:
+                return "XML";
+            case UNSPECIFIED:
             case STRING:
             default:
                 if (params != null && params.getStringByteLength() != 0) {
@@ -350,9 +354,9 @@ public class TeradataJDBCUtil {
             switch (type) {
                 case BOOLEAN:
                     if (value.equalsIgnoreCase("true")) {
-                        stmt.setBoolean(id, true);
+                        stmt.setShort(id, Short.parseShort("1"));
                     } else if (value.equalsIgnoreCase("false")) {
-                        stmt.setBoolean(id, false);
+                        stmt.setShort(id, Short.parseShort("0"));
                     } else {
                         stmt.setShort(id, Short.parseShort(value));
                     }

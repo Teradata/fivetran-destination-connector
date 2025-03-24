@@ -16,12 +16,21 @@ import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Implementation of the gRPC service for Teradata destination connector.
+ */
 public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.DestinationConnectorImplBase {
     private static final Logger logger = LoggerFactory.getLogger(TeradataDestinationServiceImpl.class);
     private static final String INFO = "INFO";
     private static final String WARNING = "WARNING";
     private static final String SEVERE = "SEVERE";
 
+    /**
+     * Handles the configuration form request.
+     *
+     * @param request The configuration form request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void configurationForm(ConfigurationFormRequest request, StreamObserver<ConfigurationFormResponse> responseObserver) {
         logMessage(INFO, "Fetching configuration form");
@@ -90,6 +99,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
     }
 
+    /**
+     * Handles the test request.
+     *
+     * @param request The test request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void test(TestRequest request, StreamObserver<TestResponse> responseObserver) {
         String testName = request.getName();
@@ -107,6 +122,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         }
     }
 
+    /**
+     * Handles the describe table request.
+     *
+     * @param request The describe table request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void describeTable(DescribeTableRequest request, StreamObserver<DescribeTableResponse> responseObserver) {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
@@ -131,6 +152,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         responseObserver.onCompleted();
     }
 
+    /**
+     * Handles the create table request.
+     *
+     * @param request The create table request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void createTable(CreateTableRequest request, StreamObserver<CreateTableResponse> responseObserver) {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
@@ -158,6 +185,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         responseObserver.onCompleted();
     }
 
+    /**
+     * Handles the alter table request.
+     *
+     * @param request The alter table request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void alterTable(AlterTableRequest request,
                            StreamObserver<AlterTableResponse> responseObserver) {
@@ -199,6 +232,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         }
     }
 
+    /**
+     * Handles the truncate table request.
+     *
+     * @param request The truncate table request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void truncate(TruncateRequest request,
                          StreamObserver<TruncateResponse> responseObserver) {
@@ -244,6 +283,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         }
     }
 
+    /**
+     * Handles the write batch request.
+     *
+     * @param request The write batch request.
+     * @param responseObserver The response observer to send the response.
+     */
     @Override
     public void writeBatch(WriteBatchRequest request,
                            StreamObserver<WriteBatchResponse> responseObserver) {
