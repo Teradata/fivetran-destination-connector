@@ -22,10 +22,12 @@ public class IntegrationTestBase {
     static String user = System.getenv("TERADATA_USER");
     static String password = System.getenv("TERADATA_PASSWORD");
     static String database = System.getenv("TERADATA_DATABASE");
+    static String logmech = System.getenv("TERADATA_LOGMECH");
+    static String tmode = System.getenv("TERADATA_TMODE");
 
     // Immutable map to hold the configuration
     static ImmutableMap<String, String> confMap =
-            ImmutableMap.of("host", host, "user", user, "password", password, "database", database);
+            ImmutableMap.of("host", host, "user", user, "password", password, "database", database, "logmech", logmech, "tmode", tmode);
     static TeradataConfiguration conf = new TeradataConfiguration(confMap);
 
     // List of all column names for the allTypesTable

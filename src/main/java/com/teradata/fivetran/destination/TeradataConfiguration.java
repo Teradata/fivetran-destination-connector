@@ -4,10 +4,16 @@ import java.util.Map;
 
 public class TeradataConfiguration {
     private final String host;
+    private final String logmech;
     private final String database;
     private final String user;
     private final String password;
+    private final String tmode;
+    private final String sslMode;
+    private final String sslServerCert;
+    private final String driverParameters;
     private final Integer batchSize;
+    private final String queryBand;
 
     /**
      * Constructs a TeradataConfiguration object using the provided configuration map.
@@ -17,9 +23,15 @@ public class TeradataConfiguration {
     public TeradataConfiguration(Map<String, String> conf) {
         this.host = conf.get("host");
         this.database = getOrDefault(conf.get("database"), null);
+        this.logmech = conf.get("logmech");
         this.user = conf.get("user");
         this.password = conf.get("password");
+        this.tmode = conf.get("tmode");
+        this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
+        this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
+        this.driverParameters = getOrDefault(conf.get("driver.parameters"), null);
         this.batchSize = Integer.valueOf(getOrDefault(conf.get("batch.size"), "10000"));
+        this.queryBand = getOrDefault(conf.get("query.band"), "org=teradata-internal-telem;appname=fivetran;");
     }
 
     /**
@@ -40,6 +52,10 @@ public class TeradataConfiguration {
      */
     public String host() {
         return host;
+    }
+
+    public String logmech() {
+        return logmech;
     }
 
     /**
@@ -69,12 +85,28 @@ public class TeradataConfiguration {
         return password;
     }
 
+    public String tmode() { return tmode; }
+
+    public String sslMode() {
+        return sslMode;
+    }
+
+    public String sslServerCert() {
+        return sslServerCert;
+    }
+
+    public String driverParameters() {
+        return driverParameters;
+    }
+
     /**
      * Returns the batch size.
      *
      * @return The batch size.
-     */
+    */
     public Integer batchSize() {
         return batchSize;
     }
+
+    public String queryBand(){ return queryBand; }
 }
