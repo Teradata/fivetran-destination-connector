@@ -5,6 +5,9 @@ import fivetran_sdk.v2.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -21,17 +24,135 @@ public class TeradataJDBCUtil {
      * @throws SQLException If a database access error occurs.
      * @throws ClassNotFoundException If the JDBC driver class is not found.
      */
-    static Connection createConnection(TeradataConfiguration conf) throws SQLException, ClassNotFoundException {
+    static Connection createConnection(TeradataConfiguration conf) throws Exception {
         Properties connectionProps = new Properties();
-        connectionProps.put("user", conf.user());
-        if (conf.password() != null) {
-            connectionProps.put("password", conf.password());
+
+        connectionProps.put("logmech", conf.logmech());
+        if (!conf.logmech().equals("BROWSER")) {
+            connectionProps.put("user", conf.user());
+            if (conf.password() != null) {
+                connectionProps.put("password", conf.password());
+            }
         }
+
+        connectionProps.put("TMODE", conf.TMODE());
+
+        connectionProps.put("sslMode", conf.sslMode());
+        logger.info(String.format("SSLMODE:--- %s", conf.sslMode()));
+        if (!conf.sslMode().equals("DISABLE")) {
+            String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
+            connectionProps.put("sslcapath", sslCertPaths[0]);
+            connectionProps.put("sslca", sslCertPaths[1]);
+            logger.info(String.format("SSLCAPATH:--- %s", sslCertPaths[0]));
+            logger.info(String.format("SSLCA: --- %s", sslCertPaths[1]));
+        }
+
+        String driverParameters = conf.driverParameters();
+        if (driverParameters != null) {
+            for (String parameter : driverParameters.split(",")) {
+                String[] keyValue = parameter.split("=");
+                if (keyValue.length != 2) {
+                    throw new Exception("Invalid value of `driverParameters` configuration");
+                }
+                putIfNotEmpty(connectionProps, keyValue[0], keyValue[1]);
+            }
+        }
+
+        String queryBandText = handleQueryBand(conf.queryBand());
 
         String url = String.format("jdbc:teradata://%s", conf.host());
         Class.forName("com.teradata.jdbc.TeraDriver");
-        return DriverManager.getConnection(url, connectionProps);
+        Connection conn = DriverManager.getConnection(url, connectionProps);
+        Statement stmt = conn.createStatement();
+
+        try{
+            stmt.execute(String.format("SET QUERY_BAND = '%s' FOR SESSION;", queryBandText));
+        } catch (SQLException e) {
+            logger.warn("Failed to set query band, please check the format for setting query band", e);
+        }
+
+        return conn;
     }
+
+    /**
+     * Puts a key-value pair in a properties object if the key and value are not empty.
+     *
+     * @param props The properties object.
+     * @param key The key.
+     * @param value The value.
+     */
+    private static void putIfNotEmpty(Properties props, String key, String value) {
+        if (key != null && !key.trim().isEmpty() && value != null && !value.trim().isEmpty()) {
+            props.put(key.trim(), value.trim());
+        }
+    }
+
+    /**
+     *
+     * @param sslCert: The SSL certificate as raw String
+     * @return the array of string with ssl certificate file's paths
+     * @throws IOException
+     */
+    private static String[] writeSslCertToFile(String sslCert) throws IOException {
+        File tempFile = File.createTempFile("sslCert", ".pem");
+        tempFile.deleteOnExit();
+        try (FileWriter writer = new FileWriter(tempFile)) {
+            sslCert = sslCert.replace("\\n", "\n" );
+            writer.write(sslCert);
+        }
+        return new String[]{tempFile.getParent(), tempFile.getAbsolutePath()};
+    }
+
+    /**
+     * Handles and validates the user-defined query band text.
+     *
+     * @return The validated query band text, ensuring required parameters are presented in required
+     * format.
+     */
+    private static String handleQueryBand(String queryBand) {
+        // Split the queryBand into key-value pairs
+        String[] pairs = queryBand.split(";");
+        Map<String, String> queryBandMap = new HashMap<>();
+
+        // Populate the map with key-value pairs
+        for (String pair : pairs) {
+            if (!pair.trim().isEmpty()) {
+                String[] keyValue = pair.split("=");
+                if (keyValue.length == 2) {
+                    queryBandMap.put(keyValue[0].trim(), keyValue[1].trim());
+                }
+            }
+        }
+
+        // Check if "org" key exists, if not add it
+        if (!queryBandMap.containsKey("org")) {
+            queryBandMap.put("org", "teradata-internal-telem;");
+        }
+
+        // Check if "appname" key exists
+        if (queryBandMap.containsKey("appname")) {
+            // Check if "airflow" exists in the value of "appname" key
+            String appnameValue = queryBandMap.get("appname").toLowerCase();
+            if (!appnameValue.contains("fivetran")) {
+                queryBandMap.put("appname", queryBandMap.get("appname") + "_fivetran;");
+            }
+        } else {
+            // Add "appname=fivetran;" if "appname" key does not exist
+            queryBandMap.put("appname", "fivetran;");
+        }
+
+        // Reconstruct the queryBand string from the map
+        StringBuilder updatedQueryBand = new StringBuilder();
+        for (Map.Entry<String, String> entry : queryBandMap.entrySet()) {
+            updatedQueryBand.append(entry.getKey()).append("=").append(entry.getValue());
+            if (!entry.getValue().endsWith(";")) {
+                updatedQueryBand.append(";");
+            }
+        }
+
+        return updatedQueryBand.toString();
+    }
+
 
     /**
      * Checks if a table exists in the specified database.
@@ -124,6 +245,8 @@ public class TeradataJDBCUtil {
             }
 
             return Table.newBuilder().setName(originalTableName).addAllColumns(columns).build();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
