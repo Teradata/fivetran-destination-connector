@@ -16,6 +16,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -82,6 +83,8 @@ public abstract class Writer {
      */
     private IvParameterSpec readIV(InputStream is, String file) throws Exception {
         byte[] ivBytes = new byte[16];
+        SecureRandom secureRandom = new SecureRandom();
+        secureRandom.nextBytes(ivBytes); // Generate a random IV
         int bytesRead = 0;
         while (bytesRead < ivBytes.length) {
             int read = is.read(ivBytes, bytesRead, ivBytes.length - bytesRead);
