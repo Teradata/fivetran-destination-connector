@@ -97,7 +97,7 @@ public class UpdateHistoryWriter extends Writer {
             firstColumn = false;
         }
 
-        insertQuery.append(String.format(" FROM %s WHERE `_fivetran_active` = TRUE ", TeradataJDBCUtil.escapeTable(database, table)));
+        insertQuery.append(String.format(" FROM %s WHERE _fivetran_active = TRUE ", TeradataJDBCUtil.escapeTable(database, table)));
 
         for (Column c : columns) {
             if (c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
@@ -130,7 +130,7 @@ public class UpdateHistoryWriter extends Writer {
 
     private void updateOldRow(List<String> row) throws SQLException {
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET `_fivetran_active` = FALSE, `_fivetran_end` = DATE_SUB(?,  INTERVAL 1 MICROSECOND) WHERE `_fivetran_active` = TRUE AND `_fivetran_start` < ? ",
+                "UPDATE %s SET _fivetran_active = FALSE, _fivetran_end = DATE_SUB(?,  INTERVAL 1 MICROSECOND) WHERE _fivetran_active = TRUE AND _fivetran_start < ? ",
                 TeradataJDBCUtil.escapeTable(database, table)));
 
         for (int i = 0; i < row.size(); i++) {

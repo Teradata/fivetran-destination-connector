@@ -47,7 +47,7 @@ public class DeleteHistoryWriter extends Writer {
     @Override
     public void writeRow(List<String> row) throws Exception {
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET `_fivetran_active` = FALSE, `_fivetran_end` = ? WHERE `_fivetran_active` = TRUE ",
+                "UPDATE %s SET _fivetran_active = FALSE, _fivetran_end = ? WHERE _fivetran_active = TRUE ",
                 TeradataJDBCUtil.escapeTable(database, table)));
 
         for (int i = 0; i < row.size(); i++) {

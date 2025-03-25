@@ -48,9 +48,13 @@ public class EarliestStartHistoryWriter extends Writer {
     }
 
     public void writeDelete(List<String> row) throws Exception {
+        logger.info("#########################EarliestStartHistoryWriter.writeDelete#############################################################");
         StringBuilder deleteQuery = new StringBuilder(String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, table)));
 
         boolean firstPKColumn = true;
+        for (int i = 0; i < row.size(); i++) {
+            logger.info("Rows is " + row.get(i));
+        }
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
             if (c != null && c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
@@ -65,8 +69,8 @@ public class EarliestStartHistoryWriter extends Writer {
             }
         }
 
-        deleteQuery.append("AND `_fivetran_start` >= ?");
-
+        deleteQuery.append("AND _fivetran_start >= ?");
+        logger.info(String.format("deleteQuery SQL:\n %s", deleteQuery.toString()));
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(deleteQuery.toString())) {
             for (int i = 0; i < row.size(); i++) {
@@ -77,6 +81,8 @@ public class EarliestStartHistoryWriter extends Writer {
                 }
 
                 paramIndex++;
+                logger.info("paramIndex is " + paramIndex);
+                logger.info("value is " + value);
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
 
@@ -88,10 +94,13 @@ public class EarliestStartHistoryWriter extends Writer {
     }
 
     public void writeUpdate(List<String> row) throws Exception {
+        logger.info("#########################EarliestStartHistoryWriter.writeUpdate#############################################################");
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET `_fivetran_active` = FALSE, `_fivetran_end` = DATE_SUB(?,  INTERVAL 1 MICROSECOND) WHERE `_fivetran_active` = TRUE ",
+                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = _fivetran_start - INTERVAL '1' SECOND WHERE _fivetran_active = 1 ",
                 TeradataJDBCUtil.escapeTable(database, table)));
-
+        for (int i = 0; i < row.size(); i++) {
+            logger.info("Rows is " + row.get(i));
+        }
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
             if (c != null && c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
@@ -99,7 +108,7 @@ public class EarliestStartHistoryWriter extends Writer {
                         String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-
+        logger.info(String.format("updateQuery SQL:\n %s", updateQuery.toString()));
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
             paramIndex++;
@@ -113,15 +122,17 @@ public class EarliestStartHistoryWriter extends Writer {
                 }
 
                 paramIndex++;
+                logger.info("paramIndex is " + paramIndex);
+                logger.info("value is " + value);
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
-
             stmt.execute();
         }
     }
 
     @Override
     public void writeRow(List<String> row) throws Exception {
+        logger.info("#########################EarliestStartHistoryWriter.writeRow#############################################################");
         writeDelete(row);
         writeUpdate(row);
     }
