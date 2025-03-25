@@ -30,24 +30,24 @@ When extracting data from your source using Fivetran, Teradata Vantage automatic
 
 The table below demonstrates how Fivetran data types are converted into Teradata Vantage-supported types:
 
-| Fivetran Data Type  | Teradata Vantage Data Type     |
-|---------------------|--------------------------------|
-| BOOLEAN             | BYTEINT                        |
-| SHORT               | SMALLINT                       |
-| INT                 | INTEGER                        |
-| LONG                | BIGINT                         |
-| DECIMAL             | DECIMAL                        |
-| FLOAT               | FLOAT                          |
-| DOUBLE              | DOUBLE PRECISION               |
-| NAIVE_DATE          | DATE                           |
-| NAIVE_DATETIME      | TIMESTAMP                      |
-| NAIVE_TIME          | TIMESTAMP                      |
-| NAIVE_DATE          | TIMESTAMP                      |
-| UTC_DATETIME        | TIMESTAMP                      |
-| STRING              | VARCHAR                        |
-| XML                 | TEXT                           |
-| JSON                | JSON                           |
-| BINARY              | BLOB                           |
+| Fivetran Data Type  | Teradata Vantage Data Type      |
+|---------------------|---------------------------------|
+| BOOLEAN             | BYTEINT                         |
+| SHORT               | SMALLINT                        |
+| INT                 | INTEGER                         |
+| LONG                | BIGINT                          |
+| DECIMAL             | DECIMAL                         |
+| FLOAT               | FLOAT                           |
+| DOUBLE              | DOUBLE PRECISION                |
+| NAIVE_DATE          | DATE                            |
+| NAIVE_DATETIME      | TIMESTAMP                       |
+| NAIVE_TIME          | TIMESTAMP                       |
+| NAIVE_DATE          | TIMESTAMP                       |
+| UTC_DATETIME        | TIMESTAMP                       |
+| STRING              | VARCHAR                         |
+| XML                 | XML                             |
+| JSON                | JSON                            |
+| BINARY              | BLOB                            |
 
 ----
 
