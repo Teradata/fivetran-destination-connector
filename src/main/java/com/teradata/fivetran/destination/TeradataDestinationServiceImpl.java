@@ -108,7 +108,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                 .addAllFields(Collections.singletonList(password))
                                 .build()).build();
 
-        FormField TMODE =  FormField.newBuilder().setName("TMODE").setLabel("Transaction Mode")
+        FormField tmode =  FormField.newBuilder().setName("tmode").setLabel("Transaction Mode")
                 .setRequired(false)
                 .setDescription(
                         "Transaction Mode.\n"
@@ -258,7 +258,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, TMODE, sslMode, sslAllow, sslPrefer, sslREQUIRE, sslVerifyCa, sslVerifyFull, database, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, tmode, sslMode, sslAllow, sslPrefer, sslREQUIRE, sslVerifyCa, sslVerifyFull, database, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();
@@ -295,6 +295,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void describeTable(DescribeTableRequest request, StreamObserver<DescribeTableResponse> responseObserver) {
+        logger.info("########################describeTable##############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -325,6 +326,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void createTable(CreateTableRequest request, StreamObserver<CreateTableResponse> responseObserver) {
+        logger.info("#########################createTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
@@ -359,6 +361,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void alterTable(AlterTableRequest request,
                            StreamObserver<AlterTableResponse> responseObserver) {
+        logger.info("#########################alterTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
@@ -406,6 +409,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void truncate(TruncateRequest request,
                          StreamObserver<TruncateResponse> responseObserver) {
+        logger.info("#########################truncate#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -457,7 +461,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void writeBatch(WriteBatchRequest request,
                            StreamObserver<WriteBatchResponse> responseObserver) {
-        logger.info("In writeBatch");
+        logger.info("#########################writeBatch#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =

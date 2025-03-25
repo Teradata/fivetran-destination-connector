@@ -38,7 +38,7 @@ public class TeradataJDBCUtil {
         connectionProps.put("tmode", conf.tmode());
 
         connectionProps.put("sslMode", conf.sslMode());
-        logger.info(String.format("SSLMODE:--- %s", conf.sslMode()));
+        //logger.info(String.format("SSLMODE:--- %s", conf.sslMode()));
         if (!conf.sslMode().equals("DISABLE")) {
             String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
             connectionProps.put("sslcapath", sslCertPaths[0]);
@@ -52,7 +52,7 @@ public class TeradataJDBCUtil {
             for (String parameter : driverParameters.split(",")) {
                 String[] keyValue = parameter.split("=");
                 if (keyValue.length != 2) {
-                    throw new Exception("Invalid value of `driverParameters` configuration");
+                    throw new Exception("Invalid value of 'driverParameters' configuration");
                 }
                 putIfNotEmpty(connectionProps, keyValue[0], keyValue[1]);
             }
