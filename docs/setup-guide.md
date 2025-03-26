@@ -50,7 +50,21 @@ Ensure that the Teradata Vantage database user has the following permissions:
     * **tmode**
     * **logmech**
 6. (Optional) Enable SSL and specify related configurations.
-7. (Optional) Specify additional **Driver Parameters**. Refer to [https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html) documentation for a list of supported parameters. 
-8. Click **Save & Test**.
+   
+   >   When using SSLMODE as VERIFY-CA or VERIFY-FULL, a PEM file containing Certificate Authority (CA) certificates is required.
+   >   It is mandatory to modify this PEM file by replacing all newline characters with \n and converting it into a single string,
+   >   you can use the following Python program:
+   >   ``` python
+   >   with open("<existing PEM file location>", "r") as f:
+   >      pem_content = f.read()
+   >    escaped_pem = pem_content.replace("\n", "\\n")
+   >   with open("<modified PEM file location>", "w") as f:
+   >     f.write(escaped_pem)
+   >   ```
+   >   The modified file will now contain the certificate as a single string. This string can be passed to the "SSL Server's Certificate" field
+   >   when adding a newTeradata Destination.
+   
+8. (Optional) Specify additional **Driver Parameters**. Refer to [https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html) documentation for a list of supported parameters. 
+9. Click **Save & Test**.
 
 Fivetran tests and validates the Teradata Vantage connection configuration. Once the connection configuration test is successful, you can sync your data using Fivetran connectors to the Teradata Vantage destination.
