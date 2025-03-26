@@ -5,6 +5,8 @@ import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,12 +16,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class UpdateHistoryWriter extends Writer {
-
+    private static final Logger logger = LoggerFactory.getLogger(UpdateHistoryWriter.class);
     private final List<List<String>> rows = new ArrayList<>();
 
     public UpdateHistoryWriter(Connection conn, String database, String table, List<Column> columns,
                                FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        logger.info("UpdateHistoryWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
     }
 
 
@@ -30,6 +33,7 @@ public class UpdateHistoryWriter extends Writer {
 
     @Override
     public void setHeader(List<String> header) {
+        logger.info("in UpdateHistoryWriter.setHeader");
         for (int i = 0; i < header.size(); i++) {
             nameToHeaderPos.put(header.get(i), i);
         }
@@ -54,11 +58,13 @@ public class UpdateHistoryWriter extends Writer {
 
     @Override
     public void writeRow(List<String> row) throws SQLException {
+        logger.info("#########################UpdateHistoryWriter.writeRow#############################################################");
         rows.add(row);
     }
 
     @Override
     public void commit() throws SQLException {
+        logger.info("#########################UpdateHistoryWriter.commit#############################################################");
         rows.sort(Comparator.comparing(row -> {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             String dateString = TeradataJDBCUtil.formatISODateTime(row.get(fivetranStartPos));
@@ -72,11 +78,13 @@ public class UpdateHistoryWriter extends Writer {
     }
 
     private void processRow(List<String> row) throws SQLException {
+        logger.info("Processing row: {}", row);
         insertNewRow(row);
         updateOldRow(row);
     }
 
     private void insertNewRow(List<String> row) throws SQLException {
+        logger.info("Inserting new row: {}", row);
         StringBuilder insertQuery = new StringBuilder(String.format(
                 "INSERT INTO %s SELECT ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -129,8 +137,9 @@ public class UpdateHistoryWriter extends Writer {
     }
 
     private void updateOldRow(List<String> row) throws SQLException {
+        logger.info("Updating old row: {}", row);
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET _fivetran_active = FALSE, _fivetran_end = DATE_SUB(?,  INTERVAL 1 MICROSECOND) WHERE _fivetran_active = TRUE AND _fivetran_start < ? ",
+                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = DATE_SUB(?,  INTERVAL 1 MICROSECOND) WHERE _fivetran_active = TRUE AND _fivetran_start < ? ",
                 TeradataJDBCUtil.escapeTable(database, table)));
 
         for (int i = 0; i < row.size(); i++) {

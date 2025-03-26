@@ -226,7 +226,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setLabel("Driver Parameters")
                 .setRequired(false)
                 .setDescription(
-                        "Additional JDBC parameters to use with connection string to SingleStore server.\n"
+                        "Additional JDBC parameters to use with connection string to Teradata Vantage.\n"
                                 + "Format: 'param1=value1,param2=value2, ...'.\n"
                                 + "The supported parameters are available in the https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html")
                 .setTextField(TextField.PlainText)
@@ -293,7 +293,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void describeTable(DescribeTableRequest request, StreamObserver<DescribeTableResponse> responseObserver) {
-        logger.info("######################################################################################");
+        logger.info("########################describeTable##############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -324,7 +324,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void createTable(CreateTableRequest request, StreamObserver<CreateTableResponse> responseObserver) {
-        logger.info("######################################################################################");
+        logger.info("#########################createTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
@@ -359,7 +359,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void alterTable(AlterTableRequest request,
                            StreamObserver<AlterTableResponse> responseObserver) {
-        logger.info("######################################################################################");
+        logger.info("#########################alterTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
@@ -407,7 +407,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void truncate(TruncateRequest request,
                          StreamObserver<TruncateResponse> responseObserver) {
-        logger.info("######################################################################################");
+        logger.info("#########################truncate#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -421,9 +421,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 responseObserver.onCompleted();
                 return;
             }
-
+            long nanoseconds = request.getUtcDeleteBefore().getSeconds();
+            logger.info(String.format("Nanos: %s", nanoseconds));
+            String nanos = String.valueOf( nanoseconds * 1000000L);
+            nanos = nanos.substring(0, 6);
+            logger.info(String.format("Nanos: %s", nanos));
             String queryNanosToTimestamp = String.format("SELECT TO_TIMESTAMP(CAST('%d' AS BIGINT)) + INTERVAL '0.%06d' SECOND",
-                    request.getUtcDeleteBefore().getSeconds(), request.getUtcDeleteBefore().getNanos());
+                    request.getUtcDeleteBefore().getSeconds(), Long.parseLong(nanos));
             logger.info(String.format("Executing SQL:\n %s", queryNanosToTimestamp));
             stmt.execute(queryNanosToTimestamp);
             String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
@@ -459,8 +463,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void writeBatch(WriteBatchRequest request,
                            StreamObserver<WriteBatchResponse> responseObserver) {
-        logger.info("######################################################################################");
-        logger.info("**************** In writeBatch");
+        logger.info("#########################writeBatch#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =
@@ -514,6 +517,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void writeHistoryBatch(WriteHistoryBatchRequest request,
                                   StreamObserver<WriteBatchResponse> responseObserver) {
+        logger.info("#########################writeHistoryBatch#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =
@@ -524,31 +528,34 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
             }
-
+            logger.info("****************************************************************** In EarliestStartHistoryWriter");
             EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getEarliestStartFilesList()) {
                 e.write(file);
             }
-
+            logger.info("****************************************************************** In UpdateHistoryWriter");
             UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getUpdateFilesList()) {
                 u.write(file);
             }
-
+            logger.info("****************************************************************** In LoadDataWriter");
             LoadDataWriter<WriteBatchResponse> w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                     new WriteBatchWarningHandler(responseObserver));
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
             }
-
+            logger.info("****************************************************************** In DeleteHistoryWriter");
             DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getDeleteFilesList()) {
                 d.write(file);
             }
+
+            responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
         } catch (Exception e) {
             logger.warn(String.format("WriteHistoryBatch failed for %s",
                     TeradataJDBCUtil.escapeTable(database, table)), e);

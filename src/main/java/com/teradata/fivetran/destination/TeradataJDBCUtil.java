@@ -36,6 +36,7 @@ public class TeradataJDBCUtil {
         }
 
         connectionProps.put("tmode", conf.tmode());
+        connectionProps.put("FLATTEN", "ON");
 
         connectionProps.put("sslMode", conf.sslMode());
         logger.info(String.format("SSLMODE:--- %s", conf.sslMode()));
@@ -317,7 +318,7 @@ public class TeradataJDBCUtil {
      */
     static String generateCreateTableQuery(String database, String tableName, Table table) {
         String columnDefinitions = getColumnDefinitions(table.getColumnsList());
-        return String.format("CREATE Multiset TABLE %s (%s)", escapeTable(database, tableName), columnDefinitions);
+        return String.format("CREATE TABLE %s (%s)", escapeTable(database, tableName), columnDefinitions);
     }
 
     /**
@@ -432,7 +433,6 @@ public class TeradataJDBCUtil {
      */
     public static String formatISODateTime(String dateTime) {
         dateTime = dateTime.replace("T", " ").replace("Z", "");
-        // SingleStore doesn't support more than 6 digits after a period
         int dotPos = dateTime.indexOf(".", 0);
         if (dotPos != -1 && dotPos + 6 < dateTime.length()) {
             return dateTime.substring(0, dotPos + 6 + 1);

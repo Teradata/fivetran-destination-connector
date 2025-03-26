@@ -33,7 +33,7 @@ public class EarliestStartHistoryWriter extends Writer {
         for (Column column : columns) {
             nameToColumn.put(column.getName(), column);
         }
-
+        logger.info("header is " + header);
         for (int i = 0; i < header.size(); i++) {
             String name = header.get(i);
             if (name.equals("_fivetran_start")) {
@@ -41,7 +41,8 @@ public class EarliestStartHistoryWriter extends Writer {
             }
             headerColumns.add(nameToColumn.get(name));
         }
-
+        logger.info("headerColumns is " + headerColumns);
+        logger.info("earliestFivetranStartPos is " + earliestFivetranStartPos);
         if (earliestFivetranStartPos == null) {
             throw new IllegalArgumentException("File doesn't contain _fivetran_start column");
         }
@@ -75,8 +76,11 @@ public class EarliestStartHistoryWriter extends Writer {
         try (PreparedStatement stmt = conn.prepareStatement(deleteQuery.toString())) {
             for (int i = 0; i < row.size(); i++) {
                 String value = row.get(i);
+                logger.info("IN FOR: i is " + i);
+                logger.info("IN FOR: value is " + value);
                 Column c = headerColumns.get(i);
                 if (c == null || !c.getPrimaryKey() || c.getName().equals("_fivetran_start")) {
+                    logger.info("IN FOR: continue, c is " + c);
                     continue;
                 }
 
@@ -88,8 +92,8 @@ public class EarliestStartHistoryWriter extends Writer {
 
             paramIndex++;
             TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
-
             stmt.execute();
+            logger.info("Executed delete statement for row: {}", row);
         }
     }
 
@@ -111,13 +115,13 @@ public class EarliestStartHistoryWriter extends Writer {
         logger.info(String.format("updateQuery SQL:\n %s", updateQuery.toString()));
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
-            paramIndex++;
-            TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
-
             for (int i = 0; i < row.size(); i++) {
                 String value = row.get(i);
+                logger.info("IN FOR: i is " + i);
+                logger.info("IN FOR: value is " + value);
                 Column c = headerColumns.get(i);
                 if (c == null || !c.getPrimaryKey() || c.getName().equals("_fivetran_start")) {
+                    logger.info("IN FOR: continue, c is " + c);
                     continue;
                 }
 
@@ -127,6 +131,7 @@ public class EarliestStartHistoryWriter extends Writer {
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
             stmt.execute();
+            logger.info("Executed update statement for row: {}", row);
         }
     }
 

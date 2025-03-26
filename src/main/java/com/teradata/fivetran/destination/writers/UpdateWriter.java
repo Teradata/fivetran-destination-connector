@@ -101,8 +101,6 @@ public class UpdateWriter extends Writer {
                 if (!headerColumns.get(i).getPrimaryKey()) {
                     continue;
                 }
-                if (value.equals("+1000000000-12-31T23:59:59.999999999Z"))
-                    value = "9999-12-31T23:59:59.999999999Z";
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());

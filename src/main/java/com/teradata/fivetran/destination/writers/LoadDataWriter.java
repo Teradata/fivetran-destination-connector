@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(TeradataJDBCUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(LoadDataWriter.class);
     private static final int BUFFER_SIZE = 524288;
     private List<Column> headerColumns;
     private PreparedStatement preparedStatement;
@@ -96,26 +96,21 @@ public class LoadDataWriter<T> extends Writer {
                 } else if (type == DataType.DOUBLE) {
                     preparedStatement.setDouble(i + 1, Double.parseDouble(value));
                 } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME && !value.equals(params.getNullString())) {
-                    if (value.equals("+1000000000-12-31T23:59:59.999999999Z")) {
-                        value = "9999-12-31T23:59:59.999999999Z";
-                        //logger.info("Value after conversion: {}", TeradataJDBCUtil.formatISODateTime(value));
-                    } else {
-                        //logger.info("Value without conversion: {}", TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
-                    }
                     preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                 } else if (type == DataType.BINARY) {
                     preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
                 } else {
                     preparedStatement.setString(i + 1, value);
                 }
+                logger.info("Set parameter {} to value: {}", i + 1, value);
             }
 
             preparedStatement.addBatch();
             currentBatchSize++;
-            //logger.info("Added row to batch. Current batch size: {}", currentBatchSize);
+            logger.info("Added row to batch. Current batch size: {}", currentBatchSize);
 
             if (currentBatchSize >= batchSize) {
-                //logger.info("Batch size limit reached. Committing batch.");
+                logger.info("Batch size limit reached. Committing batch.");
                 commit();
             }
         } catch (Exception e) {
@@ -128,11 +123,11 @@ public class LoadDataWriter<T> extends Writer {
     @Override
     public void commit() throws SQLException {
         if (currentBatchSize > 0) {
-            //logger.info("Committing batch of size: {}", currentBatchSize);
+            logger.info("Committing batch of size: {}", currentBatchSize);
             preparedStatement.executeBatch();
             preparedStatement.clearBatch();
             currentBatchSize = 0;
-            //logger.info("Batch committed successfully.");
+            logger.info("Batch committed successfully.");
         } else {
             //logger.info("No rows to commit.");
         }

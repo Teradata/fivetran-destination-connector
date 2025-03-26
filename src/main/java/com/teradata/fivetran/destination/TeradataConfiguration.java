@@ -30,7 +30,7 @@ public class TeradataConfiguration {
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
         this.driverParameters = getOrDefault(conf.get("driver.parameters"), null);
-        this.batchSize = Integer.valueOf(getOrDefault(conf.get("batch.size"), "10000"));
+        this.batchSize = Integer.valueOf(getOrDefault(conf.get("batch.size"), "1"));
         this.queryBand = getOrDefault(conf.get("query.band"), "org=teradata-internal-telem;appname=fivetran;");
     }
 

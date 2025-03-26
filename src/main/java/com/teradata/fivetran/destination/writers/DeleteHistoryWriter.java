@@ -5,6 +5,8 @@ import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -16,9 +18,10 @@ import java.util.List;
 import java.util.Map;
 
 public class DeleteHistoryWriter extends Writer {
-
+    private static final Logger logger = LoggerFactory.getLogger(DeleteHistoryWriter.class);
     public DeleteHistoryWriter(Connection conn, String database, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        logger.info("DeleteHistoryWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
     }
 
     List<Column> headerColumns = new ArrayList<>();
@@ -26,6 +29,7 @@ public class DeleteHistoryWriter extends Writer {
 
     @Override
     public void setHeader(List<String> header) throws SQLException, IOException {
+        logger.info("in DeleteHistoryWriter.setHeader");
         Map<String, Column> nameToColumn = new HashMap<>();
         for (Column column : columns) {
             nameToColumn.put(column.getName(), column);
@@ -46,8 +50,9 @@ public class DeleteHistoryWriter extends Writer {
 
     @Override
     public void writeRow(List<String> row) throws Exception {
+        logger.info("#########################DeleteHistoryWriter.writeRow#############################################################");
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET _fivetran_active = FALSE, _fivetran_end = ? WHERE _fivetran_active = TRUE ",
+                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? WHERE _fivetran_active = TRUE ",
                 TeradataJDBCUtil.escapeTable(database, table)));
 
         for (int i = 0; i < row.size(); i++) {

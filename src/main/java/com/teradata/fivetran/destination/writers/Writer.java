@@ -9,6 +9,8 @@ import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.Compression;
 import fivetran_sdk.v2.FileParams;
 import fivetran_sdk.v2.Encryption;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
@@ -25,7 +27,7 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
 public abstract class Writer {
-
+    private static final Logger logger = LoggerFactory.getLogger(Writer.class);
     protected Connection conn;
     protected String database;
     protected String table;
@@ -155,20 +157,12 @@ public abstract class Writer {
             setHeader(header);
 
             String[] tokens;
-            int rowsInBatch = 0;
             while ((tokens = csvReader.readNext()) != null) {
-                List<String> row = new ArrayList<>(Arrays.asList(tokens));
-                writeRow(row);
-                rowsInBatch++;
-                if (rowsInBatch == batchSize) {
-                    commit();
-                    setHeader(header);
-                    rowsInBatch = 0;
-                }
-            }
+               List<String> row = new ArrayList<>(Arrays.asList(tokens));
+               logger.info("Calling writeRow()");
+               writeRow(row);
+           }
         }
-
-        commit();
     }
 
     /**
