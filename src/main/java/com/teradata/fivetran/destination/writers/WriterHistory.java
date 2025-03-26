@@ -76,7 +76,7 @@ public class WriterHistory {
                     // Step 2: Update existing active records
                     String updateQuery = String.format(
                             "UPDATE %s SET _fivetran_active = 0, _fivetran_end = TIMESTAMP '%s' - INTERVAL '1' MILLISECOND " +
-                                    "WHERE _fivetran_active = TRUE AND %s",
+                                    "WHERE _fivetran_active = 1 AND %s",
                             TeradataJDBCUtil.escapeTable(database, table), earliestStart, whereClause);
                     stmt.execute(updateQuery);
                 } catch (SQLException e) {

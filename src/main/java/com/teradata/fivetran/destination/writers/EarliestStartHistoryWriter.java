@@ -100,7 +100,7 @@ public class EarliestStartHistoryWriter extends Writer {
     public void writeUpdate(List<String> row) throws Exception {
         logger.info("#########################EarliestStartHistoryWriter.writeUpdate#############################################################");
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = _fivetran_start - INTERVAL '1' SECOND WHERE _fivetran_active = 1 ",
+                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 ",
                 TeradataJDBCUtil.escapeTable(database, table)));
         for (int i = 0; i < row.size(); i++) {
             logger.info("Rows is " + row.get(i));
@@ -115,6 +115,8 @@ public class EarliestStartHistoryWriter extends Writer {
         logger.info(String.format("updateQuery SQL:\n %s", updateQuery.toString()));
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
+            paramIndex++;
+            TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
             for (int i = 0; i < row.size(); i++) {
                 String value = row.get(i);
                 logger.info("IN FOR: i is " + i);

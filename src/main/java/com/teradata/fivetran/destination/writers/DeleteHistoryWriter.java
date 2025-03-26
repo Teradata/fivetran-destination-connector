@@ -52,7 +52,7 @@ public class DeleteHistoryWriter extends Writer {
     public void writeRow(List<String> row) throws Exception {
         logger.info("#########################DeleteHistoryWriter.writeRow#############################################################");
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? WHERE _fivetran_active = TRUE ",
+                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? WHERE _fivetran_active = 1 ",
                 TeradataJDBCUtil.escapeTable(database, table)));
 
         for (int i = 0; i < row.size(); i++) {

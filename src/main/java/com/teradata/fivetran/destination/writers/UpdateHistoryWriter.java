@@ -58,13 +58,14 @@ public class UpdateHistoryWriter extends Writer {
 
     @Override
     public void writeRow(List<String> row) throws SQLException {
-        logger.info("#########################UpdateHistoryWriter.writeRow#############################################################");
+        logger.info("#########################UpdateHistoryWriter.writeRow#########################");
         rows.add(row);
+        commit();
     }
 
     @Override
     public void commit() throws SQLException {
-        logger.info("#########################UpdateHistoryWriter.commit#############################################################");
+        logger.info("#########################UpdateHistoryWriter.commit#########################");
         rows.sort(Comparator.comparing(row -> {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             String dateString = TeradataJDBCUtil.formatISODateTime(row.get(fivetranStartPos));
@@ -78,12 +79,14 @@ public class UpdateHistoryWriter extends Writer {
     }
 
     private void processRow(List<String> row) throws SQLException {
+        logger.info("#########################UpdateHistoryWriter.processRow#########################");
         logger.info("Processing row: {}", row);
         insertNewRow(row);
         updateOldRow(row);
     }
 
     private void insertNewRow(List<String> row) throws SQLException {
+        logger.info("#########################UpdateHistoryWriter.insertNewRow#########################");
         logger.info("Inserting new row: {}", row);
         StringBuilder insertQuery = new StringBuilder(String.format(
                 "INSERT INTO %s SELECT ",
@@ -105,14 +108,14 @@ public class UpdateHistoryWriter extends Writer {
             firstColumn = false;
         }
 
-        insertQuery.append(String.format(" FROM %s WHERE _fivetran_active = TRUE ", TeradataJDBCUtil.escapeTable(database, table)));
+        insertQuery.append(String.format(" FROM %s WHERE _fivetran_active = 1 ", TeradataJDBCUtil.escapeTable(database, table)));
 
         for (Column c : columns) {
             if (c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
                 insertQuery.append(String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-
+        logger.info("Insert query: {}", insertQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(insertQuery.toString())) {
             for (Column c : columns) {
@@ -133,13 +136,14 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
+            logger.info("Executed insert statement for row: {}", row);
         }
     }
 
     private void updateOldRow(List<String> row) throws SQLException {
         logger.info("Updating old row: {}", row);
         StringBuilder updateQuery = new StringBuilder(String.format(
-                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = DATE_SUB(?,  INTERVAL 1 MICROSECOND) WHERE _fivetran_active = TRUE AND _fivetran_start < ? ",
+                "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 AND _fivetran_start < ? ",
                 TeradataJDBCUtil.escapeTable(database, table)));
 
         for (int i = 0; i < row.size(); i++) {
@@ -149,7 +153,7 @@ public class UpdateHistoryWriter extends Writer {
                         String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-
+        logger.info("Update query: {}", updateQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
             paramIndex++;
@@ -169,6 +173,7 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
+            logger.info("Executed update statement for row: {}", row);
         }
     }
 }
