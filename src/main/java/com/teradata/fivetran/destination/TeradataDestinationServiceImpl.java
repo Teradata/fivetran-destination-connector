@@ -228,7 +228,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setLabel("Driver Parameters")
                 .setRequired(false)
                 .setDescription(
-                        "Additional JDBC parameters to use with connection string to SingleStore server.\n"
+                        "Additional JDBC parameters to use with connection string to Teradata Vantage.\n"
                                 + "Format: 'param1=value1,param2=value2, ...'.\n"
                                 + "The supported parameters are available in the https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html")
                 .setTextField(TextField.PlainText)
@@ -423,10 +423,11 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 responseObserver.onCompleted();
                 return;
             }
-
+            long nanoseconds = request.getUtcDeleteBefore().getSeconds();
+            String nanos = String.valueOf( nanoseconds * 1000000L);
+            nanos = nanos.substring(0, 6);
             String queryNanosToTimestamp = String.format("SELECT TO_TIMESTAMP(CAST('%d' AS BIGINT)) + INTERVAL '0.%06d' SECOND",
-                    request.getUtcDeleteBefore().getSeconds(), request.getUtcDeleteBefore().getNanos());
-            logger.info(String.format("Executing SQL:\n %s", queryNanosToTimestamp));
+                    request.getUtcDeleteBefore().getSeconds(), Long.parseLong(nanos));
             stmt.execute(queryNanosToTimestamp);
             String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
 

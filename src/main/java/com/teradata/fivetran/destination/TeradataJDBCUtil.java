@@ -432,7 +432,6 @@ public class TeradataJDBCUtil {
      */
     public static String formatISODateTime(String dateTime) {
         dateTime = dateTime.replace("T", " ").replace("Z", "");
-        // SingleStore doesn't support more than 6 digits after a period
         int dotPos = dateTime.indexOf(".", 0);
         if (dotPos != -1 && dotPos + 6 < dateTime.length()) {
             return dateTime.substring(0, dotPos + 6 + 1);
