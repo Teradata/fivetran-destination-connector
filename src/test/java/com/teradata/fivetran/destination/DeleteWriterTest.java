@@ -179,6 +179,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                 data.append(i.toString() + "\n");
             }
             w.write(null, new ByteArrayInputStream(data.toString().getBytes()));
+            w.commit();
 
             // Delete data from the table in batches
             DeleteWriter d = new DeleteWriter(conn, database, t.getName(), t.getColumnsList(),
@@ -188,6 +189,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                 data.append(i.toString() + "\n");
             }
             d.write(null, new ByteArrayInputStream(data.toString().getBytes()));
+            d.commit();
         }
 
         // Verify the remaining data in the table

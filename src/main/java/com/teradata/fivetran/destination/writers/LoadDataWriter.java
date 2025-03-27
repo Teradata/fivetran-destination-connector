@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(TeradataJDBCUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(LoadDataWriter.class);
     private static final int BUFFER_SIZE = 524288;
     private List<Column> headerColumns;
     private PreparedStatement preparedStatement;
@@ -95,13 +95,14 @@ public class LoadDataWriter<T> extends Writer {
                     preparedStatement.setFloat(i + 1, Float.parseFloat(value));
                 } else if (type == DataType.DOUBLE) {
                     preparedStatement.setDouble(i + 1, Double.parseDouble(value));
-                } else if (type == DataType.NAIVE_TIME || type == DataType.NAIVE_DATE || type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME) {
-                    preparedStatement.setString(i + 1, TeradataJDBCUtil.formatISODateTime(value));
+                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME && !value.equals(params.getNullString())) {
+                    preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                 } else if (type == DataType.BINARY) {
                     preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
                 } else {
                     preparedStatement.setString(i + 1, value);
                 }
+                logger.info("Set parameter {} to value: {}", i + 1, value);
             }
 
             preparedStatement.addBatch();
