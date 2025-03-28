@@ -267,6 +267,16 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
     }
 
+    @Override
+    public void capabilities(CapabilitiesRequest request,
+                             StreamObserver<CapabilitiesResponse> responseObserver) {
+        responseObserver.onNext(CapabilitiesResponse
+                .newBuilder()
+                .setBatchFileFormat(BatchFileFormat.CSV)
+                .build());
+        responseObserver.onCompleted();
+    }
+
     /**
      * Handles the test request.
      *
