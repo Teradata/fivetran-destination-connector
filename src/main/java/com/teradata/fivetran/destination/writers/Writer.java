@@ -158,16 +158,9 @@ public abstract class Writer {
             setHeader(header);
 
             String[] tokens;
-            int rowsInBatch = 0;
             while ((tokens = csvReader.readNext()) != null) {
                 List<String> row = new ArrayList<>(Arrays.asList(tokens));
                 writeRow(row);
-                rowsInBatch++;
-                if (rowsInBatch == batchSize) {
-                    commit();
-                    setHeader(header);
-                    rowsInBatch = 0;
-                }
             }
         }
 
