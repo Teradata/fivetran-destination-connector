@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(TeradataJDBCUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(LoadDataWriter.class);
     private static final int BUFFER_SIZE = 524288;
     private List<Column> headerColumns;
     private PreparedStatement preparedStatement;

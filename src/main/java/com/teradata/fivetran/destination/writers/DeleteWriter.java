@@ -4,6 +4,8 @@ import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -13,6 +15,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class DeleteWriter extends Writer {
+    private static final Logger logger = LoggerFactory.getLogger(DeleteWriter.class);
     private final List<Integer> pkIds = new ArrayList<>();
     private final List<Column> pkColumns = new ArrayList<>();
     private final List<List<String>> rows = new ArrayList<>();
@@ -31,6 +34,7 @@ public class DeleteWriter extends Writer {
     public DeleteWriter(Connection conn, String database, String table, List<Column> columns,
                         FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        logger.info("DeleteWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
     }
 
     /**

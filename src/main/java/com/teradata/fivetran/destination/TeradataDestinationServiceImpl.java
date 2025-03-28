@@ -22,9 +22,6 @@ import org.slf4j.LoggerFactory;
  */
 public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.DestinationConnectorImplBase {
     private static final Logger logger = LoggerFactory.getLogger(TeradataDestinationServiceImpl.class);
-    private static final String INFO = "INFO";
-    private static final String WARNING = "WARNING";
-    private static final String SEVERE = "SEVERE";
 
     /**
      * Handles the configuration form request.
@@ -34,7 +31,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void configurationForm(ConfigurationFormRequest request, StreamObserver<ConfigurationFormResponse> responseObserver) {
-        logMessage(INFO, "Fetching configuration form");
+        logMessage("INFO", "Fetching configuration form");
         responseObserver.onNext(getConfigurationForm());
         responseObserver.onCompleted();
     }
@@ -313,17 +310,18 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
 
-        logMessage(INFO, String.format("Database: %s, Table: %s", database, table));
+        logMessage("INFO", String.format("Database: %s, Table: %s", database, table));
 
         try {
             Table t = TeradataJDBCUtil.getTable(conf, database, table, table, new DescribeTableWarningHandler(responseObserver));
-            logMessage(INFO, String.format("Table metadata: %s", t));
+            logMessage("INFO", String.format("Table metadata: %s", t));
             responseObserver.onNext(DescribeTableResponse.newBuilder().setTable(t).build());
         } catch (TeradataJDBCUtil.TableNotExistException e) {
-            logger.warn(String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
+            logMessage("WARNING", String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
             responseObserver.onNext(DescribeTableResponse.newBuilder().setNotFound(true).build());
         } catch (Exception e) {
-            logger.warn(String.format("DescribeTable failed for %s", TeradataJDBCUtil.escapeTable(database, table)), e);
+            logMessage("SEVERE", String.format("DescribeTable failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(DescribeTableResponse.newBuilder()
                     .setWarning(Warning.newBuilder().setMessage(e.getMessage()).build())
                     .build());
@@ -345,9 +343,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
-            logger.info(String.format("Executing SQL:\n %s", query));
+            logMessage("INFO", String.format("Executing SQL:\n %s", query));
 
-            logMessage(INFO, String.format("[CreateTable]: %s | %s | %s",
+            logMessage("INFO", String.format("[CreateTable]: %s | %s | %s",
                     request.getSchemaName(), request.getTable().getName(), request.getTable().getColumnsList()));
             stmt.execute(query);
 
@@ -355,8 +353,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         } catch (Exception e) {
             String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
             String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
-
-            logger.warn(String.format("CreateTable failed for %s", TeradataJDBCUtil.escapeTable(database, table)), e);
+            logMessage("SEVERE", String.format("CreateTable failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(CreateTableResponse.newBuilder()
                     .setTask(Task.newBuilder().setMessage(e.getMessage()).build())
                     .setSuccess(false)
@@ -383,10 +381,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, new AlterTableWarningHandler(responseObserver));
             // query is null when table is not changed
             if (query != null) {
-                logger.info(String.format("Executing SQL:\n %s", query));
                 String[] queries = query.split(";");
                 for (String q : queries) {
-                    logger.info(String.format("Executing inner SQL:\n %s", q));
+                    logMessage("INFO", (String.format("Executing SQL:\n %s", q)));
                     if (!q.trim().isEmpty()) {
                         stmt.execute(q.trim() + ";");
                     }
@@ -399,8 +396,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
             String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(),
                     request.getTable().getName());
-            logger.warn(String.format("AlterTable failed for %s",
-                    TeradataJDBCUtil.escapeTable(database, table)), e);
+            logMessage("SEVERE", String.format("AlterTable failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
 
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
@@ -430,7 +427,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             if (!TeradataJDBCUtil.checkTableExists(stmt, database, table)) {
-                logger.warn(String.format("Table %s doesn't exist",
+                logMessage("WARNING", String.format("Table %s doesn't exist",
                         TeradataJDBCUtil.escapeTable(database, table)));
                 responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
                 responseObserver.onCompleted();
@@ -446,14 +443,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
 
             String query = TeradataJDBCUtil.generateTruncateTableQuery(conf, request, utcDeleteBefore);
-            logger.info(String.format("Executing SQL:\n %s", query));
+            logMessage("INFO", String.format("Executing SQL:\n %s", query));
             stmt.execute(query);
 
             responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
-            logger.warn(String.format("TruncateTable failed for %s",
-                    TeradataJDBCUtil.escapeTable(database, table)), e);
+            logMessage("SEVERE", String.format("TruncateTable failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
 
             responseObserver.onNext(TruncateResponse.newBuilder()
                     .setTask(Task.newBuilder()
@@ -480,13 +477,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =
                 TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
-        logger.info(String.format("Database: %s, Table: %s", database, table));
+        logMessage("INFO", String.format("Database: %s, Table: %s", database, table));
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(column -> column.getPrimaryKey())) {
                 throw new Exception("No primary key found");
             }
-
+            logMessage("INFO", "Started LoadDataWriter");
             LoadDataWriter w =
                     new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
@@ -494,15 +491,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
             }
-
+            logMessage("INFO", "Started UpdateWriter");
             UpdateWriter u =
                     new UpdateWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getUpdateFilesList()) {
                 u.write(file);
             }
-
-
+            logMessage("INFO", "Started DeleteWriter");
             DeleteWriter d =
                     new DeleteWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
@@ -513,8 +509,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
-            logger.warn(String.format("WriteBatch failed for %s",
-                    TeradataJDBCUtil.escapeTable(database, table)), e);
+            logMessage("SEVERE", String.format("WriteBatch failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
 
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()

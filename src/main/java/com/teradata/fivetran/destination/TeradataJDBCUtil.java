@@ -38,13 +38,13 @@ public class TeradataJDBCUtil {
         connectionProps.put("tmode", conf.tmode());
 
         connectionProps.put("sslMode", conf.sslMode());
-        //logger.info(String.format("SSLMODE:--- %s", conf.sslMode()));
+        logMessage("INFO", String.format("SSLMODE: %s", conf.sslMode()));
         if (!conf.sslMode().equals("DISABLE")) {
             String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
             connectionProps.put("sslcapath", sslCertPaths[0]);
             connectionProps.put("sslca", sslCertPaths[1]);
-            logger.info(String.format("SSLCAPATH:--- %s", sslCertPaths[0]));
-            logger.info(String.format("SSLCA: --- %s", sslCertPaths[1]));
+            logMessage("INFO", String.format("SSLCAPATH:  %s", sslCertPaths[0]));
+            logMessage("INFO", String.format("SSLCA:  %s", sslCertPaths[1]));
         }
 
         String driverParameters = conf.driverParameters();
@@ -68,7 +68,7 @@ public class TeradataJDBCUtil {
         try{
             stmt.execute(String.format("SET QUERY_BAND = '%s' FOR SESSION;", queryBandText));
         } catch (SQLException e) {
-            logger.warn("Failed to set query band, please check the format for setting query band", e);
+            logMessage("SEVERE", "Failed to set query band, please check the format for setting query band: " + e.getMessage());
         }
 
         return conn;
@@ -570,7 +570,7 @@ public class TeradataJDBCUtil {
         }
 
         if (pkChanged) {
-            logger.info("Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
+            logMessage("INFO", "Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
 
             return generateRecreateTableQuery(database, table, newTable, commonColumns);
         } else {
@@ -719,5 +719,9 @@ public class TeradataJDBCUtil {
      */
     public static String getTableName(TeradataConfiguration conf, String schema, String table) {
         return conf.database() != null ? table : table;
+    }
+
+    public static void logMessage(String level, String message) {
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }
