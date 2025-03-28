@@ -7,7 +7,8 @@ public class TeradataConfiguration {
     private final String logmech;
     private final String database;
     private final String user;
-    private final String password;
+    private final String td2password;
+    private final String ldappassword;
     private final String tmode;
     private final String sslMode;
     private final String sslServerCert;
@@ -25,7 +26,8 @@ public class TeradataConfiguration {
         this.database = getOrDefault(conf.get("database"), null);
         this.logmech = conf.get("logmech");
         this.user = conf.get("user");
-        this.password = conf.get("password");
+        this.td2password = conf.get("td2password");
+        this.ldappassword = conf.get("ldappassword");
         this.tmode = conf.get("tmode");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
@@ -82,7 +84,10 @@ public class TeradataConfiguration {
      * @return The password.
      */
     public String password() {
-        return password;
+        if (logmech !=null && logmech.equals("LDAP")) {
+            return ldappassword;
+        }
+        return td2password;
     }
 
     public String tmode() { return tmode; }

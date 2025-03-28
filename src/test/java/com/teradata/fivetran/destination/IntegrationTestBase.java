@@ -27,7 +27,7 @@ public class IntegrationTestBase {
 
     // Immutable map to hold the configuration
     static ImmutableMap<String, String> confMap =
-            ImmutableMap.of("host", host, "user", user, "password", password, "database", database, "logmech", logmech, "tmode", tmode);
+            ImmutableMap.of("host", host, "user", user, "td2password", password, "database", database, "logmech", logmech, "tmode", tmode);
     static TeradataConfiguration conf = new TeradataConfiguration(confMap);
 
     // List of all column names for the allTypesTable

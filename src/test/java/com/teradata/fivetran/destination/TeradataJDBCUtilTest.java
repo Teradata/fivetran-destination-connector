@@ -15,7 +15,7 @@ public class TeradataJDBCUtilTest extends IntegrationTestBase {
     @Test
     public void driverParameters() throws Exception {
         // Create a TeradataConfiguration object with specified parameters
-        TeradataConfiguration conf = new TeradataConfiguration(ImmutableMap.of("host", host, "user", user, "password", password, "database", database, "logmech", logmech, "tmode", tmode));
+        TeradataConfiguration conf = new TeradataConfiguration(ImmutableMap.of("host", host, "user", user, "td2password", password, "database", database, "logmech", logmech, "tmode", tmode));
 
         // Establish a connection and execute a query
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);

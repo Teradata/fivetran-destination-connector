@@ -13,7 +13,7 @@ public class TeradataConfigurationTest extends IntegrationTestBase {
     @Test
     public void defaultValues() throws Exception {
         // Create a TeradataConfiguration object with specified parameters
-        TeradataConfiguration conf = new TeradataConfiguration(ImmutableMap.of("host", host, "user", user, "database", database, "password", password, "batch.size", "10000"));
+        TeradataConfiguration conf = new TeradataConfiguration(ImmutableMap.of("host", host, "user", user, "database", database, "td2password", password, "batch.size", "10000"));
 
         // Assert that the configuration values match the expected values
         assertEquals(host, conf.host());

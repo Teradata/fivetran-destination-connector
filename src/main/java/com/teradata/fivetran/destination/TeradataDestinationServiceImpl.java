@@ -61,8 +61,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setPlaceholder("user_name")
                 .build();
 
-        FormField password = FormField.newBuilder()
-                .setName("password")
+        FormField td2Password = FormField.newBuilder()
+                .setName("td2password")
+                .setLabel("Password")
+                .setTextField(TextField.Password)
+                .setPlaceholder("your_password")
+                .build();
+
+        FormField ldapPassword = FormField.newBuilder()
+                .setName("ldappassword")
                 .setLabel("Password")
                 .setTextField(TextField.Password)
                 .setPlaceholder("your_password")
@@ -90,9 +97,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .setStringValue("TD2")
                                         .build()
                                 )
-                                .addAllFields(
-                                        Collections.singletonList(user))
-                                .addAllFields(Collections.singletonList(password))
+                                .addAllFields(Arrays.asList(user, td2Password))
                                 .build()).build();
 
         FormField LDAPLogmech = FormField.newBuilder()
@@ -103,9 +108,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .setStringValue("LDAP")
                                         .build()
                                 )
-                                .addAllFields(
-                                        Collections.singletonList(user))
-                                .addAllFields(Collections.singletonList(password))
+                                .addAllFields(Arrays.asList(user, ldapPassword))
                                 .build()).build();
 
         FormField tmode =  FormField.newBuilder().setName("tmode").setLabel("Transaction Mode")
