@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,19 +16,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Class to handle writing updates for a table.
+ */
 public class UpdateWriter extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(UpdateWriter.class);
     private List<Column> headerColumns = new ArrayList<>();
 
+    /**
+     * Constructor to initialize UpdateWriter.
+     *
+     * @param conn The database connection.
+     * @param database The database name.
+     * @param table The table name.
+     * @param columns The list of columns.
+     * @param params The file parameters.
+     * @param secretKeys The map of secret keys.
+     * @param batchSize The batch size.
+     */
     public UpdateWriter(Connection conn, String database, String table, List<Column> columns,
                         FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
-        logger.info("UpdateWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
+        logMessage("INFO",String.format("UpdateWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
+    /**
+     * Sets the header for the writer.
+     *
+     * @param header The list of header column names.
+     */
     @Override
     public void setHeader(List<String> header) {
-        logger.info("Setting header with columns: {}", header);
+        logMessage("INFO","Setting header with columns: " + header);
         Map<String, Column> nameToColumn = new HashMap<>();
         for (Column column : columns) {
             nameToColumn.put(column.getName(), column);
@@ -36,12 +55,18 @@ public class UpdateWriter extends Writer {
         for (String name : header) {
             headerColumns.add(nameToColumn.get(name));
         }
-        logger.info("Header columns set: {}", headerColumns);
+        logMessage("INFO","Header columns set: " + headerColumns);
     }
 
+    /**
+     * Writes a row to the writer.
+     *
+     * @param row The list of row values.
+     * @throws SQLException If an SQL error occurs.
+     */
     @Override
     public void writeRow(List<String> row) throws SQLException {
-        logger.info("Writing row: {}", row);
+        logMessage("INFO","Writing row: " + row);
         StringBuilder updateClause = new StringBuilder(
                 String.format("UPDATE %s SET ", TeradataJDBCUtil.escapeTable(database, table)));
         StringBuilder whereClause = new StringBuilder("WHERE ");
@@ -75,12 +100,12 @@ public class UpdateWriter extends Writer {
         }
 
         if (firstUpdateColumn) {
-            logger.info("No columns to update for row: {}", row);
+            logMessage("INFO","No columns to update for row: " + row);
             return;
         }
 
         String query = updateClause.toString() + " " + whereClause;
-        logger.info("Prepared SQL update statement: {}", query);
+        logMessage("INFO","Prepared SQL update statement: " + query);
 
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
@@ -93,7 +118,7 @@ public class UpdateWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());
-                logger.info("Set parameter at index {}: {}", paramIndex, value);
+                logMessage("INFO",String.format("Set parameter at index %d: %s", paramIndex, value));
             }
 
             for (int i = 0; i < row.size(); i++) {
@@ -105,19 +130,27 @@ public class UpdateWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());
-                logger.info("Set primary key parameter at index {}: {}", paramIndex, value);
+                logMessage("INFO",String.format("Set primary key parameter at index %d: %s", paramIndex, value));
             }
 
             stmt.execute();
-            logger.info("Executed update statement for row: {}", row);
+            logMessage("INFO","Executed update statement for row: " + row);
         } catch (SQLException e) {
-            logger.error("Failed to execute update statement for row: {}", row, e);
+            logMessage("SEVERE",String.format("Failed to execute update statement for row: %s, %s", row, e.getMessage()));
             throw e;
         }
     }
 
+    /**
+     * Commits the written rows to the database.
+     */
     @Override
     public void commit() {
-        logger.info("Commit called, but no action required for UpdateWriter.");
+        logMessage("INFO","Commit called, but no action required for UpdateWriter.");
+    }
+
+    private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }

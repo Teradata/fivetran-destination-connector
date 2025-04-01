@@ -14,6 +14,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,6 @@ import org.slf4j.LoggerFactory;
  * Implementation of the gRPC service for Teradata destination connector.
  */
 public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.DestinationConnectorImplBase {
-    private static final Logger logger = LoggerFactory.getLogger(TeradataDestinationServiceImpl.class);
 
     /**
      * Handles the configuration form request.
@@ -305,7 +305,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void describeTable(DescribeTableRequest request, StreamObserver<DescribeTableResponse> responseObserver) {
-        logger.info("########################describeTable##############################################################");
+        logMessage("INFO","########################describeTable##############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -337,12 +337,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void createTable(CreateTableRequest request, StreamObserver<CreateTableResponse> responseObserver) {
-        logger.info("#########################createTable#############################################################");
+        logMessage("INFO","#########################createTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+            if(query == null) {
+                throw new Exception("Table or Database is empty");
+            }
             logMessage("INFO", String.format("Executing SQL:\n %s", query));
 
             logMessage("INFO", String.format("[CreateTable]: %s | %s | %s",
@@ -372,7 +375,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void alterTable(AlterTableRequest request,
                            StreamObserver<AlterTableResponse> responseObserver) {
-        logger.info("#########################alterTable#############################################################");
+        logMessage("INFO","#########################alterTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
@@ -419,7 +422,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void truncate(TruncateRequest request,
                          StreamObserver<TruncateResponse> responseObserver) {
-        logger.info("#########################truncate#############################################################");
+        logMessage("INFO","#########################truncate#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
@@ -472,7 +475,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     @Override
     public void writeBatch(WriteBatchRequest request,
                            StreamObserver<WriteBatchResponse> responseObserver) {
-        logger.info("#########################writeBatch#############################################################");
+        logMessage("INFO","#########################writeBatch#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =
@@ -530,6 +533,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      * @param message The log message.
      */
     private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
         System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }

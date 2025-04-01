@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +16,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class DeleteWriter extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(DeleteWriter.class);
     private final List<Integer> pkIds = new ArrayList<>();
     private final List<Column> pkColumns = new ArrayList<>();
     private final List<List<String>> rows = new ArrayList<>();
@@ -34,7 +34,7 @@ public class DeleteWriter extends Writer {
     public DeleteWriter(Connection conn, String database, String table, List<Column> columns,
                         FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
-        logger.info("DeleteWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
+        logMessage("INFO",String.format("DeleteWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     /**
@@ -86,6 +86,8 @@ public class DeleteWriter extends Writer {
         String query = String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, table)) +
                 rows.stream().map(row -> "(" + condition + ")").collect(Collectors.joining(" OR "));
 
+        logMessage("INFO", "Prepared SQL statement: " + query);
+
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             for (int i = 0; i < rows.size(); i++) {
                 List<String> row = rows.get(i);
@@ -99,5 +101,10 @@ public class DeleteWriter extends Writer {
         }
 
         rows.clear();
+    }
+
+    private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }

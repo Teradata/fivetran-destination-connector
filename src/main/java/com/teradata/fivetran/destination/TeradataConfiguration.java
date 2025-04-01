@@ -23,11 +23,11 @@ public class TeradataConfiguration {
      */
     public TeradataConfiguration(Map<String, String> conf) {
         this.host = conf.get("host");
-        this.database = getOrDefault(conf.get("database"), null);
-        this.logmech = conf.get("logmech");
         this.user = conf.get("user");
+        this.logmech = conf.get("logmech");
         this.td2password = conf.get("td2password");
         this.ldappassword = conf.get("ldappassword");
+        this.database = getOrDefault(conf.get("database"), conf.get("user"));
         this.tmode = conf.get("tmode");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);

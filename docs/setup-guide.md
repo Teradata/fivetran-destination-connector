@@ -34,7 +34,6 @@ Ensure that the Teradata Vantage database user has the following permissions:
 * `DELETE`
 * `CREATE`
 * `ALTER`
-* `CREATE DATABASE` (if `database` configuration is not specified)
 
 ### <span class="step-item">Complete Fivetran configuration</span>
 

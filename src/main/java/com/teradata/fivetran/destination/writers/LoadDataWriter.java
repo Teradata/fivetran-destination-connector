@@ -6,6 +6,7 @@ import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
 import fivetran_sdk.v2.DataType;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(LoadDataWriter.class);
     private static final int BUFFER_SIZE = 524288;
     private List<Column> headerColumns;
     private PreparedStatement preparedStatement;
@@ -46,12 +46,12 @@ public class LoadDataWriter<T> extends Writer {
                           WarningHandler<T> warningHandler) throws IOException {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         this.warningHandler = warningHandler;
-        logger.info("LoadDataWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
+        logMessage("INFO", String.format("LoadDataWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     @Override
     public void setHeader(List<String> header) throws SQLException {
-        logger.info("Setting header with columns: {}", header);
+        logMessage("INFO","Setting header with columns: " + header);
         headerColumns = new ArrayList<>();
         Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, col -> col));
 
@@ -69,13 +69,13 @@ public class LoadDataWriter<T> extends Writer {
         String query = String.format("INSERT INTO %s (%s) VALUES (%s)",
                 TeradataJDBCUtil.escapeTable(database, table), columnNames, placeholders);
 
-        logger.info("Prepared SQL statement: {}", query);
+        logMessage("INFO","Prepared SQL statement: " + query);
         preparedStatement = conn.prepareStatement(query);
     }
 
     @Override
     public void writeRow(List<String> row) throws Exception {
-        logger.info("Writing row: {}", row);
+        logMessage("INFO","Writing row: " + row);
         try {
             for (int i = 0; i < row.size(); i++) {
                 DataType type = headerColumns.get(i).getType();
@@ -106,15 +106,15 @@ public class LoadDataWriter<T> extends Writer {
 
             preparedStatement.addBatch();
             currentBatchSize++;
-            logger.info("Added row to batch. Current batch size: {}", currentBatchSize);
+            logMessage("INFO", "Added row to batch. Current batch size: " + currentBatchSize);
 
             if (currentBatchSize >= batchSize) {
-                logger.info("Batch size limit reached. Committing batch.");
+                logMessage("INFO", "Batch size limit reached. Committing batch.");
                 commit();
             }
         } catch (Exception e) {
             warningHandler.handle("Failed to write row to batch", e);
-            logger.error("Failed to write row to batch", e);
+            logMessage("SEVERE","Failed to write row to batch " + e.getMessage());
             throw e;
         }
     }
@@ -122,13 +122,19 @@ public class LoadDataWriter<T> extends Writer {
     @Override
     public void commit() throws SQLException {
         if (currentBatchSize > 0) {
-            logger.info("Committing batch of size: {}", currentBatchSize);
+            logMessage("INFO","Committing batch of size: " + currentBatchSize);
             preparedStatement.executeBatch();
             preparedStatement.clearBatch();
             currentBatchSize = 0;
-            logger.info("Batch committed successfully.");
+            logMessage("INFO", "Batch committed successfully.");
         } else {
-            logger.info("No rows to commit.");
+            logMessage("INFO","No rows to commit.");
         }
     }
+
+    private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
+    }
+
 }

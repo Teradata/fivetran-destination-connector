@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
 import java.util.function.Function;
 
 public class TeradataJDBCUtil {
-    private static final Logger logger = LoggerFactory.getLogger(TeradataJDBCUtil.class);
+
+    private static final Logger log = LoggerFactory.getLogger(TeradataJDBCUtil.class);
 
     /**
      * Creates a connection to the Teradata database using the provided configuration.
@@ -38,7 +39,6 @@ public class TeradataJDBCUtil {
         connectionProps.put("tmode", conf.tmode());
 
         connectionProps.put("sslMode", conf.sslMode());
-        logMessage("INFO", String.format("SSLMODE: %s", conf.sslMode()));
         if (!conf.sslMode().equals("DISABLE")) {
             String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
             connectionProps.put("sslcapath", sslCertPaths[0]);
@@ -332,12 +332,11 @@ public class TeradataJDBCUtil {
     static String generateCreateTableQuery(TeradataConfiguration conf, Statement stmt, CreateTableRequest request) throws SQLException {
         String database = getDatabaseName(conf, request.getSchemaName());
         String table = getTableName(conf, request.getSchemaName(), request.getTable().getName());
-        String createTableQuery = generateCreateTableQuery(database, table, request.getTable());
 
-        if (!checkDatabaseExists(stmt, database)) {
-            return String.format("CREATE DATABASE %s AS PERM = 2000000; %s", escapeIdentifier(database), createTableQuery);
+        if(database != null && table != null) {
+            return generateCreateTableQuery(database, table, request.getTable());
         } else {
-            return createTableQuery;
+            return null;
         }
     }
 
@@ -418,7 +417,12 @@ public class TeradataJDBCUtil {
             default:
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
-                    return "VARCHAR(" + stringByteLength + ")";
+                    if (stringByteLength <= 64000) {
+                        return "VARCHAR(" + stringByteLength + ")";
+                    }
+                    else {
+                        return "VARCHAR(64000)";
+                    }
                 }
                 return "VARCHAR(64000)";
         }
@@ -591,7 +595,7 @@ public class TeradataJDBCUtil {
         String dropTable = String.format("DROP TABLE %s", escapeTable(database, tableName));
         String renameTable = String.format("RENAME TABLE %s TO %s",
                 escapeTable(database, tmpTableName), escapeTable(database, tableName));
-
+        logMessage("INFO", "Prepared SQL statement: " + String.join("; ", createTable, insertData, dropTable, renameTable));
         return String.join("; ", createTable, insertData, dropTable, renameTable);
     }
 
@@ -626,7 +630,7 @@ public class TeradataJDBCUtil {
             query.append(String.format("ALTER TABLE %s %s; ", escapeTable(database, table),
                     String.join(", ", addOperations)));
         }
-
+        logMessage("INFO", "Prepared SQL statement: " + query.toString());
         return query.toString();
     }
 
@@ -647,7 +651,7 @@ public class TeradataJDBCUtil {
           escapeIdentifier(request.getSyncedColumn()),
           utcDeleteBefore);
 
-
+        logMessage("INFO", "Prepared SQL statement: " + query);
         return query;
     }
 
