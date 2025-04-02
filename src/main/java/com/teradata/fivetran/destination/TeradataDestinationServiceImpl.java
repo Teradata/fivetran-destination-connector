@@ -52,6 +52,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
 
         FormField user = FormField.newBuilder()
+                .setRequired(true)
                 .setName("user")
                 .setLabel("User")
                 .setTextField(TextField.PlainText)
@@ -59,6 +60,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
 
         FormField td2Password = FormField.newBuilder()
+                .setRequired(true)
                 .setName("td2password")
                 .setLabel("Password")
                 .setTextField(TextField.Password)
@@ -66,6 +68,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
 
         FormField ldapPassword = FormField.newBuilder()
+                .setRequired(true)
                 .setName("ldappassword")
                 .setLabel("Password")
                 .setTextField(TextField.Password)
@@ -108,8 +111,17 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                 .addAllFields(Arrays.asList(user, ldapPassword))
                                 .build()).build();
 
+        FormField database = FormField.newBuilder()
+                .setRequired(true)
+                .setDescription("NOTE: Please make sure Database already exists")
+                .setName("database")
+                .setLabel("Database")
+                .setTextField(TextField.PlainText)
+                .setPlaceholder("your_database_name")
+                .build();
+
         FormField tmode =  FormField.newBuilder().setName("tmode").setLabel("Transaction Mode")
-                .setRequired(false)
+                .setRequired(true)
                 .setDescription(
                         "Transaction Mode.\n"
                                 + "Options include:\n"
@@ -150,45 +162,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("VERIFY-FULL"))
                 .build();
 
-        FormField sslAllow = FormField.newBuilder()
-                                .setConditionalFields(
-                                    ConditionalFields.newBuilder()
-                                    .setCondition(VisibilityCondition.newBuilder()
-                                    .setConditionField("ssl.mode")
-                                    .setStringValue("ALLOW")
-                                    .build()
-                                    )
-                                    .addAllFields(
-                                        Collections.singletonList(serverCert))
-                                .build())
-                            .build();
-
-        FormField sslPrefer = FormField.newBuilder()
-                .setConditionalFields(
-                        ConditionalFields.newBuilder()
-                                .setCondition(VisibilityCondition.newBuilder()
-                                        .setConditionField("ssl.mode")
-                                        .setStringValue("PREFER")
-                                        .build()
-                                )
-                                .addAllFields(
-                                        Collections.singletonList(serverCert))
-                                .build())
-                .build();
-
-        FormField sslREQUIRE = FormField.newBuilder()
-                .setConditionalFields(
-                        ConditionalFields.newBuilder()
-                                .setCondition(VisibilityCondition.newBuilder()
-                                        .setConditionField("ssl.mode")
-                                        .setStringValue("REQUIRE")
-                                        .build()
-                                )
-                                .addAllFields(
-                                        Collections.singletonList(serverCert))
-                                .build())
-                .build();
-
         FormField sslVerifyCa = FormField.newBuilder()
                 .setConditionalFields(
                         ConditionalFields.newBuilder()
@@ -214,14 +187,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         Collections.singletonList(serverCert))
                                 .build())
                 .build();
-
-        FormField database = FormField.newBuilder()
-                .setName("database")
-                .setLabel("Database")
-                .setTextField(TextField.PlainText)
-                .setPlaceholder("your_database_name")
-                .build();
-
 
         FormField driverParameters = FormField.newBuilder()
                 .setName("driver.parameters")
@@ -258,7 +223,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, tmode, sslMode, sslAllow, sslPrefer, sslREQUIRE, sslVerifyCa, sslVerifyFull, database, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();

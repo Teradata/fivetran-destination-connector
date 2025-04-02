@@ -28,7 +28,7 @@ public class TeradataConfiguration {
         this.td2password = conf.get("td2password");
         this.ldappassword = conf.get("ldappassword");
         this.database = getOrDefault(conf.get("database"), conf.get("user"));
-        this.tmode = conf.get("tmode");
+        this.tmode = getOrDefault(conf.get("tmode"), "DEFAULT");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
         this.driverParameters = getOrDefault(conf.get("driver.parameters"), null);
