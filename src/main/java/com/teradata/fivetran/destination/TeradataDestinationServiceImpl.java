@@ -136,7 +136,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
 
         FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
-                .setLabel("SSL Server's Certificate").setRequired(false)
+                .setLabel("SSL Server's Certificate").setRequired(true)
                 .setDescription(
                         "Server's certificate.")
                 .setTextField(TextField.PlainText)
