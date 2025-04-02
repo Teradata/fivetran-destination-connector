@@ -39,7 +39,8 @@ public class TeradataJDBCUtil {
         connectionProps.put("tmode", conf.tmode());
 
         connectionProps.put("sslMode", conf.sslMode());
-        if (!conf.sslMode().equals("DISABLE")) {
+        Set<String> CaModes = new HashSet<>(Arrays.asList("DISABLE", "ALLOW", "PREFER", "REQUIRE"));
+        if (!CaModes.contains(conf.sslMode())) {
             String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
             connectionProps.put("sslcapath", sslCertPaths[0]);
             connectionProps.put("sslca", sslCertPaths[1]);
