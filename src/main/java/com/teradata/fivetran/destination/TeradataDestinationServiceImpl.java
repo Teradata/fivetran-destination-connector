@@ -479,7 +479,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage(e.getMessage()).build())
+                            .setMessage(stackTrace).build())
                     .build());
             responseObserver.onCompleted();
         }
