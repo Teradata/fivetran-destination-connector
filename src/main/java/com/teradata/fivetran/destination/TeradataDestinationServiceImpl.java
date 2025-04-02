@@ -9,6 +9,7 @@ import com.teradata.fivetran.destination.writers.UpdateWriter;
 import fivetran_sdk.v2.*;
 import io.grpc.stub.StreamObserver;
 
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Arrays;
@@ -473,7 +474,24 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
-        } catch (Exception e) {
+        }
+        catch (BatchUpdateException bue) {
+            String stackTrace = "";
+            if (bue.getNextException() != null) {
+                Exception nextException = bue.getNextException();
+                stackTrace = getStackTrace(nextException);
+            } else {
+                stackTrace = getStackTrace(bue);
+            }
+            logMessage("SEVERE", String.format("WriteBatch failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
+            responseObserver.onNext(WriteBatchResponse.newBuilder()
+                    .setTask(Task.newBuilder()
+                            .setMessage(stackTrace).build())
+                    .build());
+            responseObserver.onCompleted();
+        }
+        catch (Exception e) {
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("WriteBatch failed for %s with exception %s",
                     TeradataJDBCUtil.escapeTable(database, table), stackTrace));
