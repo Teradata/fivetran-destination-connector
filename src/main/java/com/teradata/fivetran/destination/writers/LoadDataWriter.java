@@ -82,7 +82,13 @@ public class LoadDataWriter<T> extends Writer {
                 String value = row.get(i);
 
                 if (type == DataType.BOOLEAN) {
-                    preparedStatement.setBoolean(i + 1, value.equalsIgnoreCase("true"));
+                    if (value.equalsIgnoreCase("true")) {
+                        preparedStatement.setShort(i + 1, Short.parseShort("1"));
+                    } else if (value.equalsIgnoreCase("false")) {
+                        preparedStatement.setShort(i + 1, Short.parseShort("0"));
+                    } else {
+                        preparedStatement.setShort(i + 1, Short.parseShort(value));
+                    }
                 } else if (type == DataType.SHORT) {
                     preparedStatement.setShort(i + 1, Short.parseShort(value));
                 } else if (type == DataType.INT) {

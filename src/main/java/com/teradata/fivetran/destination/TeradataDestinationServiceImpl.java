@@ -291,6 +291,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 stmt.execute("SELECT 1");
                 responseObserver.onNext(TestResponse.newBuilder().setSuccess(true).build());
             } catch (Exception e) {
+                String stackTrace = getStackTrace(e);
+                logMessage("SEVERE", String.format("Test failed with exception %s", stackTrace));
                 responseObserver.onNext(TestResponse.newBuilder().setSuccess(false).setFailure(e.getMessage()).build());
             }
             responseObserver.onCompleted();
@@ -320,8 +322,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("WARNING", String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
             responseObserver.onNext(DescribeTableResponse.newBuilder().setNotFound(true).build());
         } catch (Exception e) {
+            String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("DescribeTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(DescribeTableResponse.newBuilder()
                     .setWarning(Warning.newBuilder().setMessage(e.getMessage()).build())
                     .build());
@@ -356,11 +359,11 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         } catch (Exception e) {
             String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
             String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
+            String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("CreateTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(CreateTableResponse.newBuilder()
                     .setTask(Task.newBuilder().setMessage(e.getMessage()).build())
-                    .setSuccess(false)
                     .build());
         }
         responseObserver.onCompleted();
@@ -399,15 +402,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
             String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(),
                     request.getTable().getName());
+            String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("AlterTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
-
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(e.getMessage()).build())
-                    .build());
-            responseObserver.onNext(AlterTableResponse.newBuilder()
-                    .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
         }
@@ -452,15 +452,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
+            String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("TruncateTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
-
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(TruncateResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(e.getMessage()).build())
-                    .build());
-            responseObserver.onNext(TruncateResponse.newBuilder()
-                    .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
         }
@@ -512,15 +509,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
+            String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("WriteBatch failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
-
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(e.getMessage()).build())
-                    .build());
-            responseObserver.onNext(WriteBatchResponse.newBuilder()
-                    .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
         }
@@ -535,5 +529,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     private void logMessage(String level, String message) {
         message = StringEscapeUtils.escapeJava(message);
         System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
+    }
+
+    private String getStackTrace(Exception ex) {
+        StringBuffer sb = new StringBuffer(500);
+        StackTraceElement[] st = ex.getStackTrace();
+        sb.append(ex.getClass().getName() + ": " + ex.getMessage() + "\n");
+        for (int i = 0; i < st.length; i++) {
+            sb.append("\t at " + st[i].toString() + "\n");
+        }
+        return sb.toString();
     }
 }
