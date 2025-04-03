@@ -71,6 +71,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
 
             // Commit the data to the table
             w.commit();
+            w.deleteInsert();
         }
 
         // Verify the data in the table
@@ -130,6 +131,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
             w.writeRow(List.of("1", dataBase64));
             // Commit the data to the table
             w.commit();
+            w.deleteInsert();
 
             // Verify the data in the table
             try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + conf.database() + ".allBytes")) {

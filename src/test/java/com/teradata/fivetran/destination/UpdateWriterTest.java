@@ -51,6 +51,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
             ));
             // Commit the data to the table
             w.commit();
+            w.deleteInsert();
 
             // Update the row of data in the table
             UpdateWriter u = new UpdateWriter(conn, database, allTypesTable.getName(), allTypesTable.getColumnsList(), params, null, 123);
@@ -152,6 +153,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
             w.writeRow(List.of("1", dataBase64, "123"));
             // Commit the data to the table
             w.commit();
+            w.deleteInsert();
 
             // Update the row of data in the table
             UpdateWriter u = new UpdateWriter(conn, database, allBytesTable.getName(), allBytesTable.getColumnsList(), params, null, 123);

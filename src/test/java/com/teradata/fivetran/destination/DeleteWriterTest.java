@@ -65,6 +65,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                     "Sample String"                // varcharColumn
             ));
             w.commit();
+            w.deleteInsert();
 
             // Delete the data from the table
             DeleteWriter d = new DeleteWriter(conn, database, allTypesTableBigKey.getName(),
@@ -147,6 +148,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
             w.setHeader(List.of("a", "b", "c"));
             w.writeRow(List.of("1", dataBase64, "123"));
             w.commit();
+            w.deleteInsert();
 
             // Delete the data from the table
             DeleteWriter d = new DeleteWriter(conn, database, allBytesTable.getName(),
@@ -179,7 +181,8 @@ public class DeleteWriterTest extends IntegrationTestBase {
                 data.append(i.toString() + "\n");
             }
             w.write(null, new ByteArrayInputStream(data.toString().getBytes()));
-
+            w.commit();
+            w.deleteInsert();
             // Delete data from the table in batches
             DeleteWriter d = new DeleteWriter(conn, database, t.getName(), t.getColumnsList(),
                     params, null, 1010);
@@ -188,6 +191,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                 data.append(i.toString() + "\n");
             }
             d.write(null, new ByteArrayInputStream(data.toString().getBytes()));
+            d.commit();
         }
 
         // Verify the remaining data in the table
