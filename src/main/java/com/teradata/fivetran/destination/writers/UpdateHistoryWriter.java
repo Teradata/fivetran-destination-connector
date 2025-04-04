@@ -5,8 +5,7 @@ import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,7 +18,6 @@ import java.util.*;
  * Class to handle writing update history for a table.
  */
 public class UpdateHistoryWriter extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(UpdateHistoryWriter.class);
     private final List<List<String>> rows = new ArrayList<>();
 
     /**
@@ -36,7 +34,7 @@ public class UpdateHistoryWriter extends Writer {
     public UpdateHistoryWriter(Connection conn, String database, String table, List<Column> columns,
                                FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
-        logger.info("UpdateHistoryWriter initialized with database: {}, table: {}, batchSize: {}", database, table, batchSize);
+        logMessage("INFO", String.format("UpdateHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     private List<Column> headerColumns = new ArrayList<>();
@@ -50,7 +48,6 @@ public class UpdateHistoryWriter extends Writer {
      */
     @Override
     public void setHeader(List<String> header) {
-        logger.info("in UpdateHistoryWriter.setHeader");
         for (int i = 0; i < header.size(); i++) {
             nameToHeaderPos.put(header.get(i), i);
         }
@@ -81,7 +78,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws SQLException {
-        logger.info("#########################UpdateHistoryWriter.writeRow#########################");
+        logMessage("INFO", "#########################UpdateHistoryWriter.writeRow#########################");
         rows.add(row);
         commit();
     }
@@ -93,7 +90,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     @Override
     public void commit() throws SQLException {
-        logger.info("#########################UpdateHistoryWriter.commit#########################");
+        logMessage("INFO", "#########################UpdateHistoryWriter.commit#########################");
         rows.sort(Comparator.comparing(row -> {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             String dateString = TeradataJDBCUtil.formatISODateTime(row.get(fivetranStartPos));
@@ -113,8 +110,8 @@ public class UpdateHistoryWriter extends Writer {
      * @throws SQLException If an SQL error occurs.
      */
     private void processRow(List<String> row) throws SQLException {
-        logger.info("#########################UpdateHistoryWriter.processRow#########################");
-        logger.info("Processing row: {}", row);
+        logMessage("INFO", "#########################UpdateHistoryWriter.processRow#########################");
+        logMessage("INFO", "Processing row: " + row);
         insertNewRow(row);
         updateOldRow(row);
     }
@@ -126,8 +123,8 @@ public class UpdateHistoryWriter extends Writer {
      * @throws SQLException If an SQL error occurs.
      */
     private void insertNewRow(List<String> row) throws SQLException {
-        logger.info("#########################UpdateHistoryWriter.insertNewRow#########################");
-        logger.info("Inserting new row: {}", row);
+        logMessage("INFO", "#########################UpdateHistoryWriter.insertNewRow#########################");
+        logMessage("INFO", "Inserting new row: " + row);
         StringBuilder insertQuery = new StringBuilder(String.format(
                 "INSERT INTO %s SELECT ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -155,7 +152,7 @@ public class UpdateHistoryWriter extends Writer {
                 insertQuery.append(String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-        logger.info("Insert query: {}", insertQuery);
+        logMessage("INFO", "Insert query is " + insertQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(insertQuery.toString())) {
             for (Column c : columns) {
@@ -176,7 +173,7 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logger.info("Executed insert statement for row: {}", row);
+            logMessage("INFO", "Executed insert statement for row: " + row);
         }
     }
 
@@ -187,7 +184,8 @@ public class UpdateHistoryWriter extends Writer {
      * @throws SQLException If an SQL error occurs.
      */
     private void updateOldRow(List<String> row) throws SQLException {
-        logger.info("Updating old row: {}", row);
+        logMessage("INFO", "#########################UpdateHistoryWriter.updateOldRow#########################");
+        logMessage("INFO", "Updating old row: " + row);
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 AND _fivetran_start < ? ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -199,7 +197,7 @@ public class UpdateHistoryWriter extends Writer {
                         String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-        logger.info("Update query: {}", updateQuery);
+        logMessage("INFO", "Update query is " + updateQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
             paramIndex++;
@@ -219,7 +217,13 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logger.info("Executed update statement for row: {}", row);
+            logMessage("INFO", "Executed update statement for row: " + row);
         }
     }
+
+    private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
+    }
+
 }

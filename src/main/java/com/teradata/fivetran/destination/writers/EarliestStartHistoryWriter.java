@@ -5,8 +5,7 @@ import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -21,7 +20,6 @@ import java.util.Map;
  * Class to handle writing earliest start history for a table.
  */
 public class EarliestStartHistoryWriter extends Writer {
-    private static final Logger logger = LoggerFactory.getLogger(EarliestStartHistoryWriter.class);
 
     /**
      * Constructor to initialize EarliestStartHistoryWriter.
@@ -36,6 +34,7 @@ public class EarliestStartHistoryWriter extends Writer {
      */
     public EarliestStartHistoryWriter(Connection conn, String database, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        logMessage("INFO",String.format("EarliestStartHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     List<Column> headerColumns = new ArrayList<>();
@@ -54,7 +53,6 @@ public class EarliestStartHistoryWriter extends Writer {
         for (Column column : columns) {
             nameToColumn.put(column.getName(), column);
         }
-        logger.info("header is " + header);
         for (int i = 0; i < header.size(); i++) {
             String name = header.get(i);
             if (name.equals("_fivetran_start")) {
@@ -62,8 +60,6 @@ public class EarliestStartHistoryWriter extends Writer {
             }
             headerColumns.add(nameToColumn.get(name));
         }
-        logger.info("headerColumns is " + headerColumns);
-        logger.info("earliestFivetranStartPos is " + earliestFivetranStartPos);
         if (earliestFivetranStartPos == null) {
             throw new IllegalArgumentException("File doesn't contain _fivetran_start column");
         }
@@ -76,13 +72,10 @@ public class EarliestStartHistoryWriter extends Writer {
      * @throws Exception If an error occurs.
      */
     public void writeDelete(List<String> row) throws Exception {
-        logger.info("#########################EarliestStartHistoryWriter.writeDelete#############################################################");
+        logMessage("INFO","#########################EarliestStartHistoryWriter.writeDelete#############################################################");
         StringBuilder deleteQuery = new StringBuilder(String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, table)));
 
         boolean firstPKColumn = true;
-        for (int i = 0; i < row.size(); i++) {
-            logger.info("Rows is " + row.get(i));
-        }
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
             if (c != null && c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
@@ -98,29 +91,24 @@ public class EarliestStartHistoryWriter extends Writer {
         }
 
         deleteQuery.append("AND _fivetran_start >= ?");
-        logger.info(String.format("deleteQuery SQL:\n %s", deleteQuery.toString()));
+        logMessage("INFO", "deleteQuery is " + deleteQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(deleteQuery.toString())) {
             for (int i = 0; i < row.size(); i++) {
                 String value = row.get(i);
-                logger.info("IN FOR: i is " + i);
-                logger.info("IN FOR: value is " + value);
                 Column c = headerColumns.get(i);
                 if (c == null || !c.getPrimaryKey() || c.getName().equals("_fivetran_start")) {
-                    logger.info("IN FOR: continue, c is " + c);
                     continue;
                 }
 
                 paramIndex++;
-                logger.info("paramIndex is " + paramIndex);
-                logger.info("value is " + value);
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
 
             paramIndex++;
             TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
             stmt.execute();
-            logger.info("Executed delete statement for row: {}", row);
+            logMessage("INFO", "Executed delete statement for row: " + row);
         }
     }
 
@@ -131,13 +119,10 @@ public class EarliestStartHistoryWriter extends Writer {
      * @throws Exception If an error occurs.
      */
     public void writeUpdate(List<String> row) throws Exception {
-        logger.info("#########################EarliestStartHistoryWriter.writeUpdate#############################################################");
+        logMessage("INFO","#########################EarliestStartHistoryWriter.writeUpdate#############################################################");
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 ",
                 TeradataJDBCUtil.escapeTable(database, table)));
-        for (int i = 0; i < row.size(); i++) {
-            logger.info("Rows is " + row.get(i));
-        }
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
             if (c != null && c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
@@ -145,28 +130,23 @@ public class EarliestStartHistoryWriter extends Writer {
                         String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-        logger.info(String.format("updateQuery SQL:\n %s", updateQuery.toString()));
+        logMessage("INFO", "updateQuery is " + updateQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
             paramIndex++;
             TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
             for (int i = 0; i < row.size(); i++) {
                 String value = row.get(i);
-                logger.info("IN FOR: i is " + i);
-                logger.info("IN FOR: value is " + value);
                 Column c = headerColumns.get(i);
                 if (c == null || !c.getPrimaryKey() || c.getName().equals("_fivetran_start")) {
-                    logger.info("IN FOR: continue, c is " + c);
                     continue;
                 }
 
                 paramIndex++;
-                logger.info("paramIndex is " + paramIndex);
-                logger.info("value is " + value);
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
             stmt.execute();
-            logger.info("Executed update statement for row: {}", row);
+            logMessage("INFO", "Executed update statement for row: " + row);
         }
     }
 
@@ -178,7 +158,7 @@ public class EarliestStartHistoryWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws Exception {
-        logger.info("#########################EarliestStartHistoryWriter.writeRow#############################################################");
+        logMessage("INFO", "#########################EarliestStartHistoryWriter.writeRow#############################################################");
         writeDelete(row);
         writeUpdate(row);
     }
@@ -193,5 +173,10 @@ public class EarliestStartHistoryWriter extends Writer {
     @Override
     public void commit() throws InterruptedException, IOException, SQLException {
         // Implementation for commit
+    }
+
+    private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }

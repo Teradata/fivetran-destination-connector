@@ -1,8 +1,7 @@
 package com.teradata.fivetran.destination.warning_util;
 
 import io.grpc.stub.StreamObserver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.StringEscapeUtils;
 
 /**
  * Abstract class to handle warnings and send them to a response observer.
@@ -11,7 +10,6 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class WarningHandler<T> {
     protected final StreamObserver<T> responseObserver;
-    protected static final Logger logger = LoggerFactory.getLogger(WarningHandler.class);
 
     /**
      * Constructor for WarningHandler.
@@ -28,7 +26,7 @@ public abstract class WarningHandler<T> {
      * @param message The warning message.
      */
     public void handle(String message) {
-        logger.warn(message);
+        logMessage("WARNING", message);
         responseObserver.onNext(createWarning(message));
     }
 
@@ -39,7 +37,7 @@ public abstract class WarningHandler<T> {
      * @param t       The throwable associated with the warning.
      */
     public void handle(String message, Throwable t) {
-        logger.warn(message, t);
+        logMessage("WARNING", message);
         responseObserver.onNext(createWarning(String.format("%s: %s", message, t.getMessage())));
     }
 
@@ -50,4 +48,9 @@ public abstract class WarningHandler<T> {
      * @return The warning response.
      */
     public abstract T createWarning(String message);
+
+    private void logMessage(String level, String message) {
+        message = StringEscapeUtils.escapeJava(message);
+        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
+    }
 }

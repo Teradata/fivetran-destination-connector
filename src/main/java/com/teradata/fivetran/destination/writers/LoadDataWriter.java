@@ -7,8 +7,6 @@ import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
 import fivetran_sdk.v2.DataType;
 import org.apache.commons.lang3.StringEscapeUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -94,7 +92,7 @@ public class LoadDataWriter<T> extends Writer {
 
     @Override
     public void writeRow(List<String> row) throws Exception {
-        logMessage("INFO","Writing row: " + row);
+        logMessage("INFO","#########################LoadDataWriter.writeRow#########################");
         try {
             for (int i = 0; i < row.size(); i++) {
                 DataType type = headerColumns.get(i).getType();

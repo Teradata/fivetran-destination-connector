@@ -5,12 +5,9 @@ import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
 import org.apache.commons.lang3.StringEscapeUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -65,6 +62,7 @@ public class DeleteWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws SQLException {
+        logMessage("INFO","#########################DeleteWriter.writeRow#########################");
         rows.add(row);
     }
 

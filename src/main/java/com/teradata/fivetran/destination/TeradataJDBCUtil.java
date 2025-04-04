@@ -2,8 +2,6 @@ package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import fivetran_sdk.v2.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -15,7 +13,6 @@ import java.util.function.Function;
 
 public class TeradataJDBCUtil {
 
-    private static final Logger log = LoggerFactory.getLogger(TeradataJDBCUtil.class);
 
     /**
      * Creates a connection to the Teradata database using the provided configuration.
