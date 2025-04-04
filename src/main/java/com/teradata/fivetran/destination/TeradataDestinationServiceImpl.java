@@ -439,13 +439,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =
                 TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
-        logMessage("INFO", String.format("Database: %s, Table: %s", database, table));
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(column -> column.getPrimaryKey())) {
                 throw new Exception("No primary key found");
             }
-            logMessage("INFO", "Started LoadDataWriter");
+            logMessage("INFO", "********************************In LoadDataWriter**********************************");
             LoadDataWriter w =
                     new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
@@ -454,14 +453,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 w.write(file);
                 w.deleteInsert();
             }
-            logMessage("INFO", "Started UpdateWriter");
+            logMessage("INFO", "********************************In UpdateWriter**********************************");
             UpdateWriter u =
                     new UpdateWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getUpdateFilesList()) {
                 u.write(file);
             }
-            logMessage("INFO", "Started DeleteWriter");
+            logMessage("INFO", "********************************In DeleteWriter**********************************");
             DeleteWriter d =
                     new DeleteWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());

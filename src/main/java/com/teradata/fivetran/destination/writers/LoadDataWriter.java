@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLXML;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -122,8 +123,14 @@ public class LoadDataWriter<T> extends Writer {
                     preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                 } else if (type == DataType.BINARY) {
                     preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
-                } else {
+                } else if (type == DataType.XML) {
+                    SQLXML sqlxml =  preparedStatement.getConnection().createSQLXML();
+                    sqlxml.setString(value);
+                    preparedStatement.setSQLXML(i + 1, sqlxml);
+                } else if (type == DataType.STRING) {
                     preparedStatement.setString(i + 1, value);
+                } else {
+                    preparedStatement.setObject(i + 1, value);
                 }
                 logMessage("INFO", String.format("Set parameter at index %d: %s", i + 1, value));
             }

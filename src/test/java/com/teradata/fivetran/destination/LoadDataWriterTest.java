@@ -87,7 +87,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                         "2024-01-01 12:34:56.0",    // timestampColumn
                         "DEADBEEF1DE",            // blobColumn (hex encoded)
                         "{\"key\": \"value\"}",   // jsonColumn
-                        "&lt;root&gt;&lt;child&gt;value&lt;/child&gt;&lt;/root&gt;", // xmlColumn
+                        "<root><child>value</child></root>", // xmlColumn
                         "Sample String"           // varcharColumn
                 ),
                 Arrays.asList("2",
@@ -101,7 +101,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                         "2024-01-01 12:34:56.0",    // timestampColumn
                         "DEADBEEF1DE",            // blobColumn (hex encoded)
                         "{\"key\": \"value\"}",   // jsonColumn
-                        "&lt;root&gt;&lt;child&gt;value&lt;/child&gt;&lt;/root&gt;", // xmlColumn
+                        "<root><child>value</child></root>", // xmlColumn
                         "Sample String"           // varcharColumn
                 )
         ));
