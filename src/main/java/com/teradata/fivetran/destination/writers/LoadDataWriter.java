@@ -71,7 +71,8 @@ public class LoadDataWriter<T> extends Writer {
                 .collect(Collectors.joining(", "));
 
         String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
-        temp_table = String.format("%s_%s", table, "tmp_del_ins");
+
+        temp_table = String.format("%s_%s_%d", table, "tmp_del_ins", System.currentTimeMillis());
 
         String createTempTable = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
                 TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
