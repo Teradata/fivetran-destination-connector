@@ -81,7 +81,7 @@ public class LoadDataWriter<T> extends Writer {
             conn.createStatement().execute(createTempTable);
         } catch (SQLException e) {
             logMessage("SEVERE","Failed to create temporary table: " + e.getMessage());
-            throw new SQLException("Failed to create temporary table", e);
+            throw new SQLException("Failed to create temporary table: " + e.getMessage(), e);
         }
 
         String query = String.format("INSERT INTO %s (%s) VALUES (%s)",
