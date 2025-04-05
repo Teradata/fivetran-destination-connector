@@ -22,7 +22,7 @@ public class DescribeTableTest extends IntegrationTestBase {
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             // Retrieve the table metadata
-            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, schema, "allTypesTable", "allTypesTable", testWarningHandle);
+            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, "allTypesTable", "allTypesTable", testWarningHandle);
             assertEquals("allTypesTable", allTypesTable.getName());
             List<Column> columns = allTypesTable.getColumnsList();
 
@@ -91,7 +91,7 @@ public class DescribeTableTest extends IntegrationTestBase {
                     + "dec2 DECIMAL(10, 5)" + ")");
 
             // Retrieve the table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
             assertEquals("scaleAndPrecision", t.getName());
             List<Column> columns = t.getColumnsList();
 

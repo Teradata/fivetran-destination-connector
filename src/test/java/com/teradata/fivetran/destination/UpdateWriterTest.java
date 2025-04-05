@@ -29,9 +29,9 @@ public class UpdateWriterTest extends IntegrationTestBase {
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             // Retrieve the table metadata
-            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, schema, "allTypesTable", "allTypesTable", testWarningHandle);
+            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, "allTypesTable", "allTypesTable", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
-            LoadDataWriter w = new LoadDataWriter(conn, database, schema, allTypesTable.getName(), allTypesTable.getColumnsList(), params, null, 123, testWarningHandle);
+            LoadDataWriter w = new LoadDataWriter(conn, database, allTypesTable.getName(), allTypesTable.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(allTypesColumns);
             // Write a row of data into the table
             w.writeRow(List.of(
@@ -108,7 +108,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".partialUpdate VALUES(10, 11, 12)");
 
             // Retrieve the table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "partialUpdate", "partialUpdate", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "partialUpdate", "partialUpdate", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
@@ -145,9 +145,9 @@ public class UpdateWriterTest extends IntegrationTestBase {
             // Create a table with a BLOB column
             stmt.executeQuery("CREATE TABLE " + conf.database() + ".allBytes(a INT PRIMARY KEY NOT NULL, b BLOB, c INT)");
             // Retrieve the table metadata
-            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, schema, "allBytes", "allBytes", testWarningHandle);
+            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, "allBytes", "allBytes", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
-            LoadDataWriter w = new LoadDataWriter(conn, database, schema, allBytesTable.getName(), allBytesTable.getColumnsList(), params, null, 123, testWarningHandle);
+            LoadDataWriter w = new LoadDataWriter(conn, database, allBytesTable.getName(), allBytesTable.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(List.of("a", "b", "c"));
             // Write a row of data into the table
             w.writeRow(List.of("1", dataBase64, "123"));

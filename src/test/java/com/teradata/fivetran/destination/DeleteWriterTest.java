@@ -42,11 +42,11 @@ public class DeleteWriterTest extends IntegrationTestBase {
 
             // Get the table metadata
             Table allTypesTableBigKey =
-                    TeradataJDBCUtil.getTable(conf, database, schema, "allTypesTableBigKey", "allTypesTableBigKey", testWarningHandle);
+                    TeradataJDBCUtil.getTable(conf, database, "allTypesTableBigKey", "allTypesTableBigKey", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
 
             // Load data into the table
-            LoadDataWriter w = new LoadDataWriter(conn, database, schema, allTypesTableBigKey.getName(),
+            LoadDataWriter w = new LoadDataWriter(conn, database, allTypesTableBigKey.getName(),
                     allTypesTableBigKey.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(allTypesColumns);
             w.writeRow(List.of(
@@ -68,7 +68,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
             w.deleteInsert();
 
             // Delete the data from the table
-            DeleteWriter d = new DeleteWriter(conn, database, schema, allTypesTableBigKey.getName(),
+            DeleteWriter d = new DeleteWriter(conn, database, allTypesTableBigKey.getName(),
                     allTypesTableBigKey.getColumnsList(), params, null, 123);
             d.setHeader(allTypesColumns);
             d.writeRow(List.of(
@@ -106,12 +106,12 @@ public class DeleteWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".deletePartOfRows VALUES(10, 11, 12)");
 
             // Get the table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "deletePartOfRows", "deletePartOfRows", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "deletePartOfRows", "deletePartOfRows", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Delete specific rows from the table
-            DeleteWriter d = new DeleteWriter(conn, database, schema, t.getName(), t.getColumnsList(),
+            DeleteWriter d = new DeleteWriter(conn, database, t.getName(), t.getColumnsList(),
                     params, null, 123);
             d.setHeader(List.of("id", "a", "b"));
             d.writeRow(List.of("4", "unm", "unm"));
@@ -140,18 +140,18 @@ public class DeleteWriterTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement();) {
             // Create a table with a BLOB column
             stmt.executeQuery("CREATE TABLE " + conf.database() + ".allBytes(a INT PRIMARY KEY NOT NULL, b BLOB, c INT)");
-            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, schema, "allBytes", "allBytes", testWarningHandle);
+            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, "allBytes", "allBytes", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
 
             // Load data into the table
-            LoadDataWriter w = new LoadDataWriter(conn, database, schema, allBytesTable.getName(), allBytesTable.getColumnsList(), params, null, 123, testWarningHandle);
+            LoadDataWriter w = new LoadDataWriter(conn, database, allBytesTable.getName(), allBytesTable.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(List.of("a", "b", "c"));
             w.writeRow(List.of("1", dataBase64, "123"));
             w.commit();
             w.deleteInsert();
 
             // Delete the data from the table
-            DeleteWriter d = new DeleteWriter(conn, database, schema, allBytesTable.getName(),
+            DeleteWriter d = new DeleteWriter(conn, database, allBytesTable.getName(),
                     allBytesTable.getColumnsList(), params, null, 123);
             d.setHeader(List.of("a", "b", "c"));
             d.writeRow(List.of("1", dataBase64, "123"));
@@ -171,10 +171,10 @@ public class DeleteWriterTest extends IntegrationTestBase {
             stmt.execute("CREATE TABLE " + conf.database() + ".batchSize(id INT PRIMARY KEY NOT NULL)");
 
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "batchSize", "batchSize", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "batchSize", "batchSize", testWarningHandle);
 
             // Load data into the table in batches
-            LoadDataWriter w = new LoadDataWriter(conn, database, schema, t.getName(), t.getColumnsList(),
+            LoadDataWriter w = new LoadDataWriter(conn, database, t.getName(), t.getColumnsList(),
                     params, null, 1000, testWarningHandle);
             StringBuilder data = new StringBuilder("id\n");
             for (Integer i = 0; i < 2000; i++) {
@@ -184,7 +184,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
             w.commit();
             w.deleteInsert();
             // Delete data from the table in batches
-            DeleteWriter d = new DeleteWriter(conn, database, schema, t.getName(), t.getColumnsList(),
+            DeleteWriter d = new DeleteWriter(conn, database, t.getName(), t.getColumnsList(),
                     params, null, 1010);
             data = new StringBuilder("id\n");
             for (Integer i = 0; i < 100; i++) {

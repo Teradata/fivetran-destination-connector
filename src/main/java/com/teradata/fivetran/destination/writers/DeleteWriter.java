@@ -28,7 +28,7 @@ public class DeleteWriter extends Writer {
      * @param secretKeys The map of secret keys.
      * @param batchSize  The batch size for writing rows.
      */
-    public DeleteWriter(Connection conn, String database, String schema, String table, List<Column> columns,
+    public DeleteWriter(Connection conn, String database, String table, List<Column> columns,
                         FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         logMessage("INFO",String.format("DeleteWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
@@ -81,7 +81,7 @@ public class DeleteWriter extends Writer {
                 .map(column -> String.format("%s = ?", TeradataJDBCUtil.escapeIdentifier(column.getName())))
                 .collect(Collectors.joining(" AND "));
 
-        String query = String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, schema, table)) +
+        String query = String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, table)) +
                 rows.stream().map(row -> "(" + condition + ")").collect(Collectors.joining(" OR "));
 
         logMessage("INFO", "Prepared SQL statement: " + query);

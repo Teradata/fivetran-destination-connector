@@ -272,22 +272,21 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         logMessage("INFO","########################describeTable##############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-        String schema = request.getSchemaName();
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
 
         logMessage("INFO", String.format("Database: %s, Table: %s", database, table));
 
         try {
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, table, table, new DescribeTableWarningHandler(responseObserver));
+            Table t = TeradataJDBCUtil.getTable(conf, database, table, table, new DescribeTableWarningHandler(responseObserver));
             logMessage("INFO", String.format("Table metadata: %s", t));
             responseObserver.onNext(DescribeTableResponse.newBuilder().setTable(t).build());
         } catch (TeradataJDBCUtil.TableNotExistException e) {
-            logMessage("WARNING", String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, schema, table)));
+            logMessage("WARNING", String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
             responseObserver.onNext(DescribeTableResponse.newBuilder().setNotFound(true).build());
         } catch (Exception e) {
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("DescribeTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(DescribeTableResponse.newBuilder()
                     .setWarning(Warning.newBuilder().setMessage(e.getMessage()).build())
                     .build());
@@ -303,7 +302,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
      */
     @Override
     public void createTable(CreateTableRequest request, StreamObserver<CreateTableResponse> responseObserver) {
-        request.getSchemaName();
         logMessage("INFO","#########################createTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
@@ -322,11 +320,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(CreateTableResponse.newBuilder().setSuccess(true).build());
         } catch (Exception e) {
             String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-            String schema = request.getSchemaName();
             String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("CreateTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(CreateTableResponse.newBuilder()
                     .setTask(Task.newBuilder().setMessage(e.getMessage()).build())
                     .build());
@@ -365,12 +362,11 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onCompleted();
         } catch (Exception e) {
             String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-            String schema = request.getSchemaName();
             String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(),
                     request.getTable().getName());
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("AlterTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(e.getMessage()).build())
@@ -391,14 +387,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         logMessage("INFO","#########################truncate#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-        String schema = request.getSchemaName();
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
-            if (!TeradataJDBCUtil.checkTableExists(stmt, database, schema, table)) {
+            if (!TeradataJDBCUtil.checkTableExists(stmt, database, table)) {
                 logMessage("WARNING", String.format("Table %s doesn't exist",
-                        TeradataJDBCUtil.escapeTable(database, schema, table)));
+                        TeradataJDBCUtil.escapeTable(database, table)));
                 responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
                 responseObserver.onCompleted();
                 return;
@@ -421,7 +416,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         } catch (Exception e) {
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("TruncateTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(TruncateResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(e.getMessage()).build())
@@ -442,7 +437,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         logMessage("INFO","#########################writeBatch#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-        String schema = request.getSchemaName();
         String table =
                 TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
@@ -452,7 +446,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             }
             logMessage("INFO", "********************************In LoadDataWriter**********************************");
             LoadDataWriter w =
-                    new LoadDataWriter(conn, database, schema, table, request.getTable().getColumnsList(),
+                    new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                             new WriteBatchWarningHandler(responseObserver));
             for (String file : request.getReplaceFilesList()) {
@@ -468,7 +462,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             }
             logMessage("INFO", "********************************In DeleteWriter**********************************");
             DeleteWriter d =
-                    new DeleteWriter(conn, database, schema, table, request.getTable().getColumnsList(),
+                    new DeleteWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getDeleteFilesList()) {
                 d.write(file);
@@ -486,7 +480,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 stackTrace = getStackTrace(bue);
             }
             logMessage("SEVERE", String.format("WriteBatch failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(stackTrace).build())
@@ -496,7 +490,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         catch (Exception e) {
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("WriteBatch failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(stackTrace).build())
@@ -511,7 +505,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         logMessage("INFO","#########################writeHistoryBatch#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-        String schema = request.getSchemaName();
         String table =
                 TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
 
@@ -521,19 +514,19 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 throw new Exception("No primary key found");
             }
             logMessage("INFO", "********************************In DescribeTableWriter**********************************");
-            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, schema, table, request.getTable().getColumnsList(),
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getEarliestStartFilesList()) {
                 e.write(file);
             }
             logMessage("INFO", "********************************In EarliestStartHistoryWriter**********************************");
-            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, schema, table, request.getTable().getColumnsList(),
+            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getUpdateFilesList()) {
                 u.write(file);
             }
             logMessage("INFO", "********************************In LoadDataWriter**********************************");
-            LoadDataWriter<WriteBatchResponse> w = new LoadDataWriter<>(conn, database, schema, table, request.getTable().getColumnsList(),
+            LoadDataWriter<WriteBatchResponse> w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                     new WriteBatchWarningHandler(responseObserver));
             for (String file : request.getReplaceFilesList()) {
@@ -541,7 +534,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 w.deleteInsert();
             }
             logMessage("INFO", "********************************In UpdateHistoryWriter**********************************");
-            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, schema, table, request.getTable().getColumnsList(),
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             for (String file : request.getDeleteFilesList()) {
                 d.write(file);
@@ -552,7 +545,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         } catch (Exception e) {
             String stackTrace = getStackTrace(e);
             logMessage("SEVERE", String.format("WriteHistoryBatch failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, schema, table), stackTrace));
+                    TeradataJDBCUtil.escapeTable(database, table), stackTrace));
 
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()

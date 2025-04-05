@@ -29,7 +29,6 @@ public abstract class Writer {
 
     protected Connection conn;
     protected String database;
-    protected String schema;
     protected String table;
     protected List<Column> columns;
     protected FileParams params;

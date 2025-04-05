@@ -35,12 +35,12 @@ public class UpdateHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".noFivetranStartUpdate VALUES(1, 'a', 1, '2005-05-24 20:57:00.0')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "noFivetranStartUpdate", "noFivetranStartUpdate", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "noFivetranStartUpdate", "noFivetranStartUpdate", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize UpdateHistoryWriter and expect an exception due to missing _fivetran_start column
-            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
+            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
             Exception exception = assertThrows(IllegalArgumentException.class, () -> {
                 u.setHeader(Arrays.asList("id", "data", "_fivetran_active", "_fivetran_end"));
             });
@@ -73,12 +73,12 @@ public class UpdateHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".singlePKUpdate VALUES(2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "singlePKUpdate", "singlePKUpdate", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "singlePKUpdate", "singlePKUpdate", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize UpdateHistoryWriter and write rows
-            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
+            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
             u.setHeader(Arrays.asList("id", "data", "_fivetran_start"));
             u.writeRow(Arrays.asList("1", "f", "2005-05-25T20:57:00Z"));
             u.writeRow(Arrays.asList("2", "unm", "2005-05-26T20:57:00Z"));
@@ -125,12 +125,12 @@ public class UpdateHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".multiPKUpdate VALUES(2, 2, 'e', 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "multiPKUpdate", "multiPKUpdate", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, "multiPKUpdate", "multiPKUpdate", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize UpdateHistoryWriter and write rows
-            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
+            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
             u.setHeader(Arrays.asList("id1", "id2", "data1", "data2", "_fivetran_start"));
             u.writeRow(Arrays.asList("1", "1", "f", "f", "2005-05-25T20:57:00Z"));
             u.writeRow(Arrays.asList("2", "2", "unm", "f", "2005-05-26T20:57:00Z"));

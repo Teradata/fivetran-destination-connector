@@ -47,7 +47,7 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, schema, "allTypesCreateTable", "allTypesCreateTable", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, "allTypesCreateTable", "allTypesCreateTable", testWarningHandle);
             assertEquals("allTypesCreateTable", result.getName());
             List<Column> columns = result.getColumnsList();
 
@@ -134,7 +134,7 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, schema, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
             assertEquals("scaleAndPrecision", result.getName());
             List<Column> columns = result.getColumnsList();
 
@@ -176,7 +176,7 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, schema, "stringByteLength", "stringByteLength", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, "stringByteLength", "stringByteLength", testWarningHandle);
             assertEquals("stringByteLength", result.getName());
             List<Column> columns = result.getColumnsList();
 

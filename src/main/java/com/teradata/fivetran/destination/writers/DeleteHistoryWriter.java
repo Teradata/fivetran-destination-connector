@@ -32,7 +32,7 @@ public class DeleteHistoryWriter extends Writer {
      * @param secretKeys The map of secret keys.
      * @param batchSize The batch size.
      */
-    public DeleteHistoryWriter(Connection conn, String database, String schema, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
+    public DeleteHistoryWriter(Connection conn, String database, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         logMessage("INFO",String.format("DeleteHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
@@ -78,7 +78,7 @@ public class DeleteHistoryWriter extends Writer {
         logMessage("INFO","#########################DeleteHistoryWriter.writeRow#########################");
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? WHERE _fivetran_active = 1 ",
-                TeradataJDBCUtil.escapeTable(database, schema, table)));
+                TeradataJDBCUtil.escapeTable(database, table)));
         logMessage("INFO","updateQuery is " + updateQuery);
 
         for (int i = 0; i < row.size(); i++) {

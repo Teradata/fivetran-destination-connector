@@ -66,7 +66,7 @@ public class UpdateWriter extends Writer {
     public void writeRow(List<String> row) throws SQLException {
         logMessage("INFO","Writing row: " + row);
         StringBuilder updateClause = new StringBuilder(
-                String.format("UPDATE %s SET ", TeradataJDBCUtil.escapeTable(database, schema, table)));
+                String.format("UPDATE %s SET ", TeradataJDBCUtil.escapeTable(database, table)));
         StringBuilder whereClause = new StringBuilder("WHERE ");
 
         boolean firstUpdateColumn = true;
