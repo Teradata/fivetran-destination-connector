@@ -35,12 +35,12 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".noFivetranStart VALUES(1, 'a', 1, '2005-05-24 20:57:00.0')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "noFivetranStart", "noFivetranStart", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "noFivetranStart", "noFivetranStart", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize EarliestStartHistoryWriter and expect an exception due to missing _fivetran_start column
-            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
             Exception exception = assertThrows(IllegalArgumentException.class, () -> {
                 e.setHeader(Arrays.asList("id", "data", "_fivetran_active", "_fivetran_end"));
             });
@@ -73,12 +73,12 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".singlePKEarliestStart VALUES(2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "singlePKEarliestStart", "singlePKEarliestStart", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "singlePKEarliestStart", "singlePKEarliestStart", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize EarliestStartHistoryWriter and write rows
-            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
             e.setHeader(Arrays.asList("id", "_fivetran_start"));
             e.writeRow(Arrays.asList("1", "2005-05-23T21:57:00Z"));
             e.writeRow(Arrays.asList("2", "2005-05-26T20:57:00Z"));
@@ -121,12 +121,12 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(2, 2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "multiPKEarliestStart", "multiPKEarliestStart", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "multiPKEarliestStart", "multiPKEarliestStart", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize EarliestStartHistoryWriter and write rows
-            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
             e.setHeader(Arrays.asList("id1", "id2", "_fivetran_start"));
             e.writeRow(Arrays.asList("1", "1", "2005-05-23T21:57:00Z"));
             e.writeRow(Arrays.asList("2", "2", "2005-05-26T20:57:00Z"));

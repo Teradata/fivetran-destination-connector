@@ -35,12 +35,12 @@ public class DeleteHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".noFivetranEnd VALUES(1, 'a', 1, '2005-05-24 20:57:00.000000')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "noFivetranEnd", "noFivetranEnd", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "noFivetranEnd", "noFivetranEnd", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize DeleteHistoryWriter and expect an exception due to missing _fivetran_end column
-            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
             Exception exception = assertThrows(IllegalArgumentException.class, () -> {
                 d.setHeader(Arrays.asList("id", "data", "_fivetran_active", "_fivetran_start"));
             });
@@ -73,12 +73,12 @@ public class DeleteHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".singlePK VALUES(2, 'e', 0, '2005-05-23 20:57:00.000000', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "singlePK", "singlePK", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "singlePK", "singlePK", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize DeleteHistoryWriter and write rows
-            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
             d.setHeader(Arrays.asList("id", "_fivetran_end"));
             d.writeRow(Arrays.asList("1", "2005-05-25T20:57:00Z"));
             d.writeRow(Arrays.asList("2", "2005-05-26T20:57:00Z"));
@@ -122,12 +122,12 @@ public class DeleteHistoryWriterTest extends IntegrationTestBase {
             stmt.execute("INSERT INTO " + conf.database() + ".multiPK VALUES(2, 2, 'e', 0, '2005-05-23 20:57:00.000000', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "multiPK", "multiPK", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, schema, "multiPK", "multiPK", testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
             // Initialize DeleteHistoryWriter and write rows
-            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, schema, t.getName(), t.getColumnsList(), params, null, 123);
             d.setHeader(Arrays.asList("id1", "id2", "_fivetran_end"));
             d.writeRow(Arrays.asList("1", "1", "2005-05-25T20:57:00Z"));
             d.writeRow(Arrays.asList("2", "2", "2005-05-26T20:57:00Z"));

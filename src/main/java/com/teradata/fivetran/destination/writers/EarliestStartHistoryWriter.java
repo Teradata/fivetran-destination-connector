@@ -32,7 +32,7 @@ public class EarliestStartHistoryWriter extends Writer {
      * @param secretKeys The map of secret keys.
      * @param batchSize The batch size.
      */
-    public EarliestStartHistoryWriter(Connection conn, String database, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
+    public EarliestStartHistoryWriter(Connection conn, String database, String schema, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         logMessage("INFO",String.format("EarliestStartHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
@@ -73,7 +73,7 @@ public class EarliestStartHistoryWriter extends Writer {
      */
     public void writeDelete(List<String> row) throws Exception {
         logMessage("INFO","#########################EarliestStartHistoryWriter.writeDelete#############################################################");
-        StringBuilder deleteQuery = new StringBuilder(String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, table)));
+        StringBuilder deleteQuery = new StringBuilder(String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, schema, table)));
 
         boolean firstPKColumn = true;
         for (int i = 0; i < row.size(); i++) {
@@ -122,7 +122,7 @@ public class EarliestStartHistoryWriter extends Writer {
         logMessage("INFO","#########################EarliestStartHistoryWriter.writeUpdate#############################################################");
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 ",
-                TeradataJDBCUtil.escapeTable(database, table)));
+                TeradataJDBCUtil.escapeTable(database, schema, table)));
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
             if (c != null && c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {

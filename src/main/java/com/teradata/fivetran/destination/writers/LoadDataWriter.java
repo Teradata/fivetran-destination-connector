@@ -42,7 +42,7 @@ public class LoadDataWriter<T> extends Writer {
      * @param warningHandler The warning handler.
      * @throws IOException If an I/O error occurs.
      */
-    public LoadDataWriter(Connection conn, String database, String table, List<Column> columns,
+    public LoadDataWriter(Connection conn, String database, String schema, String table, List<Column> columns,
                           FileParams params, Map<String, ByteString> secretKeys, Integer batchSize,
                           WarningHandler<T> warningHandler) throws IOException {
         super(conn, database, table, columns, params, secretKeys, batchSize);
@@ -75,7 +75,7 @@ public class LoadDataWriter<T> extends Writer {
         temp_table = String.format("%s_%s_%d", table, "tmp_del_ins", System.currentTimeMillis());
 
         String createTempTable = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
-                TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
+                TeradataJDBCUtil.escapeTable(database, schema, temp_table), TeradataJDBCUtil.escapeTable(database, schema, table));
         logMessage("INFO","Creating temporary table: " + createTempTable);
         try {
             dropTempTable();
@@ -86,7 +86,7 @@ public class LoadDataWriter<T> extends Writer {
         }
 
         String query = String.format("INSERT INTO %s (%s) VALUES (%s)",
-                TeradataJDBCUtil.escapeTable(database, temp_table), columnNames, placeholders);
+                TeradataJDBCUtil.escapeTable(database, schema, temp_table), columnNames, placeholders);
 
         logMessage("INFO","Prepared SQL statement: " + query);
         preparedStatement = conn.prepareStatement(query);
@@ -177,8 +177,8 @@ public class LoadDataWriter<T> extends Writer {
 
             String deleteQuery = String.format(
                     "DELETE FROM %s AS t WHERE EXISTS (SELECT 1 FROM %s AS tmp WHERE %s)",
-                    TeradataJDBCUtil.escapeTable(database, table),
-                    TeradataJDBCUtil.escapeTable(database, temp_table),
+                    TeradataJDBCUtil.escapeTable(database, schema, table),
+                    TeradataJDBCUtil.escapeTable(database, schema, temp_table),
                     condition
             );
 
@@ -194,7 +194,7 @@ public class LoadDataWriter<T> extends Writer {
         }
 
         String insertQuery = String.format("INSERT INTO %s SELECT * FROM %s",
-                TeradataJDBCUtil.escapeTable(database, table), TeradataJDBCUtil.escapeTable(database, temp_table));
+                TeradataJDBCUtil.escapeTable(database, schema, table), TeradataJDBCUtil.escapeTable(database, schema, temp_table));
         logMessage("INFO","Prepared SQL insert statement: " + insertQuery);
         try {
             conn.createStatement().execute(insertQuery);
@@ -208,8 +208,8 @@ public class LoadDataWriter<T> extends Writer {
     }
 
     private void dropTempTable() throws SQLException {
-        String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
-        String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
+        String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, schema, temp_table));
+        String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, schema, temp_table));
         logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);
         logMessage("INFO","Prepared SQL drop statement: " + dropQuery);
         try {

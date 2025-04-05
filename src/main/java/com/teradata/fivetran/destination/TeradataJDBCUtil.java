@@ -160,9 +160,9 @@ public class TeradataJDBCUtil {
      * @param table The table name.
      * @return True if the table exists, false otherwise.
      */
-    static boolean checkTableExists(Statement stmt, String database, String table) {
+    static boolean checkTableExists(Statement stmt, String database, String schema, String table) {
         try {
-            stmt.executeQuery(String.format("SELECT * FROM %s WHERE 1=0", escapeTable(database, table)));
+            stmt.executeQuery(String.format("SELECT * FROM %s WHERE 1=0", escapeTable(database, schema, table)));
             return true;
         } catch (SQLException e) {
             return false;
@@ -195,18 +195,18 @@ public class TeradataJDBCUtil {
      * @throws ClassNotFoundException If the JDBC driver class is not found.
      * @throws TableNotExistException If the table does not exist.
      */
-    static <T> Table getTable(TeradataConfiguration conf, String database, String table,
+    static <T> Table getTable(TeradataConfiguration conf, String database, String schema, String table,
                               String originalTableName, WarningHandler<T> warningHandler) throws Exception {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             DatabaseMetaData metadata = conn.getMetaData();
 
-            try (ResultSet tables = metadata.getTables(null, database, table, null)) {
+            try (ResultSet tables = metadata.getTables(null, database, schema + "_" + table, null)) {
                 if (!tables.next()) {
                     throw new TableNotExistException();
                 }
                 if (tables.next()) {
                     warningHandler.handle(String.format("Found several tables that match %s name",
-                            TeradataJDBCUtil.escapeTable(database, table)));
+                            TeradataJDBCUtil.escapeTable(database, schema, table)));
                 }
             }
 
@@ -313,9 +313,9 @@ public class TeradataJDBCUtil {
      * @param table The table metadata.
      * @return The SQL query to create the table.
      */
-    static String generateCreateTableQuery(String database, String tableName, Table table) {
+    static String generateCreateTableQuery(String database, String schema, String tableName, Table table) {
         String columnDefinitions = getColumnDefinitions(table.getColumnsList());
-        return String.format("CREATE Multiset TABLE %s (%s)", escapeTable(database, tableName), columnDefinitions);
+        return String.format("CREATE Multiset TABLE %s (%s)", escapeTable(database, schema, tableName), columnDefinitions);
     }
 
     /**
@@ -329,10 +329,11 @@ public class TeradataJDBCUtil {
      */
     static String generateCreateTableQuery(TeradataConfiguration conf, Statement stmt, CreateTableRequest request) throws SQLException {
         String database = getDatabaseName(conf, request.getSchemaName());
+        String schema = request.getSchemaName();
         String table = getTableName(conf, request.getSchemaName(), request.getTable().getName());
 
         if(database != null && table != null) {
-            return generateCreateTableQuery(database, table, request.getTable());
+            return generateCreateTableQuery(database, schema, table, request.getTable());
         } else {
             return null;
         }
@@ -537,8 +538,9 @@ public class TeradataJDBCUtil {
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table =
                 TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
+        String schema = request.getSchemaName();
 
-        Table oldTable = getTable(conf, database, table, request.getTable().getName(), warningHandler);
+        Table oldTable = getTable(conf, database, schema, table, request.getTable().getName(), warningHandler);
         Table newTable = request.getTable();
         boolean pkChanged = false;
 
@@ -574,30 +576,30 @@ public class TeradataJDBCUtil {
         if (pkChanged) {
             logMessage("INFO", "Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
 
-            return generateRecreateTableQuery(database, table, newTable, commonColumns);
+            return generateRecreateTableQuery(database, schema, table, newTable, commonColumns);
         } else {
-            return generateAlterTableQuery(database, table, columnsToAdd, columnsToChange);
+            return generateAlterTableQuery(database, schema, table, columnsToAdd, columnsToChange);
         }
     }
 
-    static String generateRecreateTableQuery(String database, String tableName, Table table,
+    static String generateRecreateTableQuery(String database, String schema, String tableName, Table table,
                                              List<Column> commonColumns) {
         String tmpTableName = tableName + "_alter_tmp";
         String columns = commonColumns.stream().map(column -> escapeIdentifier(column.getName()))
                 .collect(Collectors.joining(", "));
 
-        String createTable = generateCreateTableQuery(database, tmpTableName, table);
+        String createTable = generateCreateTableQuery(database, schema, tmpTableName, table);
         String insertData = String.format("INSERT INTO %s (%s) SELECT %s FROM %s",
-                escapeTable(database, tmpTableName), columns, columns,
-                escapeTable(database, tableName));
-        String dropTable = String.format("DROP TABLE %s", escapeTable(database, tableName));
+                escapeTable(database, schema, tmpTableName), columns, columns,
+                escapeTable(database, schema, tableName));
+        String dropTable = String.format("DROP TABLE %s", escapeTable(database, schema, tableName));
         String renameTable = String.format("RENAME TABLE %s TO %s",
-                escapeTable(database, tmpTableName), escapeTable(database, tableName));
+                escapeTable(database, schema, tmpTableName), escapeTable(database, schema, tableName));
         logMessage("INFO", "Prepared SQL statement: " + String.join("; ", createTable, insertData, dropTable, renameTable));
         return String.join("; ", createTable, insertData, dropTable, renameTable);
     }
 
-    static String generateAlterTableQuery(String database, String table, List<Column> columnsToAdd,
+    static String generateAlterTableQuery(String database, String schema, String table, List<Column> columnsToAdd,
                                           List<Column> columnsToChange) {
         if (columnsToAdd.isEmpty() && columnsToChange.isEmpty()) {
             return null;
@@ -608,15 +610,15 @@ public class TeradataJDBCUtil {
         for (Column column : columnsToChange) {
             String tmpColName = column.getName() + "_alter_tmp";
             query.append(String.format("ALTER TABLE %s ADD %s %s; ",
-                    escapeTable(database, table), escapeIdentifier(tmpColName),
+                    escapeTable(database, schema, table), escapeIdentifier(tmpColName),
                     mapDataTypes(column.getType(), column.getParams())));
             query.append(
-                    String.format("UPDATE %s SET %s = %s; ", escapeTable(database, table),
+                    String.format("UPDATE %s SET %s = %s; ", escapeTable(database, schema, table),
                             escapeIdentifier(tmpColName), escapeIdentifier(column.getName())));
-            query.append(String.format("ALTER TABLE %s DROP %s; ", escapeTable(database, table),
+            query.append(String.format("ALTER TABLE %s DROP %s; ", escapeTable(database, schema, table),
                     escapeIdentifier(column.getName())));
             query.append(String.format("ALTER TABLE %s RENAME %s TO %s; ",
-                    escapeTable(database, table), tmpColName, escapeIdentifier(column.getName())));
+                    escapeTable(database, schema, table), tmpColName, escapeIdentifier(column.getName())));
         }
 
         if (!columnsToAdd.isEmpty()) {
@@ -625,7 +627,7 @@ public class TeradataJDBCUtil {
             columnsToAdd.forEach(column -> addOperations
                     .add(String.format("ADD %s", getColumnDefinition(column))));
 
-            query.append(String.format("ALTER TABLE %s %s; ", escapeTable(database, table),
+            query.append(String.format("ALTER TABLE %s %s; ", escapeTable(database, schema, table),
                     String.join(", ", addOperations)));
         }
         logMessage("INFO", "Prepared SQL statement: " + query.toString());
@@ -636,13 +638,14 @@ public class TeradataJDBCUtil {
                                              TruncateRequest request, String utcDeleteBefore) {
         String query;
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
+        String schema = request.getSchemaName();
         String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
 
         if (request.hasSoft()) {
-            query = String.format("UPDATE %s SET %s = 1 ", escapeTable(database, table),
+            query = String.format("UPDATE %s SET %s = 1 ", escapeTable(database, schema, table),
                     escapeIdentifier(request.getSoft().getDeletedColumn()));
         } else {
-            query = String.format("DELETE FROM %s ", escapeTable(database, table));
+            query = String.format("DELETE FROM %s ", escapeTable(database, schema, table));
         }
 
       query += String.format("WHERE %s < TO_TIMESTAMP('%s')",
@@ -680,8 +683,8 @@ public class TeradataJDBCUtil {
      * @param table The table name.
      * @return The escaped table name.
      */
-    public static String escapeTable(String database, String table) {
-        return escapeIdentifier(database) + "." + escapeIdentifier(table);
+    public static String escapeTable(String database, String schema, String table) {
+        return escapeIdentifier(database) + "." + escapeIdentifier(schema + "_" + table);
     }
 
     public static String getSingleValue(ResultSet resultSet) throws SQLException {

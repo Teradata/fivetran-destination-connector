@@ -31,7 +31,7 @@ public class UpdateHistoryWriter extends Writer {
      * @param secretKeys The map of secret keys.
      * @param batchSize The batch size.
      */
-    public UpdateHistoryWriter(Connection conn, String database, String table, List<Column> columns,
+    public UpdateHistoryWriter(Connection conn, String database, String schema, String table, List<Column> columns,
                                FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         logMessage("INFO", String.format("UpdateHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
@@ -127,7 +127,7 @@ public class UpdateHistoryWriter extends Writer {
         logMessage("INFO", "Inserting new row: " + row);
         StringBuilder insertQuery = new StringBuilder(String.format(
                 "INSERT INTO %s SELECT ",
-                TeradataJDBCUtil.escapeTable(database, table)));
+                TeradataJDBCUtil.escapeTable(database, schema, table)));
 
         boolean firstColumn = true;
         for (Column c : columns) {
@@ -145,7 +145,7 @@ public class UpdateHistoryWriter extends Writer {
             firstColumn = false;
         }
 
-        insertQuery.append(String.format(" FROM %s WHERE _fivetran_active = 1 ", TeradataJDBCUtil.escapeTable(database, table)));
+        insertQuery.append(String.format(" FROM %s WHERE _fivetran_active = 1 ", TeradataJDBCUtil.escapeTable(database, schema, table)));
 
         for (Column c : columns) {
             if (c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
@@ -188,7 +188,7 @@ public class UpdateHistoryWriter extends Writer {
         logMessage("INFO", "Updating old row: " + row);
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 AND _fivetran_start < ? ",
-                TeradataJDBCUtil.escapeTable(database, table)));
+                TeradataJDBCUtil.escapeTable(database, schema, table)));
 
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
