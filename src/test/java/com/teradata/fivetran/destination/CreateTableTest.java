@@ -16,6 +16,7 @@ public class CreateTableTest extends IntegrationTestBase {
     // Test for creating a table with all data types
     @Test
     public void allDataTypes() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allTypesCreateTable";
         // Define a table with various data types
         Table allTypesCreateTable = Table.newBuilder().setName("allTypesCreateTable")
                 .addAllColumns(Arrays.asList(
@@ -39,7 +40,7 @@ public class CreateTableTest extends IntegrationTestBase {
                 .build();
 
         // Create a request to create the table
-        CreateTableRequest request = CreateTableRequest.newBuilder().setSchemaName(database)
+        CreateTableRequest request = CreateTableRequest.newBuilder().setSchemaName(IntegrationTestBase.schema)
                 .setTable(allTypesCreateTable).build();
 
         // Execute the create table query and verify the table structure
@@ -47,8 +48,8 @@ public class CreateTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, "allTypesCreateTable", "allTypesCreateTable", testWarningHandle);
-            assertEquals("allTypesCreateTable", result.getName());
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, result.getName());
             List<Column> columns = result.getColumnsList();
 
             assertEquals("boolean", columns.get(0).getName());
@@ -116,6 +117,7 @@ public class CreateTableTest extends IntegrationTestBase {
     // Test for creating a table with decimal columns having different scale and precision
     @Test
     public void scaleAndPrecision() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "scaleAndPrecision";
         // Define a table with decimal columns having different scale and precision
         Table t = Table.newBuilder().setName("scaleAndPrecision").addAllColumns(Arrays.asList(
                         Column.newBuilder().setName("dec1").setType(DataType.DECIMAL).setPrimaryKey(false)
@@ -127,15 +129,15 @@ public class CreateTableTest extends IntegrationTestBase {
                 .build();
 
         // Create a request to create the table
-        CreateTableRequest request = CreateTableRequest.newBuilder().setSchemaName(database).setTable(t).build();
+        CreateTableRequest request = CreateTableRequest.newBuilder().setSchemaName(IntegrationTestBase.schema).setTable(t).build();
 
         // Execute the create table query and verify the table structure
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
-            assertEquals("scaleAndPrecision", result.getName());
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, result.getName());
             List<Column> columns = result.getColumnsList();
 
             assertEquals("dec1", columns.get(0).getName());
@@ -155,6 +157,7 @@ public class CreateTableTest extends IntegrationTestBase {
     // Test for creating a table with string columns having different byte lengths
     @Test
     public void stringByteLength() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "stringByteLength";
         // Define a table with string columns having different byte lengths
         Table t = Table.newBuilder().setName("stringByteLength").addAllColumns(Arrays.asList(
                         Column.newBuilder().setName("str1").setType(DataType.STRING).setPrimaryKey(false)
@@ -169,15 +172,15 @@ public class CreateTableTest extends IntegrationTestBase {
                 .build();
 
         // Create a request to create the table
-        CreateTableRequest request = CreateTableRequest.newBuilder().setSchemaName(database).setTable(t).build();
+        CreateTableRequest request = CreateTableRequest.newBuilder().setSchemaName(IntegrationTestBase.schema).setTable(t).build();
 
         // Execute the create table query and verify the table structure
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             stmt.execute(query);
-            Table result = TeradataJDBCUtil.getTable(conf, database, "stringByteLength", "stringByteLength", testWarningHandle);
-            assertEquals("stringByteLength", result.getName());
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, result.getName());
             List<Column> columns = result.getColumnsList();
 
             assertEquals("str1", columns.get(0).getName());

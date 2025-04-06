@@ -19,6 +19,7 @@ public class TruncateTest extends IntegrationTestBase {
     // Test for soft truncating a table
     @Test
     public void softTruncate() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "softTruncate";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with specified columns
@@ -34,15 +35,15 @@ public class TruncateTest extends IntegrationTestBase {
 
             // Create the table in the database
             CreateTableRequest cr =
-                    CreateTableRequest.newBuilder().setSchemaName(database).setTable(t).build();
+                    CreateTableRequest.newBuilder().setSchemaName(IntegrationTestBase.schema).setTable(t).build();
             stmt.execute(TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, cr));
 
             // Insert data into the table
-            stmt.execute("INSERT INTO " + conf.database() + ".softTruncate VALUES (1, '2038-01-19 03:14:07.455', 0)");
-            stmt.execute("INSERT INTO " + conf.database() + ".softTruncate VALUES (2, '2038-01-19 03:14:07.456', 1)");
-            stmt.execute("INSERT INTO " + conf.database() + ".softTruncate VALUES (3, '2038-01-19 03:14:07.456', 0)");
-            stmt.execute("INSERT INTO " + conf.database() + ".softTruncate VALUES (4, '2038-01-19 03:14:07.457', 0)");
-            stmt.execute("INSERT INTO " + conf.database() + ".softTruncate VALUES (5, '2038-01-19 03:14:07.461', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (1, '2038-01-19 03:14:07.455', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (2, '2038-01-19 03:14:07.456', 1)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (3, '2038-01-19 03:14:07.456', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (4, '2038-01-19 03:14:07.457', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (5, '2038-01-19 03:14:07.461', 0)");
 
             // Create a truncate request with soft truncate settings
             TruncateRequest tr = TruncateRequest.newBuilder().putAllConfiguration(confMap)
@@ -60,10 +61,10 @@ public class TruncateTest extends IntegrationTestBase {
             String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
 
             // Execute the truncate table query
-            stmt.execute(TeradataJDBCUtil.generateTruncateTableQuery(conf, tr, utcDeleteBefore));
+            stmt.execute(TeradataJDBCUtil.generateTruncateTableQuery(conf.database(), tableName,  tr, utcDeleteBefore));
 
             // Verify the data in the table after truncation
-            checkResult("SELECT * FROM " + conf.database() + ".softTruncate ORDER BY a",
+            checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY a",
                     Arrays.asList(Arrays.asList("1", "2038-01-19 03:14:07.455", "1"),
                             Arrays.asList("2", "2038-01-19 03:14:07.456", "1"),
                             Arrays.asList("3", "2038-01-19 03:14:07.456", "1"),
@@ -75,6 +76,7 @@ public class TruncateTest extends IntegrationTestBase {
     // Test for hard truncating a table
     @Test
     public void hardTruncate() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "hardTruncate";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with specified columns
@@ -90,15 +92,15 @@ public class TruncateTest extends IntegrationTestBase {
 
             // Create the table in the database
             CreateTableRequest cr =
-                    CreateTableRequest.newBuilder().setSchemaName(database).setTable(t).build();
+                    CreateTableRequest.newBuilder().setSchemaName(IntegrationTestBase.schema).setTable(t).build();
             stmt.execute(TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, cr));
 
             // Insert data into the table
-            stmt.execute("INSERT INTO " + conf.database() + ".hardTruncate VALUES (1, '2038-01-19 03:14:07.455', 0)");
-            stmt.execute("INSERT INTO " + conf.database() + ".hardTruncate VALUES (2, '2038-01-19 03:14:07.456', 1)");
-            stmt.execute("INSERT INTO " + conf.database() + ".hardTruncate VALUES (3, '2038-01-19 03:14:07.456', 0)");
-            stmt.execute("INSERT INTO " + conf.database() + ".hardTruncate VALUES (4, '2038-01-19 03:14:07.457', 0)");
-            stmt.execute("INSERT INTO " + conf.database() + ".hardTruncate VALUES (5, '2038-01-19 03:14:07.461', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (1, '2038-01-19 03:14:07.455', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (2, '2038-01-19 03:14:07.456', 1)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (3, '2038-01-19 03:14:07.456', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (4, '2038-01-19 03:14:07.457', 0)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (5, '2038-01-19 03:14:07.461', 0)");
 
             // Create a truncate request with hard truncate settings
             TruncateRequest tr = TruncateRequest.newBuilder().putAllConfiguration(confMap)
@@ -115,10 +117,10 @@ public class TruncateTest extends IntegrationTestBase {
             String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
 
             // Execute the truncate table query
-            stmt.execute(TeradataJDBCUtil.generateTruncateTableQuery(conf, tr, utcDeleteBefore));
+            stmt.execute(TeradataJDBCUtil.generateTruncateTableQuery(conf.database(), tableName , tr, utcDeleteBefore));
 
             // Verify the data in the table after truncation
-            checkResult("SELECT * FROM " + conf.database() + ".hardTruncate ORDER BY a",
+            checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY a",
                     Arrays.asList(Arrays.asList("5", "2038-01-19 03:14:07.461", "0")));
         }
     }

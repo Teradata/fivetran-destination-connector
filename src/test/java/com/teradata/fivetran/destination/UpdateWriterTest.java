@@ -24,12 +24,13 @@ public class UpdateWriterTest extends IntegrationTestBase {
     // Test for updating all types of columns in a table
     @Test
     public void allTypes() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allTypesTable";
         // Create a table with various data types
         createAllTypesTable();
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             // Retrieve the table metadata
-            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, "allTypesTable", "allTypesTable", testWarningHandle);
+            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, tableName, tableName,  testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
             LoadDataWriter w = new LoadDataWriter(conn, database, allTypesTable.getName(), allTypesTable.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(allTypesColumns);
@@ -76,7 +77,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
         }
 
         // Verify the data in the table after update
-        checkResult("SELECT * FROM " + conf.database() + ".allTypesTable ORDER BY id",
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id",
                 Arrays.asList(Arrays.asList(
                         "1",
                         "1",                    // byteintColumn
@@ -97,18 +98,19 @@ public class UpdateWriterTest extends IntegrationTestBase {
     // Test for partially updating columns in a table
     @Test
     public void partialUpdate() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "partialUpdate";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             // Create a table with specified columns
-            stmt.execute("CREATE TABLE " + conf.database() + ".partialUpdate(id INT PRIMARY KEY NOT NULL, a INT, b INT)");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(id INT PRIMARY KEY NOT NULL, a INT, b INT)");
             // Insert data into the table
-            stmt.execute("INSERT INTO " + conf.database() + ".partialUpdate VALUES(1, 2, 3)");
-            stmt.execute("INSERT INTO " + conf.database() + ".partialUpdate VALUES(4, 5, 6)");
-            stmt.execute("INSERT INTO " + conf.database() + ".partialUpdate VALUES(7, 8, 9)");
-            stmt.execute("INSERT INTO " + conf.database() + ".partialUpdate VALUES(10, 11, 12)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 2, 3)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(4, 5, 6)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(7, 8, 9)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(10, 11, 12)");
 
             // Retrieve the table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "partialUpdate", "partialUpdate", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName,  testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
@@ -124,7 +126,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
         }
 
         // Verify the data in the table after partial update
-        checkResult("SELECT * FROM " + conf.database() + ".partialUpdate ORDER BY id",
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id",
                 Arrays.asList(Arrays.asList("1", "2", "3"), Arrays.asList("4", "5", "1"),
                         Arrays.asList("7", "10", "9"), Arrays.asList("10", "11", "12")));
     }
@@ -132,6 +134,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
     // Test for updating a table with all possible byte values
     @Test
     public void allBytes() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allBytes";
         // Create a byte array with all possible byte values
         byte[] data = new byte[256];
         for (int i = 0; i < 256; i++) {
@@ -143,9 +146,9 @@ public class UpdateWriterTest extends IntegrationTestBase {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with a BLOB column
-            stmt.executeQuery("CREATE TABLE " + conf.database() + ".allBytes(a INT PRIMARY KEY NOT NULL, b BLOB, c INT)");
+            stmt.executeQuery("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(a INT PRIMARY KEY NOT NULL, b BLOB, c INT)");
             // Retrieve the table metadata
-            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, "allBytes", "allBytes", testWarningHandle);
+            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, tableName, tableName,  testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
             LoadDataWriter w = new LoadDataWriter(conn, database, allBytesTable.getName(), allBytesTable.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(List.of("a", "b", "c"));
@@ -163,7 +166,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
             u.commit();
 
             // Verify the data in the table after update
-            try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + conf.database() + ".allBytes")) {
+            try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName))) {
                 assertTrue(rs.next());
                 assertEquals(1, rs.getInt(1));
                 assertArrayEquals(data, rs.getBytes(2));

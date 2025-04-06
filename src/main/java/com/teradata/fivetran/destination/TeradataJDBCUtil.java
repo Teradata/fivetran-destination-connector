@@ -189,7 +189,6 @@ public class TeradataJDBCUtil {
      * @param conf The Teradata configuration.
      * @param database The database name.
      * @param table The table name.
-     * @param originalTableName The original table name.
      * @return The table metadata.
      * @throws SQLException If a database access error occurs.
      * @throws ClassNotFoundException If the JDBC driver class is not found.
@@ -202,7 +201,7 @@ public class TeradataJDBCUtil {
 
             try (ResultSet tables = metadata.getTables(null, database, table, null)) {
                 if (!tables.next()) {
-                    throw new TableNotExistException();
+                    throw new TableNotExistException(TeradataJDBCUtil.escapeTable(database,table));
                 }
                 if (tables.next()) {
                     warningHandler.handle(String.format("Found several tables that match %s name",
@@ -329,7 +328,7 @@ public class TeradataJDBCUtil {
      */
     static String generateCreateTableQuery(TeradataConfiguration conf, Statement stmt, CreateTableRequest request) throws SQLException {
         String database = getDatabaseName(conf, request.getSchemaName());
-        String table = getTableName(conf, request.getSchemaName(), request.getTable().getName());
+        String table = getTableName(request.getSchemaName(), request.getTable().getName());
 
         if(database != null && table != null) {
             return generateCreateTableQuery(database, table, request.getTable());
@@ -535,8 +534,7 @@ public class TeradataJDBCUtil {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-        String table =
-                TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTable().getName());
+        String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
 
         Table oldTable = getTable(conf, database, table, request.getTable().getName(), warningHandler);
         Table newTable = request.getTable();
@@ -593,8 +591,9 @@ public class TeradataJDBCUtil {
         String dropTable = String.format("DROP TABLE %s", escapeTable(database, tableName));
         String renameTable = String.format("RENAME TABLE %s TO %s",
                 escapeTable(database, tmpTableName), escapeTable(database, tableName));
-        logMessage("INFO", "Prepared SQL statement: " + String.join("; ", createTable, insertData, dropTable, renameTable));
-        return String.join("; ", createTable, insertData, dropTable, renameTable);
+        String join = String.join("; ", createTable, insertData, dropTable, renameTable);
+        logMessage("INFO", "Prepared SQL statement: " + join);
+        return join;
     }
 
     static String generateAlterTableQuery(String database, String table, List<Column> columnsToAdd,
@@ -632,11 +631,9 @@ public class TeradataJDBCUtil {
         return query.toString();
     }
 
-    static String generateTruncateTableQuery(TeradataConfiguration conf,
+    static String generateTruncateTableQuery(String database, String table,
                                              TruncateRequest request, String utcDeleteBefore) {
         String query;
-        String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
-        String table = TeradataJDBCUtil.getTableName(conf, request.getSchemaName(), request.getTableName());
 
         if (request.hasSoft()) {
             query = String.format("UPDATE %s SET %s = 1 ", escapeTable(database, table),
@@ -695,8 +692,8 @@ public class TeradataJDBCUtil {
      * Exception thrown when a table does not exist.
      */
     static class TableNotExistException extends Exception {
-        TableNotExistException() {
-            super("Table doesn't exist");
+        TableNotExistException(String s) {
+            super(String.format("Table: %s doesn't exist", s));
         }
     }
 
@@ -714,13 +711,12 @@ public class TeradataJDBCUtil {
     /**
      * Retrieves the table name from the configuration or schema.
      *
-     * @param conf The Teradata configuration.
      * @param schema The schema name.
      * @param table The table name.
      * @return The table name.
      */
-    public static String getTableName(TeradataConfiguration conf, String schema, String table) {
-        return conf.database() != null ? table : table;
+    public static String getTableName(String schema, String table) {
+        return schema + "_" + table;
     }
 
     public static void logMessage(String level, String message) {

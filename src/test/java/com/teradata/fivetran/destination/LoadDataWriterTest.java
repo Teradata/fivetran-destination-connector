@@ -21,12 +21,13 @@ public class LoadDataWriterTest extends IntegrationTestBase {
     // Test for loading data with various data types into a table
     @Test
     public void allTypes() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allTypesTable";
         // Create a table with various data types
         createAllTypesTable();
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             // Retrieve the table metadata
-            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, "allTypesTable", "allTypesTable", testWarningHandle);
+            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
             LoadDataWriter w = new LoadDataWriter(conn, database, allTypesTable.getName(),
                     allTypesTable.getColumnsList(), params, null, 123, testWarningHandle);
@@ -75,7 +76,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
         }
 
         // Verify the data in the table
-        checkResult("SELECT * FROM  " + conf.database() + ".allTypesTable ORDER BY id", Arrays.asList(
+        checkResult("SELECT * FROM  " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id", Arrays.asList(
                 Arrays.asList("1",
                         "1",                    // byteintColumn
                         "32767",                  // smallintColumn
@@ -110,6 +111,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
     // Test for loading data with all possible byte values into a table
     @Test
     public void allBytes() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allBytes";
         // Create a byte array with all possible byte values
         byte[] data = new byte[256];
         for (int i = 0; i < 256; i++) {
@@ -121,8 +123,8 @@ public class LoadDataWriterTest extends IntegrationTestBase {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with a BLOB column
-            stmt.executeQuery("CREATE TABLE " + conf.database() + ".allBytes(a INT, b BLOB)");
-            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, "allBytes", "allBytes", testWarningHandle);
+            stmt.executeQuery("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(a INT, b BLOB)");
+            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
             LoadDataWriter w = new LoadDataWriter(conn, database, allBytesTable.getName(),
                     allBytesTable.getColumnsList(), params, null, 123, testWarningHandle);
@@ -134,7 +136,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
             w.deleteInsert();
 
             // Verify the data in the table
-            try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + conf.database() + ".allBytes")) {
+            try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName))) {
                 assertTrue(rs.next());
                 assertEquals(1, rs.getInt(1));
                 assertArrayEquals(data, rs.getBytes(2));

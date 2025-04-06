@@ -18,10 +18,11 @@ public class AlterTableTest extends IntegrationTestBase {
     // Test for adding a column to a table
     @Test
     public void addColumn() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_addColumn";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with one column
-            stmt.execute("CREATE TABLE " + conf.database() + ".addColumn(a INT)");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(a INT)");
             Table table = Table.newBuilder().setName("addColumn")
                     .addAllColumns(Arrays.asList(
                             Column.newBuilder().setName("a").setType(DataType.INT).build(),
@@ -30,7 +31,7 @@ public class AlterTableTest extends IntegrationTestBase {
 
             // Create an AlterTableRequest to add a new column
             AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                    .setSchemaName(database).setTable(table).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
@@ -42,7 +43,7 @@ public class AlterTableTest extends IntegrationTestBase {
             }
 
             // Verify the table structure
-            Table result = TeradataJDBCUtil.getTable(conf, database, "addColumn", "addColumn", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             List<Column> columns = result.getColumnsList();
 
             assertEquals("a", columns.get(0).getName());
@@ -58,11 +59,12 @@ public class AlterTableTest extends IntegrationTestBase {
     // Test for changing the data type of a column
     @Test
     public void changeDataType() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_changeDataType";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with an integer column
-            stmt.execute("CREATE TABLE " + conf.database() + ".changeDataType(a INT) NO PRIMARY INDEX");
-            stmt.execute("INSERT INTO " + conf.database() + ".changeDataType VALUES (5)");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " (a INT) NO PRIMARY INDEX");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (5)");
 
             // Create an AlterTableRequest to change the column type to STRING
             Table table = Table.newBuilder().setName("changeDataType")
@@ -71,7 +73,7 @@ public class AlterTableTest extends IntegrationTestBase {
                     .build();
 
             AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                    .setSchemaName(database).setTable(table).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
@@ -83,7 +85,7 @@ public class AlterTableTest extends IntegrationTestBase {
             }
 
             // Verify the table structure
-            Table result = TeradataJDBCUtil.getTable(conf, database, "changeDataType", "changeDataType", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             List<Column> columns = result.getColumnsList();
 
             assertEquals("a", columns.get(0).getName());
@@ -91,24 +93,25 @@ public class AlterTableTest extends IntegrationTestBase {
             assertEquals(false, columns.get(0).getPrimaryKey());
 
             // Verify the data in the table
-            checkResult("SELECT * FROM " + conf.database() + ".changeDataType", Arrays.asList(Arrays.asList("          5")));
+            checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) , Arrays.asList(Arrays.asList("          5")));
         }
     }
 
     // Test for changing the primary key of a column
     @Test
     public void changeKey() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_changeKey";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table without a primary key
-            stmt.execute("CREATE TABLE " + conf.database() + ".changeKey(a INT)");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(a INT)");
             Table table = Table.newBuilder().setName("changeKey").addAllColumns(Arrays.asList(Column
                             .newBuilder().setName("a").setType(DataType.INT).setPrimaryKey(true).build()))
                     .build();
 
             // Create an AlterTableRequest to set the column as primary key
             AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                    .setSchemaName(database).setTable(table).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
@@ -120,7 +123,7 @@ public class AlterTableTest extends IntegrationTestBase {
             }
 
             // Verify the table structure
-            Table result = TeradataJDBCUtil.getTable(conf, database, "changeKey", "changeKey", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             List<Column> columns = result.getColumnsList();
 
             assertEquals("a", columns.get(0).getName());
@@ -132,11 +135,12 @@ public class AlterTableTest extends IntegrationTestBase {
     // Test for performing several operations on a table
     @Test
     public void severalOperations() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_severalOperations";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with two columns
-            stmt.execute("CREATE TABLE " + conf.database() + ".severalOperations(a INT, b INT)");
-            stmt.execute("INSERT INTO " + conf.database() + ".severalOperations VALUES (5, 6)");
+            stmt.execute("CREATE TABLE "  + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(a INT, b INT)");
+            stmt.execute("INSERT INTO "  + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (5, 6)");
 
             // Create an AlterTableRequest to change column types and add a new column
             Table table = Table.newBuilder().setName("severalOperations")
@@ -147,7 +151,7 @@ public class AlterTableTest extends IntegrationTestBase {
                     .build();
 
             AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                    .setSchemaName(database).setTable(table).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
@@ -159,7 +163,7 @@ public class AlterTableTest extends IntegrationTestBase {
             }
 
             // Verify the table structure
-            Table result = TeradataJDBCUtil.getTable(conf, database, "severalOperations", "severalOperations", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             List<Column> columns = result.getColumnsList();
 
             assertEquals("a", columns.get(0).getName());
@@ -175,7 +179,7 @@ public class AlterTableTest extends IntegrationTestBase {
             assertEquals(false, columns.get(2).getPrimaryKey());
 
             // Verify the data in the table
-            checkResult("SELECT * FROM " + conf.database() + ".severalOperations",
+            checkResult("SELECT * FROM "  + TeradataJDBCUtil.escapeTable(conf.database(),tableName),
                     Arrays.asList(Arrays.asList("5", "6", null)));
         }
     }
@@ -183,11 +187,12 @@ public class AlterTableTest extends IntegrationTestBase {
     // Test for changing the scale and precision of a decimal column
     @Test
     public void changeScaleAndPrecision() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_changeScaleAndPrecision";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with a decimal column
-            stmt.execute("CREATE TABLE " + conf.database() + ".changeScaleAndPrecision(a INT, b DECIMAL(38, 30))");
-            stmt.execute("INSERT INTO " + conf.database() + ".changeScaleAndPrecision VALUES (1, '5.123')");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " (a INT, b DECIMAL(38, 30))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES (1, '5.123')");
 
             // Create an AlterTableRequest to change the scale and precision of the decimal column
             Table table = Table.newBuilder().setName("changeScaleAndPrecision").addAllColumns(
@@ -203,7 +208,7 @@ public class AlterTableTest extends IntegrationTestBase {
                     .build();
 
             AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                    .setSchemaName(database).setTable(table).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
@@ -215,8 +220,7 @@ public class AlterTableTest extends IntegrationTestBase {
             }
 
             // Verify the table structure
-            Table result = TeradataJDBCUtil.getTable(conf, database, "changeScaleAndPrecision",
-                    "changeScaleAndPrecision", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             List<Column> columns = result.getColumnsList();
 
             assertEquals("a", columns.get(0).getName());
@@ -228,7 +232,7 @@ public class AlterTableTest extends IntegrationTestBase {
             assertEquals(5, columns.get(1).getParams().getDecimal().getScale());
 
             // Verify the data in the table
-            checkResult("SELECT * FROM " + conf.database() + ".changeScaleAndPrecision",
+            checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName),
                     Arrays.asList(Arrays.asList("1", "5.12300")));
         }
     }
@@ -254,7 +258,7 @@ public class AlterTableTest extends IntegrationTestBase {
 
             // Create a CreateTableRequest for the naive datetime table
             CreateTableRequest createRequest = CreateTableRequest.newBuilder()
-                    .setSchemaName(database).setTable(naiveDatetimeTable).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(naiveDatetimeTable).build();
 
             // Execute the create table query
             String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, createRequest);
@@ -263,7 +267,7 @@ public class AlterTableTest extends IntegrationTestBase {
             // Create an AlterTableRequest for the UTC datetime table
             AlterTableRequest alterRequest =
                     AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                            .setSchemaName(database).setTable(utcDatetimeTable).build();
+                            .setSchemaName(IntegrationTestBase.schema).setTable(utcDatetimeTable).build();
 
             // Generate the alter table query and verify it is null
             query = TeradataJDBCUtil.generateAlterTableQuery(alterRequest, testWarningHandle);
@@ -274,13 +278,13 @@ public class AlterTableTest extends IntegrationTestBase {
     // Test for changing the type of a primary key column
     @Test
     public void changeTypeOfKey() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_changeTypeOfKey";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with an integer primary key column
-            stmt.execute(
-                    String.format("CREATE TABLE %s.changeTypeOfKey(a INT NOT NULL, PRIMARY KEY(a))", database));
-            stmt.execute(String.format("INSERT INTO %s.changeTypeOfKey (a) VALUES (1)", database));
-            stmt.execute(String.format("INSERT INTO %s.changeTypeOfKey (a) VALUES (2)", database));
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(a INT NOT NULL, PRIMARY KEY(a))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " (a) VALUES (1)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " (a) VALUES (2)");
             Table table = Table.newBuilder().setName("changeTypeOfKey")
                     .addAllColumns(Arrays.asList(Column.newBuilder().setName("a")
                             .setType(DataType.LONG).setPrimaryKey(true).build()))
@@ -290,7 +294,7 @@ public class AlterTableTest extends IntegrationTestBase {
 
             // Create an AlterTableRequest to change the primary key column type to LONG
             AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
-                    .setSchemaName(database).setTable(table).build();
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
             String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
@@ -302,7 +306,7 @@ public class AlterTableTest extends IntegrationTestBase {
             }
 
             // Verify the table structure
-            Table result = TeradataJDBCUtil.getTable(conf, database, "changeTypeOfKey", "changeTypeOfKey", testWarningHandle);
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             List<Column> columns = result.getColumnsList();
 
             assertEquals("a", columns.get(0).getName());
@@ -314,7 +318,7 @@ public class AlterTableTest extends IntegrationTestBase {
             assertEquals(false, columns.get(1).getPrimaryKey());
 
             // Verify the data in the table
-            checkResult(String.format("SELECT * FROM %s.changeTypeOfKey ORDER BY a", database),
+            checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY a",
                     Arrays.asList(Arrays.asList("1", null), Arrays.asList("2", null)));
         }
     }

@@ -14,10 +14,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.SQLXML;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
@@ -72,7 +69,7 @@ public class LoadDataWriter<T> extends Writer {
 
         String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
 
-        temp_table = String.format("%s_%s_%d", table, "tmp_del_ins", System.currentTimeMillis());
+        temp_table = String.format("%s_%s_%s", table, "tmp", UUID.randomUUID().toString().replace("-", "_"));
 
         String createTempTable = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
                 TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
@@ -207,7 +204,7 @@ public class LoadDataWriter<T> extends Writer {
         dropTempTable();
     }
 
-    private void dropTempTable() throws SQLException {
+    public void dropTempTable() {
         String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
         String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
         logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);
@@ -216,7 +213,7 @@ public class LoadDataWriter<T> extends Writer {
             conn.createStatement().execute(deleteQuery);
             logMessage("INFO","Temporary table deleted successfully.");
         } catch (SQLException e) {
-            logMessage("SEVERE","Failed to delete temporary table: " + e.getMessage());
+            logMessage("WARNING","Failed to delete temporary table: " + e.getMessage());
         }
         try {
             conn.createStatement().execute(dropQuery);

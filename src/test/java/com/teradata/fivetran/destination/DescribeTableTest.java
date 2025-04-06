@@ -17,13 +17,14 @@ public class DescribeTableTest extends IntegrationTestBase {
     // Test for describing a table with various data types
     @Test
     public void allTypes() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allTypesTable";
         // Create a table with various data types
         createAllTypesTable();
 
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             // Retrieve the table metadata
-            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, "allTypesTable", "allTypesTable", testWarningHandle);
-            assertEquals("allTypesTable", allTypesTable.getName());
+            Table allTypesTable = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, allTypesTable.getName());
             List<Column> columns = allTypesTable.getColumnsList();
 
             // Verify the table structure
@@ -84,15 +85,16 @@ public class DescribeTableTest extends IntegrationTestBase {
     // Test for describing a table with decimal columns having different scale and precision
     @Test
     public void scaleAndPrecision() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "scaleAndPrecision";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with decimal columns
-            stmt.executeQuery("CREATE TABLE " + conf.database() + ".scaleAndPrecision(" + "dec1 DECIMAL(38, 30), "
+            stmt.executeQuery("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(" + "dec1 DECIMAL(38, 30), "
                     + "dec2 DECIMAL(10, 5)" + ")");
 
             // Retrieve the table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "scaleAndPrecision", "scaleAndPrecision", testWarningHandle);
-            assertEquals("scaleAndPrecision", t.getName());
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, t.getName());
             List<Column> columns = t.getColumnsList();
 
             // Verify the table structure

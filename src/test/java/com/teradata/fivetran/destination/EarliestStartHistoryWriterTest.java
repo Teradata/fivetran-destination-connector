@@ -24,18 +24,19 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
      */
     @Test
     public void noFivetranStart() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "noFivetranStart";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             // Create a table without the _fivetran_start column
-            stmt.execute("CREATE TABLE " + conf.database() + ".noFivetranStart(" +
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(" +
                     "id INT PRIMARY KEY NOT NULL, " +
                     "data VARCHAR(10), " +
                     "_fivetran_active BYTEINT, " +
                     "_fivetran_end TIMESTAMP(6))");
-            stmt.execute("INSERT INTO " + conf.database() + ".noFivetranStart VALUES(1, 'a', 1, '2005-05-24 20:57:00.0')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 'a', 1, '2005-05-24 20:57:00.0')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "noFivetranStart", "noFivetranStart", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
@@ -56,24 +57,25 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
      */
     @Test
     public void singlePK() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "singlePKEarliestStart";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             // Create a table with a single primary key
-            stmt.execute("CREATE TABLE " + conf.database() + ".singlePKEarliestStart(" +
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(" +
                     "id INT NOT NULL, " +
                     "data VARCHAR(10), " +
                     "_fivetran_active BYTEINT, " +
                     "_fivetran_start TIMESTAMP(6) NOT NULL," +
                     "_fivetran_end TIMESTAMP(6)," +
                     "PRIMARY KEY(id, _fivetran_start))");
-            stmt.execute("INSERT INTO " + conf.database() + ".singlePKEarliestStart VALUES(1, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".singlePKEarliestStart VALUES(2, 'b', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".singlePKEarliestStart VALUES(3, 'c', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".singlePKEarliestStart VALUES(1, 'd', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".singlePKEarliestStart VALUES(2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(2, 'b', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(3, 'c', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 'd', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "singlePKEarliestStart", "singlePKEarliestStart", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
@@ -87,7 +89,7 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
         }
 
         // Verify the results
-        checkResult("SELECT * FROM " + conf.database() + ".singlePKEarliestStart ORDER BY id, _fivetran_start", Arrays.asList(
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id, _fivetran_start", Arrays.asList(
                 Arrays.asList("1", "d", "0", "2005-05-23 20:57:00.0", "2005-05-24 20:56:59.999999"),
                 Arrays.asList("2", "e", "0", "2005-05-23 20:57:00.0", "2005-05-24 20:56:59.999999"),
                 Arrays.asList("2", "b", "0", "2005-05-24 20:57:00.0", "2005-05-26 20:56:59.0"),
@@ -102,10 +104,11 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
      */
     @Test
     public void multiPK() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "multiPKEarliestStart";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             // Create a table with multiple primary keys
-            stmt.execute("CREATE TABLE " + conf.database() + ".multiPKEarliestStart(" +
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(" +
                     "id1 INT NOT NULL, " +
                     "id2 INT NOT NULL, " +
                     "data VARCHAR(10), " +
@@ -113,15 +116,15 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
                     "_fivetran_start TIMESTAMP(6) NOT NULL," +
                     "_fivetran_end TIMESTAMP(6)," +
                     "PRIMARY KEY(id1, id2, _fivetran_start))");
-            stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(1, 2, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(1, 1, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(2, 2, 'b', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(3, 3, 'c', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(1, 1, 'd', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
-            stmt.execute("INSERT INTO " + conf.database() + ".multiPKEarliestStart VALUES(2, 2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 2, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 1, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(2, 2, 'b', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(3, 3, 'c', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 1, 'd', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(2, 2, 'e', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
 
             // Retrieve table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "multiPKEarliestStart", "multiPKEarliestStart", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
@@ -135,7 +138,7 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
         }
 
         // Verify the results
-        checkResult("SELECT * FROM " + conf.database() + ".multiPKEarliestStart ORDER BY id1, id2, _fivetran_start", Arrays.asList(
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id1, id2, _fivetran_start", Arrays.asList(
                 Arrays.asList("1", "1", "d", "0", "2005-05-23 20:57:00.0", "2005-05-24 20:56:59.999999"),
                 Arrays.asList("1", "2", "a", "1", "2005-05-24 20:57:00.0", "9999-12-31 23:59:59.999999"),
                 Arrays.asList("2", "2", "e", "0", "2005-05-23 20:57:00.0", "2005-05-24 20:56:59.999999"),

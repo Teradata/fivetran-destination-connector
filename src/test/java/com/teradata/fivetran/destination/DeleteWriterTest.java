@@ -21,10 +21,11 @@ public class DeleteWriterTest extends IntegrationTestBase {
     // Test for deleting all rows from a table with various data types
     @Test
     public void allTypesTest() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allTypesTableBigKey";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with various data types
-            stmt.execute("CREATE TABLE " + conf.database() + ".allTypesTableBigKey (\n" +
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " (\n" +
                     "  id INTEGER PRIMARY KEY NOT NULL,\n" +
                     "  byteintColumn BYTEINT,\n" +
                     "  smallintColumn SMALLINT,\n" +
@@ -42,7 +43,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
 
             // Get the table metadata
             Table allTypesTableBigKey =
-                    TeradataJDBCUtil.getTable(conf, database, "allTypesTableBigKey", "allTypesTableBigKey", testWarningHandle);
+                    TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
 
             // Load data into the table
@@ -90,23 +91,24 @@ public class DeleteWriterTest extends IntegrationTestBase {
         }
 
         // Verify that the table is empty
-        checkResult("SELECT * FROM " + conf.database() + ".allTypesTableBigKey ORDER BY id", Arrays.asList());
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id", Arrays.asList());
     }
 
     // Test for deleting specific rows from a table
     @Test
     public void deletePartOfRows() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "deletePartOfRows";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             // Create a table and insert data
-            stmt.execute("CREATE TABLE " + conf.database() + ".deletePartOfRows(id INT PRIMARY KEY NOT NULL, a INT, b INT)");
-            stmt.execute("INSERT INTO " + conf.database() + ".deletePartOfRows VALUES(1, 2, 3)");
-            stmt.execute("INSERT INTO " + conf.database() + ".deletePartOfRows VALUES(4, 5, 6)");
-            stmt.execute("INSERT INTO " + conf.database() + ".deletePartOfRows VALUES(7, 8, 9)");
-            stmt.execute("INSERT INTO " + conf.database() + ".deletePartOfRows VALUES(10, 11, 12)");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(id INT PRIMARY KEY NOT NULL, a INT, b INT)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 2, 3)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(4, 5, 6)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(7, 8, 9)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(10, 11, 12)");
 
             // Get the table metadata
-            Table t = TeradataJDBCUtil.getTable(conf, database, "deletePartOfRows", "deletePartOfRows", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL")
                     .setUnmodifiedString("unm").build();
 
@@ -121,13 +123,14 @@ public class DeleteWriterTest extends IntegrationTestBase {
         }
 
         // Verify the remaining data in the table
-        checkResult("SELECT * FROM " + conf.database() + ".deletePartOfRows ORDER BY id",
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id",
                 Arrays.asList(Arrays.asList("1", "2", "3"), Arrays.asList("10", "11", "12")));
     }
 
     // Test for deleting rows with BLOB data
     @Test
     public void allBytes() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "allBytes";
         // Create a byte array with all possible byte values
         byte[] data = new byte[256];
         for (int i = 0; i < 256; i++) {
@@ -139,8 +142,8 @@ public class DeleteWriterTest extends IntegrationTestBase {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement();) {
             // Create a table with a BLOB column
-            stmt.executeQuery("CREATE TABLE " + conf.database() + ".allBytes(a INT PRIMARY KEY NOT NULL, b BLOB, c INT)");
-            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, "allBytes", "allBytes", testWarningHandle);
+            stmt.executeQuery("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " (a INT PRIMARY KEY NOT NULL, b BLOB, c INT)");
+            Table allBytesTable = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
 
             // Load data into the table
@@ -159,19 +162,20 @@ public class DeleteWriterTest extends IntegrationTestBase {
         }
 
         // Verify that the table is empty
-        checkResult("SELECT * FROM " + conf.database() + ".allBytes", Arrays.asList());
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName), Arrays.asList());
     }
 
     // Test for deleting rows in batches
     @Test
     public void batchSize() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "batchSize";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             // Create a table
-            stmt.execute("CREATE TABLE " + conf.database() + ".batchSize(id INT PRIMARY KEY NOT NULL)");
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(id INT PRIMARY KEY NOT NULL)");
 
             FileParams params = FileParams.newBuilder().setNullString("NULL").build();
-            Table t = TeradataJDBCUtil.getTable(conf, database, "batchSize", "batchSize", testWarningHandle);
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
 
             // Load data into the table in batches
             LoadDataWriter w = new LoadDataWriter(conn, database, t.getName(), t.getColumnsList(),
@@ -183,6 +187,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
             w.write(null, new ByteArrayInputStream(data.toString().getBytes()));
             w.commit();
             w.deleteInsert();
+            w.dropTempTable();
             // Delete data from the table in batches
             DeleteWriter d = new DeleteWriter(conn, database, t.getName(), t.getColumnsList(),
                     params, null, 1010);
@@ -200,6 +205,6 @@ public class DeleteWriterTest extends IntegrationTestBase {
             res.add(Arrays.asList(i.toString()));
         }
 
-        checkResult("SELECT * FROM " + conf.database() + ".batchSize ORDER BY id", res);
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id", res);
     }
 }
