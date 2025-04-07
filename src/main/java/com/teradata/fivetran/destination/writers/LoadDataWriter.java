@@ -3,9 +3,7 @@ package com.teradata.fivetran.destination.writers;
 import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
-import fivetran_sdk.v2.Column;
-import fivetran_sdk.v2.FileParams;
-import fivetran_sdk.v2.DataType;
+import fivetran_sdk.v2.*;
 import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.IOException;
@@ -93,7 +91,11 @@ public class LoadDataWriter<T> extends Writer {
             for (int i = 0; i < row.size(); i++) {
                 DataType type = headerColumns.get(i).getType();
                 String value = row.get(i);
-
+                if (value == null || value.equals("null") || value.equals(params.getNullString())) {
+                    preparedStatement.setNull(i + 1, java.sql.Types.NULL);
+                    logMessage("INFO", String.format("Set parameter at index %d to NULL", i + 1));
+                    continue;
+                }
                 if (type == DataType.BOOLEAN) {
                     if (value.equalsIgnoreCase("true")) {
                         preparedStatement.setShort(i + 1, Short.parseShort("1"));
@@ -124,7 +126,11 @@ public class LoadDataWriter<T> extends Writer {
                     preparedStatement.setSQLXML(i + 1, sqlxml);
                 } else if (type == DataType.STRING) {
                     preparedStatement.setString(i + 1, value);
-                } else {
+                } else if (type == DataType.JSON) {
+                    preparedStatement.setObject(i + 1, new JSONStruct ("JSON",
+                            new Object[] {value}));
+                }
+                else {
                     preparedStatement.setObject(i + 1, value);
                 }
                 logMessage("INFO", String.format("Set parameter at index %d: %s", i + 1, value));
@@ -151,8 +157,29 @@ public class LoadDataWriter<T> extends Writer {
     public void commit() throws SQLException {
         if (currentBatchSize > 0) {
             logMessage("INFO","Committing batch of size: " + currentBatchSize);
-            preparedStatement.executeBatch();
-            preparedStatement.clearBatch();
+            try {
+                preparedStatement.executeBatch();
+                preparedStatement.clearBatch();
+            }
+            catch (BatchUpdateException bue) {
+                String actualError = "";
+                if (bue.getNextException() != null) {
+                    Exception nextException = bue.getNextException();
+                    actualError = nextException.getMessage();
+                } else {
+                    actualError = bue.getMessage();
+                }
+                logMessage("SEVERE", String.format("WriteBatch failed with exception %s", actualError));
+                dropTempTable();
+                throw bue;
+            }
+            catch (SQLException e) {
+                logMessage("SEVERE","Failed to execute batch on table : "
+                        + TeradataJDBCUtil.escapeTable(database, temp_table) + " with error: "
+                        + e.getMessage());
+                dropTempTable();
+                throw e;
+            }
             currentBatchSize = 0;
             logMessage("INFO", "Batch committed successfully.");
         } else {
