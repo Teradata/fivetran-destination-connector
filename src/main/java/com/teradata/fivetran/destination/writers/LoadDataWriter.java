@@ -10,10 +10,7 @@ import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.SQLXML;
+import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -141,8 +138,10 @@ public class LoadDataWriter<T> extends Writer {
                 logMessage("INFO", "Batch size limit reached. Committing batch.");
                 commit();
             }
+        } catch (BatchUpdateException bue) {
+            logMessage("SEVERE","Failed to write row to batch with BatchUpdateException");
+            throw bue;
         } catch (Exception e) {
-            warningHandler.handle("Failed to write row to batch", e);
             logMessage("SEVERE","Failed to write row to batch " + e.getMessage());
             throw e;
         }

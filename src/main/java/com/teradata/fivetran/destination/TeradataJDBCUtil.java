@@ -195,7 +195,7 @@ public class TeradataJDBCUtil {
      * @throws TableNotExistException If the table does not exist.
      */
     static <T> Table getTable(TeradataConfiguration conf, String database, String table,
-                              String originalTableName, WarningHandler<T> warningHandler) throws Exception {
+                              String originalTableName, WarningHandler<T> warningHandler) throws TableNotExistException {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             DatabaseMetaData metadata = conn.getMetaData();
 
