@@ -188,31 +188,33 @@ public class LoadDataWriter<T> extends Writer {
     }
 
     public void deleteInsert() throws SQLException {
-        String cols = matchingCols.stream()
-                .map(Column::getName)
-                .map(TeradataJDBCUtil::escapeIdentifier)
-                .collect(Collectors.joining(", "));
-        if (!cols.isEmpty()) {
-            String condition = matchingCols.stream()
+        if (matchingCols != null && !matchingCols.isEmpty()) {
+            String cols = matchingCols.stream()
                     .map(Column::getName)
-                    .map(col -> String.format("t.%s = tmp.%s", col, col))
-                    .collect(Collectors.joining(" AND "));
+                    .map(TeradataJDBCUtil::escapeIdentifier)
+                    .collect(Collectors.joining(", "));
+            if (!cols.isEmpty()) {
+                String condition = matchingCols.stream()
+                        .map(Column::getName)
+                        .map(col -> String.format("t.%s = tmp.%s", col, col))
+                        .collect(Collectors.joining(" AND "));
 
-            String deleteQuery = String.format(
-                    "DELETE FROM %s AS t WHERE EXISTS (SELECT 1 FROM %s AS tmp WHERE %s)",
-                    TeradataJDBCUtil.escapeTable(database, table),
-                    TeradataJDBCUtil.escapeTable(database, temp_table),
-                    condition
-            );
+                String deleteQuery = String.format(
+                        "DELETE FROM %s AS t WHERE EXISTS (SELECT 1 FROM %s AS tmp WHERE %s)",
+                        TeradataJDBCUtil.escapeTable(database, table),
+                        TeradataJDBCUtil.escapeTable(database, temp_table),
+                        condition
+                );
 
-            logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);
-            try {
-                conn.createStatement().execute(deleteQuery);
-                logMessage("INFO","Delete operation completed successfully.");
-            } catch (SQLException e) {
-                logMessage("SEVERE","Failed to execute delete statement: " + e.getMessage());
-                dropTempTable();
-                throw e;
+                logMessage("INFO", "Prepared SQL delete statement: " + deleteQuery);
+                try {
+                    conn.createStatement().execute(deleteQuery);
+                    logMessage("INFO", "Delete operation completed successfully.");
+                } catch (SQLException e) {
+                    logMessage("SEVERE", "Failed to execute delete statement: " + e.getMessage());
+                    dropTempTable();
+                    throw e;
+                }
             }
         }
 
