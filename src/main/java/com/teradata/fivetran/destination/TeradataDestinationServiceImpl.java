@@ -479,6 +479,11 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .build());
             responseObserver.onCompleted();
         }
+        finally {
+            if (w != null) {
+                w.dropTempTable();
+            }
+        }
     }
 
     @Override
@@ -549,6 +554,11 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             .setMessage("writeHistoryBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
+        }
+        finally {
+            if (w != null) {
+                w.dropTempTable();
+            }
         }
     }
 
