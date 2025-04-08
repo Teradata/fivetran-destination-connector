@@ -233,6 +233,10 @@ public class LoadDataWriter<T> extends Writer {
     }
 
     public void dropTempTable() {
+        if(database == null || temp_table == null) {
+            logMessage("WARNING","Database or temporary table name is null. Cannot drop temporary table.");
+            return;
+        }
         String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
         String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
         logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);

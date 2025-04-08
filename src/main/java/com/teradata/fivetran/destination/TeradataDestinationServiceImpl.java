@@ -287,7 +287,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("DescribeTable failed for %s with exception %s",
                     TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(DescribeTableResponse.newBuilder()
-                    .setWarning(Warning.newBuilder().setMessage(e.getMessage()).build())
+                    .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
         }
         responseObserver.onCompleted();
@@ -317,7 +317,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         } catch (Exception e) {
             logMessage("SEVERE", String.format("CreateTable failed with exception %s", e.getMessage()));
             responseObserver.onNext(CreateTableResponse.newBuilder()
-                    .setTask(Task.newBuilder().setMessage("Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) + ", Error: " + e.getMessage()).build())
+                    .setTask(Task.newBuilder().setMessage("createTable :: Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
         }
         responseObserver.onCompleted();
@@ -356,7 +356,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("AlterTable failed with exception %s", e.getMessage()));
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) + ", Error: " + e.getMessage()).build())
+                            .setMessage("alterTable :: Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -404,7 +404,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("TruncateTable failed with exception %s", e.getMessage()));
             responseObserver.onNext(TruncateResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage(e.getMessage()).build())
+                            .setMessage("truncate :: Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTableName()) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -467,7 +467,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("WriteBatch failed with exception %s", actualError));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + actualError).build())
+                            .setMessage("writeBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + actualError).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -475,13 +475,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("WriteBatch failed with exception %s", e.getMessage()));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
+                            .setMessage("writeBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
-        }
-        finally {
-            if (w != null)
-                w.dropTempTable();
         }
     }
 
@@ -540,7 +536,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("writeHistoryBatch failed with exception %s", actualMessage));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + actualMessage).build())
+                            .setMessage("writeHistoryBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + actualMessage).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -550,13 +546,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
+                            .setMessage("writeHistoryBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
-        }
-        finally {
-            if (w != null)
-                w.dropTempTable();
         }
     }
 
@@ -569,5 +561,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     private void logMessage(String level, String message) {
         message = StringEscapeUtils.escapeJava(message);
         System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
+    }
+
+    private static String getStackTraceOneLine(Exception ex) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(ex.getClass().getName()).append(": ").append(ex.getMessage()).append(" | ");
+        for (StackTraceElement element : ex.getStackTrace()) {
+            sb.append("at ").append(element.toString()).append(" | ");
+        }
+        String result = sb.toString();
+        return result.length() > 250 ? result.substring(0, 250) + "......" : result;
     }
 }
