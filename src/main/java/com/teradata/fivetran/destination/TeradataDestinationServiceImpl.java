@@ -433,15 +433,19 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                             new WriteBatchWarningHandler(responseObserver));
+            logMessage("INFO", "No. of files to be written: " + request.getReplaceFilesList().size());
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
             }
-            w.deleteInsert();
-            w.dropTempTable();
+            if(!request.getReplaceFilesList().isEmpty()) {
+                w.deleteInsert();
+                w.dropTempTable();
+            }
             logMessage("INFO", "********************************In UpdateWriter**********************************");
             UpdateWriter u =
                     new UpdateWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
+            logMessage("INFO", "No. of files to be updated: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
                 u.write(file);
             }
@@ -449,6 +453,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             DeleteWriter d =
                     new DeleteWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
+            logMessage("INFO", "No. of files to be deleted: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {
                 d.write(file);
             }
@@ -480,7 +485,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onCompleted();
         }
         finally {
-            if (w != null) {
+            if (w != null && !request.getReplaceFilesList().isEmpty()) {
                 w.dropTempTable();
             }
         }
@@ -502,12 +507,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("INFO", "********************************In DescribeTableWriter**********************************");
             EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
+            logMessage("INFO", "No. of files to be written with earliest start: " + request.getEarliestStartFilesList().size());
             for (String file : request.getEarliestStartFilesList()) {
                 e.write(file);
             }
             logMessage("INFO", "********************************In EarliestStartHistoryWriter**********************************");
             UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
+            logMessage("INFO", "No. of files to be updated with history: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
                 u.write(file);
             }
@@ -515,14 +522,18 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                     new WriteBatchWarningHandler(responseObserver));
+            logMessage("INFO", "No. of files to be written with history: " + request.getReplaceFilesList().size());
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
             }
-            w.deleteInsert();
-            w.dropTempTable();
+            if(!request.getReplaceFilesList().isEmpty()) {
+                w.deleteInsert();
+                w.dropTempTable();
+            }
             logMessage("INFO", "********************************In UpdateHistoryWriter**********************************");
             DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
+            logMessage("INFO", "No. of files to be deleted with history: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {
                 d.write(file);
             }
@@ -556,7 +567,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onCompleted();
         }
         finally {
-            if (w != null) {
+            if (w != null && !request.getReplaceFilesList().isEmpty()) {
                 w.dropTempTable();
             }
         }
