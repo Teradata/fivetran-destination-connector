@@ -579,7 +579,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         for (StackTraceElement element : ex.getStackTrace()) {
             sb.append("at ").append(element.toString()).append(" | ");
         }
-        String result = sb.toString();
-        return result.length() > 250 ? result.substring(0, 250) + "......" : result;
+        return sb.toString();
     }
 }
