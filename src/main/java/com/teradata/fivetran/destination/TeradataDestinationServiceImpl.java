@@ -287,7 +287,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             logMessage("SEVERE", String.format("DescribeTable failed for %s with exception %s",
                     TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(DescribeTableResponse.newBuilder()
-                    .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
+                    .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
                     .build());
         }
         responseObserver.onCompleted();
