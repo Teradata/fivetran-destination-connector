@@ -84,6 +84,33 @@ public class LoadDataWriter<T> extends Writer {
         preparedStatement = conn.prepareStatement(query);
     }
 
+    private int getSqlTypeFromDataType(DataType type) {
+        switch (type) {
+            case BOOLEAN:
+            case SHORT:
+                return java.sql.Types.SMALLINT;
+            case INT:
+                return java.sql.Types.INTEGER;
+            case LONG:
+                return java.sql.Types.BIGINT;
+            case DECIMAL:
+                return java.sql.Types.DECIMAL;
+            case FLOAT:
+                return java.sql.Types.FLOAT;
+            case DOUBLE:
+                return java.sql.Types.DOUBLE;
+            case NAIVE_DATETIME:
+            case UTC_DATETIME:
+                return java.sql.Types.TIMESTAMP;
+            case BINARY:
+                return java.sql.Types.BINARY;
+            case XML:
+                return java.sql.Types.SQLXML;
+            default:
+                return java.sql.Types.VARCHAR;
+        }
+    }
+
     @Override
     public void writeRow(List<String> row) throws Exception {
         logMessage("INFO","#########################LoadDataWriter.writeRow#########################");
@@ -92,7 +119,7 @@ public class LoadDataWriter<T> extends Writer {
                 DataType type = headerColumns.get(i).getType();
                 String value = row.get(i);
                 if (value == null || value.equals("null") || value.equals(params.getNullString())) {
-                    preparedStatement.setNull(i + 1, java.sql.Types.NULL);
+                    preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
                     logMessage("INFO", String.format("Set parameter at index %d to NULL", i + 1));
                     continue;
                 }
