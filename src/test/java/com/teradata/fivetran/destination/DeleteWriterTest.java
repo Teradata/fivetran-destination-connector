@@ -33,6 +33,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                     "  decimalColumn DECIMAL(18,4),\n" +
                     "  floatColumn FLOAT,\n" +
                     "  doubleColumn DOUBLE PRECISION,\n" +
+                    "  timeColumn TIME(0),\n" +
                     "  dateColumn DATE,\n" +
                     "  timestampColumn TIMESTAMP,\n" +
                     "  blobColumn BLOB,\n" +
@@ -58,6 +59,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                     "12345.6789",                  // decimalColumn
                     "1234.56",                     // floatColumn
                     "9876.543",                  // doubleColumn
+                    "10:15:30",                 // timeColumn
                     "2024-01-01",                  // dateColumn
                     "2024-01-01 12:34:56",         // timestampColumn
                     "DEADBEEF1DE",              // blobColumn (empty blob)
@@ -80,6 +82,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
                     "12345.6789",                  // decimalColumn
                     "1234.56",                     // floatColumn
                     "9876.543",                  // doubleColumn
+                    "10:15:30",                 // timeColumn
                     "2024-01-01",                  // dateColumn
                     "2024-01-01 12:34:56",         // timestampColumn
                     "DEADBEEF1DE",              // blobColumn (empty blob)

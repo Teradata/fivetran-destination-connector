@@ -34,7 +34,7 @@ public class IntegrationTestBase {
     // List of all column names for the allTypesTable
     static List<String> allTypesColumns = Arrays.asList(
             "id", "byteintColumn", "smallintColumn", "bigintColumn", "decimalColumn",
-            "floatColumn", "doubleColumn", "dateColumn", "timestampColumn", "blobColumn",
+            "floatColumn", "doubleColumn", "timeColumn" , "dateColumn", "timestampColumn", "blobColumn",
             "jsonColumn", "xmlColumn", "varcharColumn"
     );
 
@@ -51,6 +51,7 @@ public class IntegrationTestBase {
                     "  decimalColumn DECIMAL(18,4),\n" +
                     "  floatColumn FLOAT,\n" +
                     "  doubleColumn DOUBLE PRECISION,\n" +
+                    "  timeColumn TIME(0),\n" +
                     "  dateColumn DATE,\n" +
                     "  timestampColumn TIMESTAMP,\n" +
                     "  blobColumn BLOB,\n" +

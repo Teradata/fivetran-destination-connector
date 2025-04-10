@@ -56,29 +56,33 @@ public class DescribeTableTest extends IntegrationTestBase {
             assertEquals(DataType.FLOAT, columns.get(6).getType());
             assertEquals(false, columns.get(6).getPrimaryKey());
 
-            assertEquals("dateColumn", columns.get(7).getName());
-            assertEquals(DataType.NAIVE_DATE, columns.get(7).getType());
+            assertEquals("timeColumn", columns.get(7).getName());
+            assertEquals(DataType.NAIVE_TIME, columns.get(7).getType());
             assertEquals(false, columns.get(7).getPrimaryKey());
 
-            assertEquals("timestampColumn", columns.get(8).getName());
-            assertEquals(DataType.NAIVE_DATETIME, columns.get(8).getType());
+            assertEquals("dateColumn", columns.get(8).getName());
+            assertEquals(DataType.NAIVE_DATE, columns.get(8).getType());
             assertEquals(false, columns.get(8).getPrimaryKey());
 
-            assertEquals("blobColumn", columns.get(9).getName());
-            assertEquals(DataType.BINARY, columns.get(9).getType());
+            assertEquals("timestampColumn", columns.get(9).getName());
+            assertEquals(DataType.NAIVE_DATETIME, columns.get(9).getType());
             assertEquals(false, columns.get(9).getPrimaryKey());
 
-            assertEquals("jsonColumn", columns.get(10).getName());
-            assertEquals(DataType.JSON, columns.get(10).getType());
+            assertEquals("blobColumn", columns.get(10).getName());
+            assertEquals(DataType.BINARY, columns.get(10).getType());
             assertEquals(false, columns.get(10).getPrimaryKey());
 
-            assertEquals("xmlColumn", columns.get(11).getName());
-            assertEquals(DataType.XML, columns.get(11).getType());
+            assertEquals("jsonColumn", columns.get(11).getName());
+            assertEquals(DataType.JSON, columns.get(11).getType());
             assertEquals(false, columns.get(11).getPrimaryKey());
 
-            assertEquals("varcharColumn", columns.get(12).getName());
-            assertEquals(DataType.STRING, columns.get(12).getType());
+            assertEquals("xmlColumn", columns.get(12).getName());
+            assertEquals(DataType.XML, columns.get(12).getType());
             assertEquals(false, columns.get(12).getPrimaryKey());
+
+            assertEquals("varcharColumn", columns.get(13).getName());
+            assertEquals(DataType.STRING, columns.get(13).getType());
+            assertEquals(false, columns.get(13).getPrimaryKey());
         }
     }
 

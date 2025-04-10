@@ -1,12 +1,15 @@
 package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
+import com.teradata.fivetran.destination.writers.JSONStruct;
 import fivetran_sdk.v2.*;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.sql.*;
+import java.sql.Date;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.function.Function;
@@ -260,22 +263,20 @@ public class TeradataJDBCUtil {
                 return DataType.BOOLEAN;
             case "SMALLINT":
                 return DataType.SHORT;
-            case "MEDIUMINT":
             case "INTEGER":
                 return DataType.INT;
             case "BIGINT":
                 return DataType.LONG;
-            case "FLOAT":
-                return DataType.FLOAT;
-            case "DOUBLE PRECISION":
-                return DataType.FLOAT;
             case "DECIMAL":
                 return DataType.DECIMAL;
+            case "FLOAT":
+            case "DOUBLE PRECISION":
+                return DataType.FLOAT;
+            case "TIME":
+                return DataType.NAIVE_TIME;
             case "DATE":
-            case "YEAR":
                 return DataType.NAIVE_DATE;
             case "DATETIME":
-            case "TIME":
             case "TIMESTAMP":
                 return DataType.NAIVE_DATETIME;
             case "BIT":
@@ -286,6 +287,8 @@ public class TeradataJDBCUtil {
             case "BLOB":
             case "LONGBLOB":
                 return DataType.BINARY;
+            case "XML":
+                return DataType.XML;
             case "CHAR":
             case "VARCHAR":
             case "TINYTEXT":
@@ -297,8 +300,6 @@ public class TeradataJDBCUtil {
                 return DataType.STRING;
             case "JSON":
                 return DataType.JSON;
-            case "XML":
-                return DataType.XML;
             default:
                 return DataType.UNSPECIFIED;
         }
@@ -397,10 +398,11 @@ public class TeradataJDBCUtil {
                 return "FLOAT";
             case DOUBLE:
                 return "DOUBLE PRECISION";
-            case NAIVE_DATE:
-                return "DATE";
-            case NAIVE_DATETIME:
             case NAIVE_TIME:
+                return "TIME(0)";
+            case NAIVE_DATE:
+                return "DATE FORMAT 'YYYY-MM-DD'";
+            case NAIVE_DATETIME:
             case UTC_DATETIME:
                 return "TIMESTAMP(6)";
             case BINARY:
@@ -493,26 +495,37 @@ public class TeradataJDBCUtil {
                 case LONG:
                     stmt.setLong(id, Long.parseLong(value));
                     break;
+                case DECIMAL:
+                    stmt.setBigDecimal(id, new BigDecimal(value));
                 case FLOAT:
                     stmt.setFloat(id, Float.parseFloat(value));
                     break;
                 case DOUBLE:
                     stmt.setDouble(id, Double.parseDouble(value));
                     break;
-                case BINARY:
-                    stmt.setBytes(id, Base64.getDecoder().decode(value));
+                case NAIVE_TIME:
+                    stmt.setTime(id, Time.valueOf(value));
                     break;
-
+                case NAIVE_DATE:
+                    stmt.setDate(id, Date.valueOf(value));
+                    break;
                 case NAIVE_DATETIME:
                 case UTC_DATETIME:
                     stmt.setTimestamp(id, TeradataJDBCUtil.getTimestampFromObject(formatISODateTime(value)));
                     break;
-
-                case DECIMAL:
-                case NAIVE_DATE:
+                case BINARY:
+                    stmt.setBytes(id, Base64.getDecoder().decode(value));
+                    break;
                 case XML:
+                    SQLXML sqlxml =  stmt.getConnection().createSQLXML();
+                    sqlxml.setString(value);
+                    stmt.setSQLXML(id, sqlxml);
+                    break;
                 case STRING:
+                    stmt.setString(id, value);
+                    break;
                 case JSON:
+                    stmt.setObject(id, new JSONStruct("JSON", new Object[] {value}));
                 case UNSPECIFIED:
                 default:
                     stmt.setString(id, value);

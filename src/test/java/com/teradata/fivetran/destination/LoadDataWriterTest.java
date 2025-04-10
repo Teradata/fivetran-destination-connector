@@ -33,7 +33,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                     allTypesTable.getColumnsList(), params, null, 123, testWarningHandle);
             w.setHeader(List.of(
                     "id", "byteintColumn", "smallintColumn", "bigintColumn", "decimalColumn",
-                    "floatColumn", "doubleColumn", "dateColumn", "timestampColumn", "blobColumn",
+                    "floatColumn", "doubleColumn", "timeColumn" , "dateColumn", "timestampColumn", "blobColumn",
                     "jsonColumn", "xmlColumn", "varcharColumn"
             ));
             // Write a row of data into the table
@@ -45,6 +45,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                     "12345.6789",                  // decimalColumn
                     "1234.56",                     // floatColumn
                     "9876.543",                  // doubleColumn
+                    "10:15:30",                 // timeColumn
                     "2024-01-01",                  // dateColumn
                     "2024-01-01 12:34:56",         // timestampColumn
                     "DEADBEEF1DE",              // blobColumn (empty blob)
@@ -62,6 +63,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                     "12345.6789",                  // decimalColumn
                     "1234.56",                     // floatColumn
                     "9876.543",                  // doubleColumn
+                    "10:15:30",                 // timeColumn
                     "2024-01-01",                  // dateColumn
                     "2024-01-01 12:34:56",         // timestampColumn
                     "DEADBEEF1DE",              // blobColumn (empty blob)
@@ -84,6 +86,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                         "12345.6789",             // decimalColumn
                         "1234.56",                // floatColumn
                         "9876.543",             // doubleColumn
+                        "10:15:30",                 // timeColumn
                         "2024-01-01",             // dateColumn
                         "2024-01-01 12:34:56.0",    // timestampColumn
                         "DEADBEEF1DE",            // blobColumn (hex encoded)
@@ -98,6 +101,7 @@ public class LoadDataWriterTest extends IntegrationTestBase {
                         "12345.6789",             // decimalColumn
                         "1234.56",                // floatColumn
                         "9876.543",             // doubleColumn
+                        "10:15:30",                 // timeColumn
                         "2024-01-01",             // dateColumn
                         "2024-01-01 12:34:56.0",    // timestampColumn
                         "DEADBEEF1DE",            // blobColumn (hex encoded)

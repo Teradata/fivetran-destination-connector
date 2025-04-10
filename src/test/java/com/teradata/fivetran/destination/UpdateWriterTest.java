@@ -43,6 +43,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
                     "12345.6789",                  // decimalColumn
                     "1234.56",                     // floatColumn
                     "9876.543",                  // doubleColumn
+                    "10:15:30",                 // timeColumn
                     "2024-01-01",                  // dateColumn
                     "2024-01-01 12:34:56",         // timestampColumn
                     "DEADBEEF1DE",              // blobColumn (empty blob)
@@ -65,6 +66,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
                     "12345.6789",                  // decimalColumn
                     "1234.56",                     // floatColumn
                     "1234.543",                  // doubleColumn
+                    "10:15:30",                 // timeColumn
                     "2025-01-01",                  // dateColumn
                     "2025-01-01 12:34:56",         // timestampColumn
                     "DEADBEEF1DE",              // blobColumn (empty blob)
@@ -83,14 +85,15 @@ public class UpdateWriterTest extends IntegrationTestBase {
                         "1",                    // byteintColumn
                         "1234",                  // smallintColumn
                         "9223372036854775807",    // bigintColumn
-                        "12345.6789",             // decimalColumn
+                        "12345.6790",             // decimalColumn
                         "1234.56",                // floatColumn
                         "1234.543",             // doubleColumn
+                        "10:15:30",                 // timeColumn
                         "2025-01-01",             // dateColumn
                         "2025-01-01 12:34:56.0",    // timestampColumn
                         "DEADBEEF1DE",            // blobColumn (hex encoded)
                         "{\"key\": \"value\"}",   // jsonColumn
-                        "&lt;root&gt;&lt;child&gt;value&lt;/child&gt;&lt;/root&gt;", // xmlColumn
+                        "<root><child>value</child></root>", // xmlColumn
                         "Sample String"           // varcharColumn
                 )));
     }

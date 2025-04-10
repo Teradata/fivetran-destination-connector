@@ -9,6 +9,7 @@ import org.apache.commons.lang3.StringEscapeUtils;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.*;
+import java.sql.Date;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -87,6 +88,7 @@ public class LoadDataWriter<T> extends Writer {
     private int getSqlTypeFromDataType(DataType type) {
         switch (type) {
             case BOOLEAN:
+                return java.sql.Types.TINYINT;
             case SHORT:
                 return java.sql.Types.SMALLINT;
             case INT:
@@ -99,6 +101,10 @@ public class LoadDataWriter<T> extends Writer {
                 return java.sql.Types.FLOAT;
             case DOUBLE:
                 return java.sql.Types.DOUBLE;
+            case NAIVE_TIME:
+                return java.sql.Types.TIME;
+            case NAIVE_DATE:
+                return java.sql.Types.DATE;
             case NAIVE_DATETIME:
             case UTC_DATETIME:
                 return java.sql.Types.TIMESTAMP;
@@ -143,7 +149,11 @@ public class LoadDataWriter<T> extends Writer {
                     preparedStatement.setFloat(i + 1, Float.parseFloat(value));
                 } else if (type == DataType.DOUBLE) {
                     preparedStatement.setDouble(i + 1, Double.parseDouble(value));
-                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME && !value.equals(params.getNullString())) {
+                } else if (type == DataType.NAIVE_TIME) {
+                    preparedStatement.setTime(i +1, Time.valueOf(value));
+                } else if (type == DataType.NAIVE_DATE) {
+                    preparedStatement.setDate(i + 1, Date.valueOf(value));
+                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME ) {
                     preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                 } else if (type == DataType.BINARY) {
                     preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
@@ -173,9 +183,11 @@ public class LoadDataWriter<T> extends Writer {
             }
         } catch (BatchUpdateException bue) {
             logMessage("SEVERE","Failed to write row to batch with BatchUpdateException");
+            dropTempTable();
             throw bue;
         } catch (Exception e) {
             logMessage("SEVERE","Failed to write row to batch " + e.getMessage());
+            dropTempTable();
             throw e;
         }
     }
