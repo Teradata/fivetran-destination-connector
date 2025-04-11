@@ -53,7 +53,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
             w.setHeader(allTypesColumns);
             w.writeRow(List.of(
                     "1",                          // id
-                    "1",                         // byteintColumn
+                    "true",                         // byteintColumn
                     "32767",                       // smallintColumn
                     "9223372036854775807",         // bigintColumn
                     "12345.6789",                  // decimalColumn
@@ -76,7 +76,7 @@ public class DeleteWriterTest extends IntegrationTestBase {
             d.setHeader(allTypesColumns);
             d.writeRow(List.of(
                     "1",                          // id
-                    "1",                         // byteintColumn
+                    "true",                         // byteintColumn
                     "32767",                       // smallintColumn
                     "9223372036854775807",         // bigintColumn
                     "12345.6789",                  // decimalColumn

@@ -37,7 +37,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
             // Write a row of data into the table
             w.writeRow(List.of(
                     "1",                          // id
-                    "1",                         // byteintColumn
+                    "true",                         // byteintColumn
                     "32767",                       // smallintColumn
                     "9223372036854775807",         // bigintColumn
                     "12345.6789",                  // decimalColumn
@@ -60,7 +60,7 @@ public class UpdateWriterTest extends IntegrationTestBase {
             u.setHeader(allTypesColumns);
             u.writeRow(List.of(
                     "1",                          // id
-                    "1",                         // byteintColumn
+                    "true",                         // byteintColumn
                     "1234",                       // smallintColumn
                     "9223372036854775807",         // bigintColumn
                     "12345.6789",                  // decimalColumn

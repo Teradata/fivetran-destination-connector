@@ -89,7 +89,6 @@ public class LoadDataWriter<T> extends Writer {
         switch (type) {
             case BOOLEAN:
             case SHORT:
-                return java.sql.Types.SMALLINT;
             case INT:
                 return java.sql.Types.INTEGER;
             case LONG:
@@ -128,48 +127,57 @@ public class LoadDataWriter<T> extends Writer {
                     logMessage("INFO", String.format("Set parameter at index %d to NULL", i + 1));
                     continue;
                 }
-                if (type == DataType.BOOLEAN) {
-                    byte booleanByte;
-                    if (value.equalsIgnoreCase("true")) {
-                        booleanByte = 1;
-                    } else if (value.equalsIgnoreCase("false")) {
-                        booleanByte = 0;
-                    } else {
-                        booleanByte = Byte.parseByte(value); // fallback for raw byte values
-                    }
-                    preparedStatement.setByte(i + 1, booleanByte);
-                } else if (type == DataType.SHORT) {
-                    preparedStatement.setShort(i + 1, Short.parseShort(value));
-                } else if (type == DataType.INT) {
-                    preparedStatement.setInt(i + 1, Integer.parseInt(value));
-                } else if (type == DataType.LONG) {
-                    preparedStatement.setLong(i + 1, Long.parseLong(value));
-                } else if (type == DataType.DECIMAL) {
-                    preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
-                } else if (type == DataType.FLOAT) {
-                    preparedStatement.setFloat(i + 1, Float.parseFloat(value));
-                } else if (type == DataType.DOUBLE) {
-                    preparedStatement.setDouble(i + 1, Double.parseDouble(value));
-                } else if (type == DataType.NAIVE_TIME) {
-                    preparedStatement.setTime(i +1, Time.valueOf(value));
-                } else if (type == DataType.NAIVE_DATE) {
-                    preparedStatement.setDate(i + 1, Date.valueOf(value));
-                } else if (type == DataType.NAIVE_DATETIME || type == DataType.UTC_DATETIME ) {
-                    preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
-                } else if (type == DataType.BINARY) {
-                    preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
-                } else if (type == DataType.XML) {
-                    SQLXML sqlxml =  preparedStatement.getConnection().createSQLXML();
-                    sqlxml.setString(value);
-                    preparedStatement.setSQLXML(i + 1, sqlxml);
-                } else if (type == DataType.STRING) {
-                    preparedStatement.setString(i + 1, value);
-                } else if (type == DataType.JSON) {
-                    preparedStatement.setObject(i + 1, new JSONStruct ("JSON",
-                            new Object[] {value}));
-                }
-                else {
-                    preparedStatement.setObject(i + 1, value);
+                switch (type) {
+                    case BOOLEAN:
+                        if (value.equalsIgnoreCase("true")) {
+                            preparedStatement.setInt(i + 1, 1);
+                        } else if (value.equalsIgnoreCase("false")) {
+                            preparedStatement.setInt(i + 1, 0);
+                        }
+                        break;
+                    case SHORT:
+                    case INT:
+                        preparedStatement.setInt(i + 1, Integer.parseInt(value));
+                        break;
+                    case LONG:
+                        preparedStatement.setLong(i + 1, Long.parseLong(value));
+                        break;
+                    case DECIMAL:
+                        preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
+                        break;
+                    case FLOAT:
+                        preparedStatement.setFloat(i + 1, Float.parseFloat(value));
+                        break;
+                    case DOUBLE:
+                        preparedStatement.setDouble(i + 1, Double.parseDouble(value));
+                        break;
+                    case NAIVE_TIME:
+                        preparedStatement.setTime(i + 1, Time.valueOf(value));
+                        break;
+                    case NAIVE_DATE:
+                        preparedStatement.setDate(i + 1, Date.valueOf(value));
+                        break;
+                    case NAIVE_DATETIME:
+                    case UTC_DATETIME:
+                        preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
+                        break;
+                    case BINARY:
+                        preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
+                        break;
+                    case XML:
+                        SQLXML sqlxml = preparedStatement.getConnection().createSQLXML();
+                        sqlxml.setString(value);
+                        preparedStatement.setSQLXML(i + 1, sqlxml);
+                        break;
+                    case STRING:
+                        preparedStatement.setString(i + 1, value);
+                        break;
+                    case JSON:
+                        preparedStatement.setObject(i + 1, new JSONStruct("JSON", new Object[]{value}));
+                        break;
+                    default:
+                        preparedStatement.setObject(i + 1, value);
+                        break;
                 }
                 logMessage("INFO", String.format("Set parameter at index %d: %s", i + 1, value));
             }
