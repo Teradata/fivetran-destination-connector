@@ -129,13 +129,15 @@ public class LoadDataWriter<T> extends Writer {
                     continue;
                 }
                 if (type == DataType.BOOLEAN) {
+                    byte booleanByte;
                     if (value.equalsIgnoreCase("true")) {
-                        preparedStatement.setShort(i + 1, Short.parseShort("1"));
+                        booleanByte = 1;
                     } else if (value.equalsIgnoreCase("false")) {
-                        preparedStatement.setShort(i + 1, Short.parseShort("0"));
+                        booleanByte = 0;
                     } else {
-                        preparedStatement.setShort(i + 1, Short.parseShort(value));
+                        booleanByte = Byte.parseByte(value); // fallback for raw byte values
                     }
+                    preparedStatement.setByte(i + 1, booleanByte);
                 } else if (type == DataType.SHORT) {
                     preparedStatement.setShort(i + 1, Short.parseShort(value));
                 } else if (type == DataType.INT) {
