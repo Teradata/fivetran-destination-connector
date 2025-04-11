@@ -88,7 +88,6 @@ public class LoadDataWriter<T> extends Writer {
     private int getSqlTypeFromDataType(DataType type) {
         switch (type) {
             case BOOLEAN:
-                return java.sql.Types.TINYINT;
             case SHORT:
                 return java.sql.Types.SMALLINT;
             case INT:
