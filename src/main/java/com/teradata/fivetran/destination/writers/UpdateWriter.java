@@ -64,7 +64,7 @@ public class UpdateWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws SQLException {
-        logMessage("INFO","Writing row: " + row);
+        //logMessage("INFO","Writing row: " + row);
         StringBuilder updateClause = new StringBuilder(
                 String.format("UPDATE %s SET ", TeradataJDBCUtil.escapeTable(database, table)));
         StringBuilder whereClause = new StringBuilder("WHERE ");
@@ -98,7 +98,7 @@ public class UpdateWriter extends Writer {
         }
 
         if (firstUpdateColumn) {
-            logMessage("INFO","No columns to update for row: " + row);
+            //logMessage("INFO","No columns to update for row: " + row);
             return;
         }
 
@@ -116,7 +116,7 @@ public class UpdateWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());
-                logMessage("INFO",String.format("Set parameter at index %d: %s", paramIndex, value));
+                //logMessage("INFO",String.format("Set parameter at index %d: %s", paramIndex, value));
             }
 
             for (int i = 0; i < row.size(); i++) {
@@ -128,11 +128,11 @@ public class UpdateWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
                         params.getNullString());
-                logMessage("INFO",String.format("Set primary key parameter at index %d: %s", paramIndex, value));
+                //logMessage("INFO",String.format("Set primary key parameter at index %d: %s", paramIndex, value));
             }
 
             stmt.execute();
-            logMessage("INFO","Executed update statement for row: " + row);
+            //logMessage("INFO","Executed update statement for row: " + row);
         } catch (SQLException e) {
             logMessage("SEVERE",String.format("Failed to execute update statement for row: %s, %s", row, e.getMessage()));
             throw e;

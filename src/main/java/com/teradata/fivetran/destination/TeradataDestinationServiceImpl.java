@@ -282,9 +282,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(response);
         } catch (TeradataJDBCUtil.TableNotExistException e) {
             logMessage("WARNING", String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
-            responseObserver.onNext(DescribeTableResponse.newBuilder()
-                    .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: Table doesn't exist"))
-                    .setNotFound(true).build());
+            responseObserver.onCompleted();
         } catch (Exception e) {
             logMessage("SEVERE", String.format("DescribeTable failed for %s with exception %s",
                     TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));

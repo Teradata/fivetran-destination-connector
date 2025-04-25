@@ -108,7 +108,7 @@ public class EarliestStartHistoryWriter extends Writer {
             paramIndex++;
             TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
             stmt.execute();
-            logMessage("INFO", "Executed delete statement for row: " + row);
+            //logMessage("INFO", "Executed delete statement for row: " + row);
         }
     }
 
@@ -146,7 +146,7 @@ public class EarliestStartHistoryWriter extends Writer {
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
             stmt.execute();
-            logMessage("INFO", "Executed update statement for row: " + row);
+            //logMessage("INFO", "Executed update statement for row: " + row);
         }
     }
 

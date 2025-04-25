@@ -106,7 +106,7 @@ public class DeleteHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logMessage("INFO","Executed update statement for row: " + row);
+            //logMessage("INFO","Executed update statement for row: " + row);
         }
     }
 

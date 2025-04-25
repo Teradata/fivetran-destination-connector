@@ -124,7 +124,7 @@ public class LoadDataWriter<T> extends Writer {
                 String value = row.get(i);
                 if (value == null || value.equals("null") || value.equals(params.getNullString())) {
                     preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
-                    logMessage("INFO", String.format("Set parameter at index %d to NULL", i + 1));
+                    //logMessage("INFO", String.format("Set parameter at index %d to NULL", i + 1));
                     continue;
                 }
                 switch (type) {
@@ -179,15 +179,15 @@ public class LoadDataWriter<T> extends Writer {
                         preparedStatement.setObject(i + 1, value);
                         break;
                 }
-                logMessage("INFO", String.format("Set parameter at index %d: %s", i + 1, value));
+                //logMessage("INFO", String.format("Set parameter at index %d: %s", i + 1, value));
             }
 
             preparedStatement.addBatch();
             currentBatchSize++;
-            logMessage("INFO", "Added row to batch. Current batch size: " + currentBatchSize);
+            //logMessage("INFO", "Added row to batch. Current batch size: " + currentBatchSize);
 
             if (currentBatchSize >= batchSize) {
-                logMessage("INFO", "Batch size limit reached. Committing batch.");
+                //logMessage("INFO", "Batch size limit reached. Committing batch.");
                 commit();
             }
         } catch (BatchUpdateException bue) {
@@ -281,25 +281,28 @@ public class LoadDataWriter<T> extends Writer {
     }
 
     public void dropTempTable() {
-        if(database == null || temp_table == null) {
-            logMessage("WARNING","Database or temporary table name is null. Cannot drop temporary table.");
-            return;
-        }
-        String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
-        String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
-        logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);
-        logMessage("INFO","Prepared SQL drop statement: " + dropQuery);
         try {
+            if (conn == null || conn.isClosed()) {
+                //logMessage("WARNING","Connection is closed. Cannot drop temporary table.");
+                return;
+            }
+            if(database == null || temp_table == null) {
+                //logMessage("WARNING","Database or temporary table name is null. Cannot drop temporary table.");
+                return;
+            }
+            String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
+            String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
+            //logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);
+            //logMessage("INFO","Prepared SQL drop statement: " + dropQuery);
+
             conn.createStatement().execute(deleteQuery);
-            logMessage("INFO","Temporary table deleted successfully.");
-        } catch (SQLException e) {
-            logMessage("WARNING","Failed to delete temporary table: " + e.getMessage());
-        }
-        try {
+            //logMessage("INFO", "Temporary table deleted successfully.");
             conn.createStatement().execute(dropQuery);
-            logMessage("INFO","Temporary table dropped successfully.");
+            //logMessage("INFO", "Temporary table dropped successfully.");
         } catch (SQLException e) {
-            logMessage("SEVERE","Failed to drop temporary table: " + e.getMessage());
+            if (e.getErrorCode() != 3807) {
+                logMessage("SEVERE", "Failed to delete or drop temporary table: " + e.getMessage());
+            }
         }
     }
 

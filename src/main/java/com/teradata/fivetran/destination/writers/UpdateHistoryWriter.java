@@ -111,7 +111,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     private void processRow(List<String> row) throws SQLException {
         logMessage("INFO", "#########################UpdateHistoryWriter.processRow#########################");
-        logMessage("INFO", "Processing row: " + row);
+        //logMessage("INFO", "Processing row: " + row);
         insertNewRow(row);
         updateOldRow(row);
     }
@@ -124,7 +124,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     private void insertNewRow(List<String> row) throws SQLException {
         logMessage("INFO", "#########################UpdateHistoryWriter.insertNewRow#########################");
-        logMessage("INFO", "Inserting new row: " + row);
+        //logMessage("INFO", "Inserting new row: " + row);
         StringBuilder insertQuery = new StringBuilder(String.format(
                 "INSERT INTO %s SELECT ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -173,7 +173,7 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logMessage("INFO", "Executed insert statement for row: " + row);
+            //logMessage("INFO", "Executed insert statement for row: " + row);
         }
     }
 
@@ -185,7 +185,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     private void updateOldRow(List<String> row) throws SQLException {
         logMessage("INFO", "#########################UpdateHistoryWriter.updateOldRow#########################");
-        logMessage("INFO", "Updating old row: " + row);
+        //logMessage("INFO", "Updating old row: " + row);
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 AND _fivetran_start < ? ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -217,7 +217,7 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logMessage("INFO", "Executed update statement for row: " + row);
+            //logMessage("INFO", "Executed update statement for row: " + row);
         }
     }
 
