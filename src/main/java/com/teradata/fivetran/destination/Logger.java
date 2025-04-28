@@ -12,7 +12,9 @@ public class Logger {
     }
 
     // Default log level for debugging
-    public static LogLevel debugLogLevel = LogLevel.DISABLED;
+    public static LogLevel debugLogLevel = "yes".equalsIgnoreCase(System.getProperty("debuglog", "no"))
+            ? LogLevel.INFO
+            : LogLevel.DISABLED;
 
     /**
      * Logs a message at the specified log level.
