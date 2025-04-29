@@ -21,3 +21,7 @@ Download the following proto files from [this repository](https://github.com/fiv
 ```
 > java -jar build/libs/TeradataDestination.jar
 ```
+>  To activate debug logging, you can set a system property using the -D option when running the jar, like below:
+>  ```
+>  java -Ddebuglog=yes -jar build/libs/TeradataDestination.jar
+>  ```
