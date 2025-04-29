@@ -1,11 +1,11 @@
 package com.teradata.fivetran.destination.writers;
 
 import com.google.protobuf.ByteString;
+import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
-import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -34,7 +34,7 @@ public class UpdateHistoryWriter extends Writer {
     public UpdateHistoryWriter(Connection conn, String database, String table, List<Column> columns,
                                FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
-        logMessage("INFO", String.format("UpdateHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("UpdateHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     private List<Column> headerColumns = new ArrayList<>();
@@ -78,7 +78,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws SQLException {
-        logMessage("INFO", "#########################UpdateHistoryWriter.writeRow#########################");
+        Logger.logMessage(Logger.LogLevel.INFO, "#########################UpdateHistoryWriter.writeRow#########################");
         rows.add(row);
         commit();
     }
@@ -90,7 +90,7 @@ public class UpdateHistoryWriter extends Writer {
      */
     @Override
     public void commit() throws SQLException {
-        logMessage("INFO", "#########################UpdateHistoryWriter.commit#########################");
+        Logger.logMessage(Logger.debugLogLevel, "#########################UpdateHistoryWriter.commit#########################");
         rows.sort(Comparator.comparing(row -> {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
             String dateString = TeradataJDBCUtil.formatISODateTime(row.get(fivetranStartPos));
@@ -110,8 +110,8 @@ public class UpdateHistoryWriter extends Writer {
      * @throws SQLException If an SQL error occurs.
      */
     private void processRow(List<String> row) throws SQLException {
-        logMessage("INFO", "#########################UpdateHistoryWriter.processRow#########################");
-        logMessage("INFO", "Processing row: " + row);
+        Logger.logMessage(Logger.debugLogLevel, "#########################UpdateHistoryWriter.processRow#########################");
+        Logger.logMessage(Logger.debugLogLevel, "Processing row: " + row);
         insertNewRow(row);
         updateOldRow(row);
     }
@@ -123,8 +123,8 @@ public class UpdateHistoryWriter extends Writer {
      * @throws SQLException If an SQL error occurs.
      */
     private void insertNewRow(List<String> row) throws SQLException {
-        logMessage("INFO", "#########################UpdateHistoryWriter.insertNewRow#########################");
-        logMessage("INFO", "Inserting new row: " + row);
+        Logger.logMessage(Logger.debugLogLevel, "#########################UpdateHistoryWriter.insertNewRow#########################");
+        Logger.logMessage(Logger.debugLogLevel, "Inserting new row: " + row);
         StringBuilder insertQuery = new StringBuilder(String.format(
                 "INSERT INTO %s SELECT ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -152,7 +152,7 @@ public class UpdateHistoryWriter extends Writer {
                 insertQuery.append(String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-        logMessage("INFO", "Insert query is " + insertQuery);
+        Logger.logMessage(Logger.LogLevel.INFO, "Insert query is " + insertQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(insertQuery.toString())) {
             for (Column c : columns) {
@@ -173,7 +173,7 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logMessage("INFO", "Executed insert statement for row: " + row);
+            Logger.logMessage(Logger.debugLogLevel, "Executed insert statement for row: " + row);
         }
     }
 
@@ -184,8 +184,8 @@ public class UpdateHistoryWriter extends Writer {
      * @throws SQLException If an SQL error occurs.
      */
     private void updateOldRow(List<String> row) throws SQLException {
-        logMessage("INFO", "#########################UpdateHistoryWriter.updateOldRow#########################");
-        logMessage("INFO", "Updating old row: " + row);
+        Logger.logMessage(Logger.debugLogLevel, "#########################UpdateHistoryWriter.updateOldRow#########################");
+        Logger.logMessage(Logger.debugLogLevel, "Updating old row: " + row);
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? - INTERVAL '1' SECOND WHERE _fivetran_active = 1 AND _fivetran_start < ? ",
                 TeradataJDBCUtil.escapeTable(database, table)));
@@ -197,7 +197,7 @@ public class UpdateHistoryWriter extends Writer {
                         String.format("AND %s = ? ", TeradataJDBCUtil.escapeIdentifier(c.getName())));
             }
         }
-        logMessage("INFO", "Update query is " + updateQuery);
+        Logger.logMessage(Logger.LogLevel.INFO, "Update query is " + updateQuery);
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(updateQuery.toString())) {
             paramIndex++;
@@ -217,13 +217,7 @@ public class UpdateHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logMessage("INFO", "Executed update statement for row: " + row);
+            Logger.logMessage(Logger.debugLogLevel, "Executed update statement for row: " + row);
         }
     }
-
-    private void logMessage(String level, String message) {
-        message = StringEscapeUtils.escapeJava(message);
-        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
-    }
-
 }

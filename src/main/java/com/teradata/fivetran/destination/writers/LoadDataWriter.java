@@ -1,10 +1,10 @@
 package com.teradata.fivetran.destination.writers;
 
 import com.google.protobuf.ByteString;
+import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import fivetran_sdk.v2.*;
-import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -42,12 +42,14 @@ public class LoadDataWriter<T> extends Writer {
         this.warningHandler = warningHandler;
         this.columns = columns;
         this.batchSize=batchSize;
-        logMessage("INFO", String.format("LoadDataWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("LoadDataWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     @Override
     public void setHeader(List<String> header) throws SQLException {
-        logMessage("INFO","Setting header with columns: " + header);
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("Setting header with columns: %s", header));
         headerColumns = new ArrayList<>();
         matchingCols = columns.stream()
                 .filter(Column::getPrimaryKey)
@@ -69,19 +71,21 @@ public class LoadDataWriter<T> extends Writer {
 
         String createTempTable = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
                 TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
-        logMessage("INFO","Creating temporary table: " + createTempTable);
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("Creating temporary table: %s", createTempTable));
         try {
             dropTempTable();
             conn.createStatement().execute(createTempTable);
         } catch (SQLException e) {
-            logMessage("SEVERE","Failed to create temporary table: " + e.getMessage());
+            Logger.logMessage(Logger.LogLevel.SEVERE,
+                    String.format("Failed to create temporary table: %s", e.getMessage()));
             throw new SQLException("Failed to create temporary table: " + e.getMessage(), e);
         }
 
         String query = String.format("INSERT INTO %s (%s) VALUES (%s)",
                 TeradataJDBCUtil.escapeTable(database, temp_table), columnNames, placeholders);
-
-        logMessage("INFO","Prepared SQL statement: " + query);
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("Prepared SQL statement: %s", query));
         preparedStatement = conn.prepareStatement(query);
     }
 
@@ -117,14 +121,14 @@ public class LoadDataWriter<T> extends Writer {
 
     @Override
     public void writeRow(List<String> row) throws Exception {
-        logMessage("INFO","#########################LoadDataWriter.writeRow#########################");
+        Logger.logMessage(Logger.debugLogLevel, "#########################LoadDataWriter.writeRow#########################");
         try {
             for (int i = 0; i < row.size(); i++) {
                 DataType type = headerColumns.get(i).getType();
                 String value = row.get(i);
                 if (value == null || value.equals("null") || value.equals(params.getNullString())) {
                     preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
-                    logMessage("INFO", String.format("Set parameter at index %d to NULL", i + 1));
+                    Logger.logMessage(Logger.debugLogLevel, String.format("Set parameter at index %d to NULL", i + 1));
                     continue;
                 }
                 switch (type) {
@@ -179,23 +183,23 @@ public class LoadDataWriter<T> extends Writer {
                         preparedStatement.setObject(i + 1, value);
                         break;
                 }
-                logMessage("INFO", String.format("Set parameter at index %d: %s", i + 1, value));
+                Logger.logMessage(Logger.debugLogLevel, String.format("Set parameter at index %d: %s", i + 1, value));
             }
 
             preparedStatement.addBatch();
             currentBatchSize++;
-            logMessage("INFO", "Added row to batch. Current batch size: " + currentBatchSize);
+            Logger.logMessage(Logger.debugLogLevel, String.format("Added row to batch. Current batch size: %d", currentBatchSize));
 
             if (currentBatchSize >= batchSize) {
-                logMessage("INFO", "Batch size limit reached. Committing batch.");
+                Logger.logMessage(Logger.debugLogLevel, String.format("Batch size limit reached. Committing batch of size: %d", currentBatchSize));
                 commit();
             }
         } catch (BatchUpdateException bue) {
-            logMessage("SEVERE","Failed to write row to batch with BatchUpdateException");
+            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to write row to batch with BatchUpdateException");
             dropTempTable();
             throw bue;
         } catch (Exception e) {
-            logMessage("SEVERE","Failed to write row to batch " + e.getMessage());
+            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to write row to batch with Exception");
             dropTempTable();
             throw e;
         }
@@ -204,7 +208,7 @@ public class LoadDataWriter<T> extends Writer {
     @Override
     public void commit() throws SQLException {
         if (currentBatchSize > 0) {
-            logMessage("INFO","Committing batch of size: " + currentBatchSize);
+            Logger.logMessage(Logger.LogLevel.INFO, "Committing batch of size: " + currentBatchSize);
             try {
                 preparedStatement.executeBatch();
                 preparedStatement.clearBatch();
@@ -217,21 +221,25 @@ public class LoadDataWriter<T> extends Writer {
                 } else {
                     actualError = bue.getMessage();
                 }
-                logMessage("SEVERE", String.format("WriteBatch failed with exception %s", actualError));
+                Logger.logMessage(Logger.LogLevel.SEVERE,
+                        String.format("WriteBatch failed with exception %s", actualError));
                 dropTempTable();
                 throw bue;
             }
             catch (SQLException e) {
-                logMessage("SEVERE","Failed to execute batch on table : "
-                        + TeradataJDBCUtil.escapeTable(database, temp_table) + " with error: "
-                        + e.getMessage());
+                Logger.logMessage(Logger.LogLevel.SEVERE,
+                        "Failed to execute batch on table : "
+                                + TeradataJDBCUtil.escapeTable(database, temp_table) + " with error: "
+                                + e.getMessage());
                 dropTempTable();
                 throw e;
             }
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("Batch of size %d committed successfully", currentBatchSize));
             currentBatchSize = 0;
-            logMessage("INFO", "Batch committed successfully.");
         } else {
-            logMessage("INFO","No rows to commit.");
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("No rows to commit. Current batch size: %d", currentBatchSize));
         }
     }
 
@@ -253,13 +261,15 @@ public class LoadDataWriter<T> extends Writer {
                         TeradataJDBCUtil.escapeTable(database, temp_table),
                         condition
                 );
-
-                logMessage("INFO", "Prepared SQL delete statement: " + deleteQuery);
+                Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL delete statement: " + deleteQuery);
                 try {
                     conn.createStatement().execute(deleteQuery);
-                    logMessage("INFO", "Delete operation completed successfully.");
+                    Logger.logMessage(Logger.LogLevel.INFO, "Delete operation completed successfully.");
                 } catch (SQLException e) {
-                    logMessage("SEVERE", "Failed to execute delete statement: " + e.getMessage());
+                    Logger.logMessage(Logger.LogLevel.SEVERE,
+                            "Failed to execute delete statement on table: "
+                                    + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                                    + e.getMessage());
                     dropTempTable();
                     throw e;
                 }
@@ -268,12 +278,17 @@ public class LoadDataWriter<T> extends Writer {
 
         String insertQuery = String.format("INSERT INTO %s SELECT * FROM %s",
                 TeradataJDBCUtil.escapeTable(database, table), TeradataJDBCUtil.escapeTable(database, temp_table));
-        logMessage("INFO","Prepared SQL insert statement: " + insertQuery);
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("Prepared SQL insert statement: %s", insertQuery));
         try {
             conn.createStatement().execute(insertQuery);
-            logMessage("INFO","Insert operation completed successfully.");
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("Insert operation completed successfully."));
         } catch (SQLException e) {
-            logMessage("SEVERE", "Failed to execute insert statement: " + e.getMessage());
+            Logger.logMessage(Logger.LogLevel.SEVERE,
+                    "Failed to execute insert statement on table: "
+                            + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                            + e.getMessage());
             dropTempTable();
             throw e;
         }
@@ -281,30 +296,28 @@ public class LoadDataWriter<T> extends Writer {
     }
 
     public void dropTempTable() {
-        if(database == null || temp_table == null) {
-            logMessage("WARNING","Database or temporary table name is null. Cannot drop temporary table.");
-            return;
-        }
-        String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
-        String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
-        logMessage("INFO","Prepared SQL delete statement: " + deleteQuery);
-        logMessage("INFO","Prepared SQL drop statement: " + dropQuery);
         try {
-            conn.createStatement().execute(deleteQuery);
-            logMessage("INFO","Temporary table deleted successfully.");
-        } catch (SQLException e) {
-            logMessage("WARNING","Failed to delete temporary table: " + e.getMessage());
-        }
-        try {
-            conn.createStatement().execute(dropQuery);
-            logMessage("INFO","Temporary table dropped successfully.");
-        } catch (SQLException e) {
-            logMessage("SEVERE","Failed to drop temporary table: " + e.getMessage());
-        }
-    }
+            if (conn == null || conn.isClosed()) {
+                Logger.logMessage(Logger.debugLogLevel,"Connection is closed. Cannot drop temporary table.");
+                return;
+            }
+            if(database == null || temp_table == null) {
+                Logger.logMessage(Logger.debugLogLevel,"Database or temporary table name is null. Cannot drop temporary table.");
+                return;
+            }
+            String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, temp_table));
+            String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, temp_table));
+            Logger.logMessage(Logger.debugLogLevel,"Prepared SQL delete statement: " + deleteQuery);
+            Logger.logMessage(Logger.debugLogLevel,"Prepared SQL drop statement: " + dropQuery);
 
-    private void logMessage(String level, String message) {
-        message = StringEscapeUtils.escapeJava(message);
-        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
+            conn.createStatement().execute(deleteQuery);
+            Logger.logMessage(Logger.debugLogLevel,"Temporary table deleted successfully.");
+            conn.createStatement().execute(dropQuery);
+            Logger.logMessage(Logger.debugLogLevel,"Temporary table dropped successfully.");
+        } catch (SQLException e) {
+            if (e.getErrorCode() != 3807) {
+                Logger.logMessage(Logger.LogLevel.SEVERE,"Failed to delete or drop temporary table: " + e.getMessage());
+            }
+        }
     }
 }

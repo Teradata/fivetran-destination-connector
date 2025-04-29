@@ -1,10 +1,10 @@
 package com.teradata.fivetran.destination.writers;
 
 import com.google.protobuf.ByteString;
+import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.FileParams;
-import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -31,7 +31,8 @@ public class DeleteWriter extends Writer {
     public DeleteWriter(Connection conn, String database, String table, List<Column> columns,
                         FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
-        logMessage("INFO",String.format("DeleteWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("DeleteWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     /**
@@ -62,7 +63,7 @@ public class DeleteWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws SQLException {
-        logMessage("INFO","#########################DeleteWriter.writeRow#########################");
+        Logger.logMessage(Logger.debugLogLevel, "#########################DeleteWriter.writeRow#########################");
         rows.add(row);
     }
 
@@ -84,7 +85,7 @@ public class DeleteWriter extends Writer {
         String query = String.format("DELETE FROM %s WHERE ", TeradataJDBCUtil.escapeTable(database, table)) +
                 rows.stream().map(row -> "(" + condition + ")").collect(Collectors.joining(" OR "));
 
-        logMessage("INFO", "Prepared SQL statement: " + query);
+        Logger.logMessage(Logger.LogLevel.INFO,"Prepared SQL statement: " + query);
 
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             for (int i = 0; i < rows.size(); i++) {
@@ -99,10 +100,5 @@ public class DeleteWriter extends Writer {
         }
 
         rows.clear();
-    }
-
-    private void logMessage(String level, String message) {
-        message = StringEscapeUtils.escapeJava(message);
-        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }

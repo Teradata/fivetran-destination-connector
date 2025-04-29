@@ -44,8 +44,8 @@ public class TeradataJDBCUtil {
             String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
             connectionProps.put("sslcapath", sslCertPaths[0]);
             connectionProps.put("sslca", sslCertPaths[1]);
-            logMessage("INFO", String.format("SSLCAPATH:  %s", sslCertPaths[0]));
-            logMessage("INFO", String.format("SSLCA:  %s", sslCertPaths[1]));
+            Logger.logMessage(Logger.LogLevel.INFO, "SSLCAPATH: " + sslCertPaths[0]);
+            Logger.logMessage(Logger.LogLevel.INFO, "SSLCA: " + sslCertPaths[1]);
         }
 
         String driverParameters = conf.driverParameters();
@@ -69,7 +69,7 @@ public class TeradataJDBCUtil {
         try{
             stmt.execute(String.format("SET QUERY_BAND = '%s' FOR SESSION;", queryBandText));
         } catch (SQLException e) {
-            logMessage("SEVERE", "Failed to set query band, please check the format for setting query band: " + e.getMessage());
+            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to set query band, please check the format for setting query band: " + e.getMessage());
         }
 
         return conn;
@@ -583,7 +583,7 @@ public class TeradataJDBCUtil {
         }
 
         if (pkChanged) {
-            logMessage("INFO", "Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
+            Logger.logMessage(Logger.LogLevel.INFO, "Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
 
             return generateRecreateTableQuery(database, table, newTable, commonColumns);
         } else {
@@ -605,7 +605,7 @@ public class TeradataJDBCUtil {
         String renameTable = String.format("RENAME TABLE %s TO %s",
                 escapeTable(database, tmpTableName), escapeTable(database, tableName));
         String join = String.join("; ", createTable, insertData, dropTable, renameTable);
-        logMessage("INFO", "Prepared SQL statement: " + join);
+        Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL statement: " + join);
         return join;
     }
 
@@ -640,7 +640,7 @@ public class TeradataJDBCUtil {
             query.append(String.format("ALTER TABLE %s %s; ", escapeTable(database, table),
                     String.join(", ", addOperations)));
         }
-        logMessage("INFO", "Prepared SQL statement: " + query.toString());
+        Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL statement: " + query.toString());
         return query.toString();
     }
 
@@ -658,8 +658,7 @@ public class TeradataJDBCUtil {
       query += String.format("WHERE %s < TO_TIMESTAMP('%s')",
           escapeIdentifier(request.getSyncedColumn()),
           utcDeleteBefore);
-
-        logMessage("INFO", "Prepared SQL statement: " + query);
+        Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL statement: " + query);
         return query;
     }
 
@@ -730,9 +729,5 @@ public class TeradataJDBCUtil {
      */
     public static String getTableName(String schema, String table) {
         return schema + "_" + table;
-    }
-
-    public static void logMessage(String level, String message) {
-        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }

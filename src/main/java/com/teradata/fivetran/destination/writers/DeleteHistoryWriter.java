@@ -5,7 +5,6 @@ import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
-import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -15,6 +14,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.teradata.fivetran.destination.Logger;
 
 /**
  * Class to handle writing delete history for a table.
@@ -34,7 +35,8 @@ public class DeleteHistoryWriter extends Writer {
      */
     public DeleteHistoryWriter(Connection conn, String database, String table, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
-        logMessage("INFO",String.format("DeleteHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("DeleteHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
     List<Column> headerColumns = new ArrayList<>();
@@ -75,11 +77,12 @@ public class DeleteHistoryWriter extends Writer {
      */
     @Override
     public void writeRow(List<String> row) throws Exception {
-        logMessage("INFO","#########################DeleteHistoryWriter.writeRow#########################");
+        Logger.logMessage(Logger.debugLogLevel,
+                "#########################DeleteHistoryWriter.writeRow#########################");
         StringBuilder updateQuery = new StringBuilder(String.format(
                 "UPDATE %s SET _fivetran_active = 0, _fivetran_end = ? WHERE _fivetran_active = 1 ",
                 TeradataJDBCUtil.escapeTable(database, table)));
-        logMessage("INFO","updateQuery is " + updateQuery);
+        Logger.logMessage(Logger.LogLevel.INFO,"updateQuery is " + updateQuery);
 
         for (int i = 0; i < row.size(); i++) {
             Column c = headerColumns.get(i);
@@ -106,7 +109,7 @@ public class DeleteHistoryWriter extends Writer {
             }
 
             stmt.execute();
-            logMessage("INFO","Executed update statement for row: " + row);
+            Logger.logMessage(Logger.debugLogLevel,"Executed update statement for row: " + row);
         }
     }
 
@@ -116,10 +119,5 @@ public class DeleteHistoryWriter extends Writer {
     @Override
     public void commit() {
         // Implementation for commit
-    }
-
-    private void logMessage(String level, String message) {
-        message = StringEscapeUtils.escapeJava(message);
-        System.out.println(String.format("{\"level\":\"%s\", \"message\": \"%s\", \"message-origin\": \"sdk_destination\"}", level, message));
     }
 }
