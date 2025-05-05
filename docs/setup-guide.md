@@ -47,17 +47,9 @@ Follow the steps in this guide to connect Teradata Vantage to Fivetran.
 6. (Optional) Enable SSL and specify SSL configuration details.
 
    >   When using SSLMODE as VERIFY-CA or VERIFY-FULL, a PEM file containing Certificate Authority (CA) certificates is required.
-   >   It is mandatory to modify this PEM file by replacing all newline characters with \n and converting it into a single string,
-   >   you can use the following Python program:
-   >   ``` python
-   >   with open("<existing PEM file location>", "r") as f:
-   >      pem_content = f.read()
-   >    escaped_pem = pem_content.replace("\n", "\\n")
-   >   with open("<modified PEM file location>", "w") as f:
-   >     f.write(escaped_pem)
-   >   ```
-   >   The modified file will now contain the certificate as a single string. This string can be passed to the "SSL Server's Certificate" field
-   >   when adding a newTeradata Destination.
+   >   The PEM file must be provided as base64url encoded content
+   >   Example Linux command to print the base64url encoded contents of a PEM file: base64 -w0 < cert.pem | tr +/ -_ | tr -d =
+   >   For more information please refer: https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/jdbcug_chapter_2.html#URL_SSLBASE64
 
 8. (Optional) Specify additional **Driver Parameters**. Refer to [Teradata Vantage documentation](https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html) for a list of supported parameters.
 9. Click **Save & Test**.

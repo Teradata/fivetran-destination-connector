@@ -41,11 +41,15 @@ public class TeradataJDBCUtil {
         connectionProps.put("sslMode", conf.sslMode());
         Set<String> CaModes = new HashSet<>(Arrays.asList("DISABLE", "ALLOW", "PREFER", "REQUIRE"));
         if (!CaModes.contains(conf.sslMode())) {
+            /*
             String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
             connectionProps.put("sslcapath", sslCertPaths[0]);
             connectionProps.put("sslca", sslCertPaths[1]);
             Logger.logMessage(Logger.LogLevel.INFO, "SSLCAPATH: " + sslCertPaths[0]);
             Logger.logMessage(Logger.LogLevel.INFO, "SSLCA: " + sslCertPaths[1]);
+             */
+
+            connectionProps.put("SSLBASE64", conf.sslServerCert());
         }
 
         String driverParameters = conf.driverParameters();
@@ -94,6 +98,7 @@ public class TeradataJDBCUtil {
      * @return the array of string with ssl certificate file's paths
      * @throws IOException
      */
+    /*
     private static String[] writeSslCertToFile(String sslCert) throws IOException {
         File tempFile = File.createTempFile("sslCert", ".pem");
         tempFile.deleteOnExit();
@@ -103,6 +108,7 @@ public class TeradataJDBCUtil {
         }
         return new String[]{tempFile.getParent(), tempFile.getAbsolutePath()};
     }
+     */
 
     /**
      * Handles and validates the user-defined query band text.
