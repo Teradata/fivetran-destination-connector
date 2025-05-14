@@ -96,7 +96,13 @@ public class DeleteWriter extends Writer {
                     TeradataJDBCUtil.setParameter(stmt, paramIndex, pkColumns.get(j).getType(), value, params.getNullString());
                 }
             }
-            stmt.execute();
+            try {
+                stmt.execute();
+            } catch (SQLException e) {
+                throw new SQLException("Failed to execute (" + query + ") on table: "
+                        + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                        + e.getMessage(), e);
+            }
         }
 
         rows.clear();

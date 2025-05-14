@@ -80,6 +80,7 @@ public class LoadDataWriter<T> extends Writer {
             Logger.logMessage(Logger.LogLevel.SEVERE,
                     String.format("Failed to create temporary table: %s", e.getMessage()));
             throw new SQLException("Failed to create temporary table: " + e.getMessage(), e);
+
         }
 
         String query = String.format("INSERT INTO %s (%s) VALUES (%s)",
@@ -267,11 +268,13 @@ public class LoadDataWriter<T> extends Writer {
                     Logger.logMessage(Logger.LogLevel.INFO, "Delete operation completed successfully.");
                 } catch (SQLException e) {
                     Logger.logMessage(Logger.LogLevel.SEVERE,
-                            "Failed to execute delete statement on table: "
+                            "Failed to execute (" + deleteQuery + ") on table: "
                                     + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
                                     + e.getMessage());
                     dropTempTable();
-                    throw e;
+                    throw new SQLException("Failed to execute (" + deleteQuery + ") on table: "
+                            + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                            + e.getMessage(), e);
                 }
             }
         }
@@ -286,11 +289,13 @@ public class LoadDataWriter<T> extends Writer {
                     String.format("Insert operation completed successfully."));
         } catch (SQLException e) {
             Logger.logMessage(Logger.LogLevel.SEVERE,
-                    "Failed to execute insert statement on table: "
+                    "Failed to execute (" + insertQuery + ") on table: "
                             + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
                             + e.getMessage());
             dropTempTable();
-            throw e;
+            throw new SQLException("Failed to execute (" + insertQuery + ") on table: "
+                    + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                    + e.getMessage(), e);
         }
         dropTempTable();
     }

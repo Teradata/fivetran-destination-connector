@@ -107,8 +107,13 @@ public class DeleteHistoryWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
-
-            stmt.execute();
+            try {
+                stmt.execute();
+            } catch (SQLException e) {
+                throw new SQLException("Failed to execute (" + updateQuery + ") on table: "
+                        + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                        + e.getMessage(), e);
+            }
             Logger.logMessage(Logger.debugLogLevel,"Executed update statement for row: " + row);
         }
     }

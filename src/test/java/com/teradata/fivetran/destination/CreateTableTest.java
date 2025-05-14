@@ -186,27 +186,27 @@ public class CreateTableTest extends IntegrationTestBase {
             assertEquals("str1", columns.get(0).getName());
             assertEquals(DataType.STRING, columns.get(0).getType());
             assertFalse(columns.get(0).getPrimaryKey());
-            assertEquals(10, columns.get(0).getParams().getStringByteLength());
+            assertEquals(20, columns.get(0).getParams().getStringByteLength());
 
             assertEquals("str2", columns.get(1).getName());
             assertEquals(DataType.STRING, columns.get(1).getType());
             assertFalse(columns.get(1).getPrimaryKey());
-            assertEquals(256, columns.get(1).getParams().getStringByteLength());
+            assertEquals(512, columns.get(1).getParams().getStringByteLength());
 
             assertEquals("str3", columns.get(2).getName());
             assertEquals(DataType.STRING, columns.get(2).getType());
             assertFalse(columns.get(2).getPrimaryKey());
-            assertEquals(300, columns.get(2).getParams().getStringByteLength());
+            assertEquals(600, columns.get(2).getParams().getStringByteLength());
 
             assertEquals("str4", columns.get(3).getName());
             assertEquals(DataType.STRING, columns.get(3).getType());
             assertFalse(columns.get(3).getPrimaryKey());
-            assertEquals(32000, columns.get(3).getParams().getStringByteLength());
+            assertEquals(20000, columns.get(3).getParams().getStringByteLength());
 
             assertEquals("str5", columns.get(4).getName());
             assertEquals(DataType.STRING, columns.get(4).getType());
             assertFalse(columns.get(4).getPrimaryKey());
-            assertEquals(64000, columns.get(4).getParams().getStringByteLength());
+            assertEquals(20000, columns.get(4).getParams().getStringByteLength());
         }
     }
 }

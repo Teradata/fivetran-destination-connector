@@ -131,7 +131,13 @@ public class UpdateWriter extends Writer {
                 Logger.logMessage(Logger.debugLogLevel, String.format("Set primary key parameter at index %d: %s", paramIndex, value));
             }
 
-            stmt.execute();
+            try {
+                stmt.execute();
+            } catch (SQLException e) {
+                throw new SQLException("Failed to execute (" + query + ") on table: "
+                        + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                        + e.getMessage(), e);
+            }
             Logger.logMessage(Logger.debugLogLevel, String.format("Executed update statement for row: %s", row));
         } catch (SQLException e) {
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("Failed to execute update statement for row: %s, %s", row, e.getMessage()));

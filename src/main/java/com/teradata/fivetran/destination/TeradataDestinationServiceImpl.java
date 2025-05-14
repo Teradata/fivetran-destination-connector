@@ -306,10 +306,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     public void createTable(CreateTableRequest request, StreamObserver<CreateTableResponse> responseObserver) {
         Logger.logMessage(Logger.LogLevel.INFO,"#########################createTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
-
+        String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
-            String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+            query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             if(query == null) {
                 throw new Exception("Table or Database is empty");
             }
@@ -320,7 +320,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         } catch (Exception e) {
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("CreateTable failed with exception %s", e.getMessage()));
             responseObserver.onNext(CreateTableResponse.newBuilder()
-                    .setTask(Task.newBuilder().setMessage("createTable :: Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) + ", Error: " + getStackTraceOneLine(e)).build())
+                    .setTask(Task.newBuilder().setMessage("createTable :: Table: "
+                            + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName())
+                            + ", SQL: " + query.replace("\n", " ")
+                            + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
         }
         responseObserver.onCompleted();
@@ -337,11 +340,11 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                            StreamObserver<AlterTableResponse> responseObserver) {
         Logger.logMessage(Logger.LogLevel.INFO,"#########################alterTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
-
+        String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
 
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, new AlterTableWarningHandler(responseObserver));
+            query = TeradataJDBCUtil.generateAlterTableQuery(request, new AlterTableWarningHandler(responseObserver));
             // query is null when table is not changed
             if (query != null) {
                 String[] queries = query.split(";");
@@ -359,7 +362,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("AlterTable failed with exception %s", e.getMessage()));
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("alterTable :: Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) + ", Error: " + getStackTraceOneLine(e)).build())
+                            .setMessage("alterTable :: Table: " 
+                                    + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) 
+                                    + ", SQL: " + query.replace("\n", " ")
+                                    + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -378,7 +384,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTableName());
-
+        String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             if (!TeradataJDBCUtil.checkTableExists(stmt, database, table)) {
@@ -396,7 +402,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
 
 
-            String query = TeradataJDBCUtil.generateTruncateTableQuery(database, table, request, utcDeleteBefore);
+            query = TeradataJDBCUtil.generateTruncateTableQuery(database, table, request, utcDeleteBefore);
             Logger.logMessage(Logger.LogLevel.INFO,String.format("Executing SQL:\n %s", query));
             stmt.execute(query);
 
@@ -407,7 +413,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(TruncateResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("truncate :: Table: " + TeradataJDBCUtil.escapeTable(conf.database(), request.getTableName()) + ", Error: " + getStackTraceOneLine(e)).build())
+                            .setMessage("truncate :: Table: " +
+                                    TeradataJDBCUtil.escapeTable(conf.database(), request.getTableName())
+                                    + ", SQL: " + query.replace("\n", " ")
+                                    + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
         }

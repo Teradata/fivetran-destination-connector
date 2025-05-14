@@ -419,17 +419,18 @@ public class TeradataJDBCUtil {
                 return "XML";
             case UNSPECIFIED:
             case STRING:
-            default:
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
-                    if (stringByteLength <= 64000) {
-                        return "VARCHAR(" + stringByteLength + ")";
+                    if (stringByteLength <= 10000) {
+                        return "VARCHAR(" + stringByteLength + ") CHARACTER SET UNICODE";
                     }
                     else {
-                        return "VARCHAR(64000)";
+                        return "VARCHAR(10000) CHARACTER SET UNICODE";
                     }
                 }
-                return "VARCHAR(64000)";
+                return "VARCHAR(10000) CHARACTER SET UNICODE";
+            default:
+                return "VARCHAR(10000)";
         }
     }
 

@@ -108,7 +108,13 @@ public class EarliestStartHistoryWriter extends Writer {
 
             paramIndex++;
             TeradataJDBCUtil.setParameter(stmt, paramIndex, DataType.UTC_DATETIME, row.get(earliestFivetranStartPos), params.getNullString());
-            stmt.execute();
+            try {
+                stmt.execute();
+            } catch (SQLException e) {
+                throw new SQLException("Failed to execute (" + deleteQuery + ") on table: "
+                        + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                        + e.getMessage(), e);
+            }
             Logger.logMessage(Logger.debugLogLevel,"Executed delete statement: " + stmt.toString());
         }
     }
@@ -146,7 +152,13 @@ public class EarliestStartHistoryWriter extends Writer {
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
-            stmt.execute();
+            try {
+                stmt.execute();
+            } catch (SQLException e) {
+                throw new SQLException("Failed to execute (" + updateQuery + ") on table: "
+                        + TeradataJDBCUtil.escapeTable(database, table) + " with error: "
+                        + e.getMessage(), e);
+            }
             Logger.logMessage(Logger.debugLogLevel,"Executed update statement: " + stmt.toString());
         }
     }
