@@ -196,11 +196,11 @@ public class LoadDataWriter<T> extends Writer {
                 commit();
             }
         } catch (BatchUpdateException bue) {
-            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to write row to batch with BatchUpdateException");
+            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to write row to batch with BatchUpdateException: " + bue.getMessage());
             dropTempTable();
             throw bue;
         } catch (Exception e) {
-            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to write row to batch with Exception");
+            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to write row to batch with Exception: " +e.getMessage());
             dropTempTable();
             throw e;
         }
