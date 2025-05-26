@@ -283,15 +283,19 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Table %s description: %s", TeradataJDBCUtil.escapeTable(database, table), t));
             DescribeTableResponse response = DescribeTableResponse.newBuilder().setTable(t).build();
             responseObserver.onNext(response);
-        } catch (TeradataJDBCUtil.TableNotExistException e) {
-            Logger.logMessage(Logger.LogLevel.WARNING, String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
-            responseObserver.onCompleted();
         } catch (Exception e) {
-            Logger.logMessage(Logger.LogLevel.SEVERE, String.format("DescribeTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
-            responseObserver.onNext(DescribeTableResponse.newBuilder()
-                    .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
-                    .build());
+            if (e.getCause() instanceof TableNotExistException) {
+                Logger.logMessage(Logger.LogLevel.WARNING, String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
+                DescribeTableResponse response =
+                        DescribeTableResponse.newBuilder().setNotFound(true).build();
+                responseObserver.onNext(response);
+            } else {
+                Logger.logMessage(Logger.LogLevel.SEVERE, String.format("DescribeTable failed for %s with exception %s",
+                        TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
+                responseObserver.onNext(DescribeTableResponse.newBuilder()
+                        .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
+                        .build());
+            }
         }
         responseObserver.onCompleted();
     }
