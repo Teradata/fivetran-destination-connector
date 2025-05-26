@@ -419,18 +419,17 @@ public class TeradataJDBCUtil {
                 return "XML";
             case UNSPECIFIED:
             case STRING:
+            default:
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
-                    if (stringByteLength <= 10000) {
-                        return "VARCHAR(" + stringByteLength + ") CHARACTER SET UNICODE";
+                    if (stringByteLength <= 64000) {
+                        return "VARCHAR(" + stringByteLength + ")";
                     }
                     else {
-                        return "VARCHAR(10000) CHARACTER SET UNICODE";
+                        return "VARCHAR(64000)";
                     }
                 }
-                return "VARCHAR(10000) CHARACTER SET UNICODE";
-            default:
-                return "VARCHAR(10000)";
+                return "VARCHAR(64000)";
         }
     }
 
@@ -705,15 +704,6 @@ public class TeradataJDBCUtil {
             return resultSet.getString(1);
         }
         return null;
-    }
-
-    /**
-     * Exception thrown when a table does not exist.
-     */
-    static class TableNotExistException extends Exception {
-        TableNotExistException(String s) {
-            super(String.format("Table: %s doesn't exist", s));
-        }
     }
 
     /**
