@@ -9,15 +9,51 @@ import io.grpc.stub.StreamObserver;
 
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Implementation of the gRPC service for Teradata destination connector.
  */
 public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.DestinationConnectorImplBase {
+    // Add these constants for validation
+    private static final Pattern SAFE_TABLE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+    private static final Pattern SAFE_COLUMN_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+    private static final Pattern SAFE_FILE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_\\-\\.]+$");
 
+    // Helper method to validate table names
+    private static String validateDatabaseAndTableName(String name) {
+        if (!SAFE_TABLE_NAME_PATTERN.matcher(name).matches()) {
+            throw new IllegalArgumentException("Unsafe table name: " + name);
+        }
+        return name;
+    }
+
+    // Helper method to validate column names
+    private void validateColumnNames(List<Column> columns) throws Exception {
+        for (Column column : columns) {
+            if (!SAFE_COLUMN_NAME_PATTERN.matcher(column.getName()).matches()) {
+                throw new Exception("Invalid column name: " + column.getName());
+            }
+        }
+    }
+
+    // Helper method to validate file paths
+    private String validateFilePath(String filePath) throws Exception {
+        if (!SAFE_FILE_NAME_PATTERN.matcher(Paths.get(filePath).getFileName().toString()).matches()) {
+            throw new Exception("Invalid file name: " + filePath);
+        }
+        // Normalize path to prevent directory traversal
+        Path normalizedPath = Paths.get(filePath).normalize();
+        return normalizedPath.toString();
+    }
     /**
      * Handles the configuration form request.
      *
@@ -283,15 +319,19 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Table %s description: %s", TeradataJDBCUtil.escapeTable(database, table), t));
             DescribeTableResponse response = DescribeTableResponse.newBuilder().setTable(t).build();
             responseObserver.onNext(response);
-        } catch (TeradataJDBCUtil.TableNotExistException e) {
-            Logger.logMessage(Logger.LogLevel.WARNING, String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
-            responseObserver.onCompleted();
         } catch (Exception e) {
-            Logger.logMessage(Logger.LogLevel.SEVERE, String.format("DescribeTable failed for %s with exception %s",
-                    TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
-            responseObserver.onNext(DescribeTableResponse.newBuilder()
-                    .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
-                    .build());
+            if (e.getCause() instanceof TableNotExistException) {
+                Logger.logMessage(Logger.LogLevel.WARNING, String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
+                DescribeTableResponse response =
+                        DescribeTableResponse.newBuilder().setNotFound(true).build();
+                responseObserver.onNext(response);
+            } else {
+                Logger.logMessage(Logger.LogLevel.SEVERE, String.format("DescribeTable failed for %s with exception %s",
+                        TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
+                responseObserver.onNext(DescribeTableResponse.newBuilder()
+                        .setWarning(Warning.newBuilder().setMessage("describeTable :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
+                        .build());
+            }
         }
         responseObserver.onCompleted();
     }
@@ -309,12 +349,18 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
+            PreparedStatement pstmt = null;
             query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
             if(query == null) {
                 throw new Exception("Table or Database is empty");
             }
+            pstmt = conn.prepareStatement(query);
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", query));
-            stmt.execute(query);
+            pstmt.execute();
+
+            if (pstmt != null) {
+                pstmt.close();
+            }
 
             responseObserver.onNext(CreateTableResponse.newBuilder().setSuccess(true).build());
         } catch (Exception e) {
@@ -343,15 +389,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
-
             query = TeradataJDBCUtil.generateAlterTableQuery(request, new AlterTableWarningHandler(responseObserver));
             // query is null when table is not changed
             if (query != null) {
                 String[] queries = query.split(";");
                 for (String q : queries) {
-                    Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", q));
                     if (!q.trim().isEmpty()) {
-                        stmt.execute(q.trim() + ";");
+                        try (PreparedStatement pstmt = conn.prepareStatement(q.trim())) {
+                            pstmt.execute();
+                        }
                     }
                 }
             }
@@ -384,10 +430,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTableName());
+        String validatedTable = validateDatabaseAndTableName(table);
+        String validatedDatabase = validateDatabaseAndTableName(database);
         String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
-            if (!TeradataJDBCUtil.checkTableExists(stmt, database, table)) {
+            PreparedStatement pstmt = null;
+            if (!TeradataJDBCUtil.checkTableExists(conn, database, validatedTable)) {
                 Logger.logMessage(Logger.LogLevel.WARNING, String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
                 responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
                 responseObserver.onCompleted();
@@ -396,15 +445,20 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             long nanoseconds = request.getUtcDeleteBefore().getSeconds();
             String nanos = String.valueOf( nanoseconds * 1000000L);
             nanos = nanos.substring(0, 6);
-            String queryNanosToTimestamp = String.format("SELECT TO_TIMESTAMP(CAST('%d' AS BIGINT)) + INTERVAL '0.%06d' SECOND",
-                    request.getUtcDeleteBefore().getSeconds(), Long.parseLong(nanos));
-            stmt.execute(queryNanosToTimestamp);
+            String queryNanosToTimestamp = "SELECT TO_TIMESTAMP(CAST(? AS BIGINT)) + INTERVAL '0.?00000' SECOND";
+            pstmt = conn.prepareStatement(queryNanosToTimestamp);
+            pstmt.setLong(1, request.getUtcDeleteBefore().getSeconds());
+            pstmt.setString(2, nanos);
+            pstmt.execute();
+            pstmt.close();
+
             String utcDeleteBefore = TeradataJDBCUtil.getSingleValue(stmt.getResultSet());
 
-
-            query = TeradataJDBCUtil.generateTruncateTableQuery(database, table, request, utcDeleteBefore);
+            query = TeradataJDBCUtil.generateTruncateTableQuery(validatedDatabase, validatedTable, request, utcDeleteBefore);
             Logger.logMessage(Logger.LogLevel.INFO,String.format("Executing SQL:\n %s", query));
-            stmt.execute(query);
+            pstmt = conn.prepareStatement(query);
+            pstmt.execute();
+            pstmt.close();
 
             responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
@@ -437,17 +491,20 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
         LoadDataWriter w = null;
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
+            String validatedTable = validateDatabaseAndTableName(table);
+            validateColumnNames(request.getTable().getColumnsList());
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(column -> column.getPrimaryKey())) {
                 throw new Exception("No primary key found");
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
+            w = new LoadDataWriter(conn, database, validatedTable, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                             new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
             for (String file : request.getReplaceFilesList()) {
-                w.write(file);
+                String safeFilePath = validateFilePath(file);
+                w.write(safeFilePath);
             }
             if(!request.getReplaceFilesList().isEmpty()) {
                 w.deleteInsert();
@@ -459,7 +516,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be updated: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
-                u.write(file);
+                String safeFilePath = validateFilePath(file);
+                u.write(safeFilePath);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In DeleteWriter**********************************");
             DeleteWriter d =
@@ -467,7 +525,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be deleted: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {
-                d.write(file);
+                String safeFilePath = validateFilePath(file);
+                d.write(safeFilePath);
             }
 
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
@@ -513,6 +572,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
         LoadDataWriter<WriteBatchResponse> w = null;
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
+            validateColumnNames(request.getTable().getColumnsList());
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
@@ -522,14 +582,16 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with earliest start: " + request.getEarliestStartFilesList().size());
             for (String file : request.getEarliestStartFilesList()) {
-                e.write(file);
+                String safeFilePath = validateFilePath(file);
+                e.write(safeFilePath);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In UpdateHistoryWriter**********************************");
             UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be updated with history: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
-                u.write(file);
+                String safeFilePath = validateFilePath(file);
+                u.write(safeFilePath);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
             w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
@@ -537,7 +599,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with history: " + request.getReplaceFilesList().size());
             for (String file : request.getReplaceFilesList()) {
-                w.write(file);
+                String safeFilePath = validateFilePath(file);
+                w.write(safeFilePath);
             }
             if(!request.getReplaceFilesList().isEmpty()) {
                 w.deleteInsert();
@@ -548,7 +611,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be deleted with history: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {
-                d.write(file);
+                String safeFilePath = validateFilePath(file);
+                d.write(safeFilePath);
             }
 
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());

@@ -164,14 +164,16 @@ public class TeradataJDBCUtil {
     /**
      * Checks if a table exists in the specified database.
      *
-     * @param stmt The SQL statement.
+     * @param conn The Connection Object
      * @param database The database name.
      * @param table The table name.
      * @return True if the table exists, false otherwise.
      */
-    static boolean checkTableExists(Statement stmt, String database, String table) {
-        try {
-            stmt.executeQuery(String.format("SELECT * FROM %s WHERE 1=0", escapeTable(database, table)));
+    static boolean checkTableExists(Connection conn, String database, String table) {
+        String query = String.format("SELECT * FROM %s WHERE 1=?", escapeTable(database, table));
+        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, 0);
+            pstmt.execute();
             return true;
         } catch (SQLException e) {
             return false;
@@ -453,7 +455,7 @@ public class TeradataJDBCUtil {
         Timestamp obj = null;
         if (object == null)
             return obj;
-        if (object instanceof java.sql.Timestamp) {
+        if (object instanceof Timestamp) {
             obj = (Timestamp) object;
         } else if (object instanceof String) {
             obj = Timestamp.valueOf((String) object);
@@ -705,15 +707,6 @@ public class TeradataJDBCUtil {
             return resultSet.getString(1);
         }
         return null;
-    }
-
-    /**
-     * Exception thrown when a table does not exist.
-     */
-    static class TableNotExistException extends Exception {
-        TableNotExistException(String s) {
-            super(String.format("Table: %s doesn't exist", s));
-        }
     }
 
     /**
