@@ -67,7 +67,7 @@ public class LoadDataWriter<T> extends Writer {
 
         String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
 
-        temp_table = String.format("%s_%s_%s", table, "tmp", UUID.randomUUID().toString().replace("-", "_"));
+        temp_table = String.format("%s_%s", "td_tmp", UUID.randomUUID().toString().replace("-", "_"));
 
         String createTempTable = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
                 TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
@@ -79,7 +79,8 @@ public class LoadDataWriter<T> extends Writer {
         } catch (SQLException e) {
             Logger.logMessage(Logger.LogLevel.SEVERE,
                     String.format("Failed to create temporary table: %s", e.getMessage()));
-            throw new SQLException("Failed to create temporary table: " + e.getMessage(), e);
+            throw new SQLException("Failed to create temporary table: " + e.getMessage() + " , with SQL: " +
+                    createTempTable , e);
 
         }
 
