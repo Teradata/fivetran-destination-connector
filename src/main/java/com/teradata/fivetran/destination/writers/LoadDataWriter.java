@@ -254,7 +254,9 @@ public class LoadDataWriter<T> extends Writer {
             if (!cols.isEmpty()) {
                 String condition = matchingCols.stream()
                         .map(Column::getName)
-                        .map(col -> String.format("t.%s = tmp.%s", col, col))
+                        .map(col -> String.format("t.%s = tmp.%s",
+                                        TeradataJDBCUtil.escapeIdentifier(col),
+                                        TeradataJDBCUtil.escapeIdentifier(col)))
                         .collect(Collectors.joining(" AND "));
 
                 String deleteQuery = String.format(
