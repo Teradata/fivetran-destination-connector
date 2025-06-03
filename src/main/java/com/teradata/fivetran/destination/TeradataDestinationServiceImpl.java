@@ -24,13 +24,13 @@ import java.util.regex.Pattern;
  */
 public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.DestinationConnectorImplBase {
     // Add these constants for validation
-    private static final Pattern SAFE_TABLE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
+    private static final Pattern SAFE_DATABASE_TABLE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
     private static final Pattern SAFE_COLUMN_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
     private static final Pattern SAFE_FILE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_\\-\\.]+$");
 
     // Helper method to validate table names
     private static String validateDatabaseAndTableName(String name) {
-        if (!SAFE_TABLE_NAME_PATTERN.matcher(name).matches()) {
+        if (!SAFE_DATABASE_TABLE_NAME_PATTERN.matcher(name).matches()) {
             throw new IllegalArgumentException("Unsafe table name: " + name);
         }
         return name;
@@ -436,7 +436,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
             PreparedStatement pstmt = null;
-            if (!TeradataJDBCUtil.checkTableExists(conn, database, validatedTable)) {
+            if (!TeradataJDBCUtil.checkTableExists(conn, validatedDatabase, validatedTable)) {
                 Logger.logMessage(Logger.LogLevel.WARNING, String.format("Table %s doesn't exist", TeradataJDBCUtil.escapeTable(database, table)));
                 responseObserver.onNext(TruncateResponse.newBuilder().setSuccess(true).build());
                 responseObserver.onCompleted();
@@ -491,6 +491,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
         LoadDataWriter w = null;
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
+            String validatedDatabase = validateDatabaseAndTableName(database);
             String validatedTable = validateDatabaseAndTableName(table);
             validateColumnNames(request.getTable().getColumnsList());
             if (request.getTable().getColumnsList().stream()
@@ -498,7 +499,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 throw new Exception("No primary key found");
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter(conn, database, validatedTable, request.getTable().getColumnsList(),
+            w = new LoadDataWriter(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                             new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
@@ -512,7 +513,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In UpdateWriter**********************************");
             UpdateWriter u =
-                    new UpdateWriter(conn, database, table, request.getTable().getColumnsList(),
+                    new UpdateWriter(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be updated: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
@@ -521,7 +522,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In DeleteWriter**********************************");
             DeleteWriter d =
-                    new DeleteWriter(conn, database, table, request.getTable().getColumnsList(),
+                    new DeleteWriter(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be deleted: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {
@@ -572,13 +573,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
         LoadDataWriter<WriteBatchResponse> w = null;
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
+            String validatedDatabase = validateDatabaseAndTableName(database);
+            String validatedTable = validateDatabaseAndTableName(table);
             validateColumnNames(request.getTable().getColumnsList());
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
             }
             Logger.logMessage(Logger.LogLevel.INFO,"********************************In EarliestStartHistoryWriter**********************************");
-            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with earliest start: " + request.getEarliestStartFilesList().size());
             for (String file : request.getEarliestStartFilesList()) {
@@ -586,7 +589,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 e.write(safeFilePath);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In UpdateHistoryWriter**********************************");
-            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
+            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be updated with history: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
@@ -594,7 +597,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 u.write(safeFilePath);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
+            w = new LoadDataWriter<>(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                     new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with history: " + request.getReplaceFilesList().size());
@@ -607,7 +610,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 w.dropTempTable();
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In DeleteHistoryWriter**********************************");
-            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, validatedDatabase, validatedTable, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be deleted with history: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {
