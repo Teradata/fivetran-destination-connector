@@ -18,7 +18,12 @@ import java.util.*;
  * Class to handle writing update history for a table.
  */
 public class UpdateHistoryWriter extends Writer {
+    private Connection conn;
+    private String database;
+    private String table;
+
     private final List<List<String>> rows = new ArrayList<>();
+    private Map<String, ColumnMetadata> varcharColumnLengths = new HashMap<>();
 
     /**
      * Constructor to initialize UpdateHistoryWriter.
@@ -34,6 +39,9 @@ public class UpdateHistoryWriter extends Writer {
     public UpdateHistoryWriter(Connection conn, String database, String table, List<Column> columns,
                                FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        this.conn = conn;
+        this.database = database;
+        this.table = table;
         Logger.logMessage(Logger.LogLevel.INFO, String.format("UpdateHistoryWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
@@ -64,6 +72,8 @@ public class UpdateHistoryWriter extends Writer {
             }
             headerColumns.add(nameToColumn.get(name));
         }
+
+        varcharColumnLengths = TeradataJDBCUtil.getVarcharColumnLengths(conn, database, table);
 
         if (fivetranStartPos == null) {
             throw new IllegalArgumentException("File doesn't contain _fivetran_start column");
@@ -166,6 +176,7 @@ public class UpdateHistoryWriter extends Writer {
             for (int i = 0; i < row.size(); i++) {
                 String value = row.get(i);
                 Column c = headerColumns.get(i);
+                resizeVarcharIfNeeded(c, value);
                 if (c != null && c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
                     paramIndex++;
                     TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
@@ -218,6 +229,7 @@ public class UpdateHistoryWriter extends Writer {
                     continue;
                 }
 
+                resizeVarcharIfNeeded(c, value);
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, c.getType(), value, params.getNullString());
             }
@@ -230,6 +242,25 @@ public class UpdateHistoryWriter extends Writer {
                         + e.getMessage(), e);
             }
             Logger.logMessage(Logger.debugLogLevel, "Executed update statement for row: " + row);
+        }
+    }
+
+    /**
+     * Resizes VARCHAR columns if the value length exceeds the current length.
+     */
+    private void resizeVarcharIfNeeded(Column c, String value) throws SQLException {
+        if (c != null && c.getType() == DataType.STRING) {
+            int valueLength = value.length();
+            String columnName = c.getName();
+            ColumnMetadata meta = varcharColumnLengths.get(columnName);
+            int maxAllowed = meta.getMaxAllowedLength();
+            int currentLen = meta.getLength();
+            int safeLength = Math.min(valueLength, maxAllowed);
+
+            if (safeLength > currentLen && currentLen < maxAllowed) {
+                TeradataJDBCUtil.resizeVarcharColumn(conn, database, table,null, columnName, currentLen, safeLength);
+                varcharColumnLengths.put(columnName, new ColumnMetadata(safeLength, meta.isUnicode() ? 2 : 1));
+            }
         }
     }
 }

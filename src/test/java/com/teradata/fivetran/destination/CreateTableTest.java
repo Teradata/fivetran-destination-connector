@@ -201,12 +201,12 @@ public class CreateTableTest extends IntegrationTestBase {
             assertEquals("str4", columns.get(3).getName());
             assertEquals(DataType.STRING, columns.get(3).getType());
             assertFalse(columns.get(3).getPrimaryKey());
-            assertEquals(32000, columns.get(3).getParams().getStringByteLength());
+            assertEquals(256, columns.get(3).getParams().getStringByteLength());
 
             assertEquals("str5", columns.get(4).getName());
             assertEquals(DataType.STRING, columns.get(4).getType());
             assertFalse(columns.get(4).getPrimaryKey());
-            assertEquals(64000, columns.get(4).getParams().getStringByteLength());
+            assertEquals(256, columns.get(4).getParams().getStringByteLength());
         }
     }
 }

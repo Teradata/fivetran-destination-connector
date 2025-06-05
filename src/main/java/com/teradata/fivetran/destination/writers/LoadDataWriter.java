@@ -14,11 +14,15 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
-    private List<Column> headerColumns;
+    private Connection conn;
     private PreparedStatement preparedStatement;
+    private String database;
+    private String table;
+    private String temp_table;
+    private List<Column> headerColumns;
+    private Map<String, ColumnMetadata> varcharColumnLengths;
     private final WarningHandler<T> warningHandler;
     private int currentBatchSize = 0;
-    private String temp_table;
     private List<Column> columns;
     private List<Column> matchingCols;
 
@@ -39,6 +43,9 @@ public class LoadDataWriter<T> extends Writer {
                           FileParams params, Map<String, ByteString> secretKeys, Integer batchSize,
                           WarningHandler<T> warningHandler) throws IOException {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        this.conn = conn;
+        this.database = database;
+        this.table = table;
         this.warningHandler = warningHandler;
         this.columns = columns;
         this.batchSize=batchSize;
@@ -66,6 +73,8 @@ public class LoadDataWriter<T> extends Writer {
                 .collect(Collectors.joining(", "));
 
         String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
+
+        varcharColumnLengths = TeradataJDBCUtil.getVarcharColumnLengths(conn, database, table);
 
         temp_table = String.format("%s_%s", "td_tmp", UUID.randomUUID().toString().replace("-", "_"));
 
@@ -176,6 +185,18 @@ public class LoadDataWriter<T> extends Writer {
                         preparedStatement.setSQLXML(i + 1, sqlxml);
                         break;
                     case STRING:
+                        int valueLength = value.length();
+                        Logger.logMessage(Logger.LogLevel.INFO, String.format("Processing STRING value: %s with length: %d", value, valueLength));
+                        String columnName = headerColumns.get(i).getName();
+                        ColumnMetadata meta = varcharColumnLengths.get(columnName);
+                        int maxAllowed = meta.getMaxAllowedLength();
+                        int currentLen = meta.getLength();
+                        int safeLength = Math.min(valueLength, maxAllowed);
+
+                        if (safeLength > currentLen && currentLen < maxAllowed) {
+                            TeradataJDBCUtil.resizeVarcharColumn(conn, database, table, temp_table, columnName, currentLen, safeLength);
+                            varcharColumnLengths.put(columnName, new ColumnMetadata(safeLength, meta.isUnicode() ? 2 : 1));
+                        }
                         preparedStatement.setString(i + 1, value);
                         break;
                     case JSON:
