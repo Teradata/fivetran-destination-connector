@@ -494,17 +494,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         }
         catch (BatchUpdateException bue) {
             String actualError = "";
-            SQLException next = bue.getNextException();
-            while (next != null) {
-                Logger.logMessage(Logger.LogLevel.INFO, "Caused by: " + next.getMessage());
-                next = next.getNextException();
+            if (bue.getNextException() != null) {
+                Exception nextException = bue.getNextException();
+                actualError = nextException.getMessage();
+            } else {
+                actualError = bue.getMessage();
             }
-//            if (bue.getNextException() != null) {
-//                Exception nextException = bue.getNextException();
-//                actualError = nextException.getMessage();
-//            } else {
-//                actualError = bue.getMessage();
-//            }
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("WriteBatch failed with exception %s", actualError));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
