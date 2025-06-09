@@ -9,6 +9,7 @@ import io.grpc.stub.StreamObserver;
 
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
@@ -129,6 +130,31 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("DEFAULT"))
                 .build();
 
+        FormField charset =  FormField.newBuilder().setName("charset").setLabel("CHARSET")
+                .setRequired(false)
+                .setDescription(
+                        "Specifies the session character set for encoding and decoding character data transferred to and from the Teradata Database.\n"
+                                + "Refer to the Teradata JDBC documentation for more information on supported character sets.\n"
+                                + "The default is 'ASCII'.")
+                .setTextField(TextField.PlainText)
+                .setDefaultValue("ASCII")
+                .setPlaceholder("charset")
+                .build();
+
+        FormField varcharCharacterSet =  FormField.newBuilder().setName("varchar.character.set").setLabel("Varchar column CHARACTER SET")
+                .setRequired(true)
+                .setDescription(
+                        "Specifies the character set for VARCHAR columns.\n"
+                                + "Options include:\n"
+                                + " * 'LATIN' uses the LATIN character set;\n"
+                                + " * 'UNICODE' uses the UNICODE character set.\n"
+                                + "The default is 'LATIN'.")
+                .setDropdownField(DropdownField.newBuilder()
+                        .addDropdownField("LATIN")
+                        .addDropdownField("UNICODE"))
+                .build();
+
+
         FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
                 .setLabel("SSL Server's Certificate").setRequired(true)
                 .setDescription(
@@ -222,7 +248,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, charset, varcharCharacterSet, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();
@@ -479,12 +505,17 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         }
         catch (BatchUpdateException bue) {
             String actualError = "";
-            if (bue.getNextException() != null) {
-                Exception nextException = bue.getNextException();
-                actualError = nextException.getMessage();
-            } else {
-                actualError = bue.getMessage();
+            SQLException next = bue.getNextException();
+            while (next != null) {
+                Logger.logMessage(Logger.LogLevel.INFO, "Caused by: " + next.getMessage());
+                next = next.getNextException();
             }
+//            if (bue.getNextException() != null) {
+//                Exception nextException = bue.getNextException();
+//                actualError = nextException.getMessage();
+//            } else {
+//                actualError = bue.getMessage();
+//            }
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("WriteBatch failed with exception %s", actualError));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()

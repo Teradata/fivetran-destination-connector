@@ -10,6 +10,8 @@ public class TeradataConfiguration {
     private final String td2password;
     private final String ldappassword;
     private final String tmode;
+    private static String charset = "ASCII";
+    private static String varcharCharacterSet = "LATIN"; // Default value for VARCHAR character set
     private final String sslMode;
     private final String sslServerCert;
     private final String driverParameters;
@@ -29,6 +31,8 @@ public class TeradataConfiguration {
         this.ldappassword = conf.get("ldappassword");
         this.database = getOrDefault(conf.get("database"), conf.get("user"));
         this.tmode = getOrDefault(conf.get("tmode"), "DEFAULT");
+        this.charset = getOrDefault(conf.get("charset"), "ASCII");
+        this.varcharCharacterSet = getOrDefault(conf.get("varchar.character.set"), "LATIN");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
         this.driverParameters = getOrDefault(conf.get("driver.parameters"), null);
@@ -91,6 +95,14 @@ public class TeradataConfiguration {
     }
 
     public String tmode() { return tmode; }
+
+    public static String charset() {
+        return charset;
+    }
+
+    public static String varcharCharacterSet() {
+        return varcharCharacterSet;
+    }
 
     public String sslMode() {
         return sslMode;

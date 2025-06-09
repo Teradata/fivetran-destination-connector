@@ -421,16 +421,27 @@ public class TeradataJDBCUtil {
             case UNSPECIFIED:
             case STRING:
             default:
+                String varcharCharacterSet = Optional.ofNullable(TeradataConfiguration.varcharCharacterSet())
+                    .map(String::toUpperCase)
+                    .filter(cs -> cs.equals("LATIN") || cs.equals("UNICODE"))
+                    .orElseGet(() -> {
+                        String cs = TeradataConfiguration.varcharCharacterSet();
+                        if (cs != null && !cs.isEmpty()) {
+
+                            Logger.logMessage(Logger.LogLevel.WARNING, "Unsupported VARCHAR character set: " + cs + ". Defaulting to LATIN.");
+                        }
+                        return "LATIN";
+                    });
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
-                    if (stringByteLength <= 1000) {
-                        return "VARCHAR(" + stringByteLength + ")";
+                    if (stringByteLength <= 256) {
+                        return "VARCHAR(" + stringByteLength + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
                     }
                     else {
-                        return "VARCHAR(256)";
+                        return "VARCHAR(256) CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
                     }
                 }
-                return "VARCHAR(256)";
+                return "VARCHAR(256) CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
         }
     }
 
@@ -710,9 +721,6 @@ public class TeradataJDBCUtil {
                                            String columnName,
                                            int currentLength,
                                            int newLength) throws SQLException {
-        if (currentLength == 64000) {
-            return; // No need to resize if current length is already at maximum
-        }
         String[] tables;
         if (temp_table == null) {
             tables = new String[]{table};

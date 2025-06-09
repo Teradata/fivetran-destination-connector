@@ -186,7 +186,6 @@ public class LoadDataWriter<T> extends Writer {
                         break;
                     case STRING:
                         int valueLength = value.length();
-                        Logger.logMessage(Logger.LogLevel.INFO, String.format("Processing STRING value: %s with length: %d", value, valueLength));
                         String columnName = headerColumns.get(i).getName();
                         ColumnMetadata meta = varcharColumnLengths.get(columnName);
                         int maxAllowed = meta.getMaxAllowedLength();
