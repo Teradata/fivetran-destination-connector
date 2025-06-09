@@ -130,17 +130,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("DEFAULT"))
                 .build();
 
-        FormField charset =  FormField.newBuilder().setName("charset").setLabel("CHARSET")
-                .setRequired(false)
-                .setDescription(
-                        "Specifies the session character set for encoding and decoding character data transferred to and from the Teradata Database.\n"
-                                + "Refer to the Teradata JDBC documentation for more information on supported character sets.\n"
-                                + "The default is 'ASCII'.")
-                .setTextField(TextField.PlainText)
-                .setDefaultValue("ASCII")
-                .setPlaceholder("charset")
-                .build();
-
         FormField varcharCharacterSet =  FormField.newBuilder().setName("varchar.character.set").setLabel("Varchar column CHARACTER SET")
                 .setRequired(true)
                 .setDescription(
@@ -248,7 +237,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, charset, varcharCharacterSet, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();
