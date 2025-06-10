@@ -192,7 +192,7 @@ public class LoadDataWriter<T> extends Writer {
                         int currentLen = meta.getLength();
                         int safeLength = Math.min(valueLength, maxAllowed);
 
-                        if (safeLength > currentLen && valueLength < maxAllowed) {
+                        if (safeLength > currentLen && currentLen < maxAllowed) {
                             TeradataJDBCUtil.resizeVarcharColumn(conn, database, table, temp_table, columnName, currentLen, safeLength);
                             varcharColumnLengths.put(columnName, new ColumnMetadata(safeLength, meta.isUnicode() ? 2 : 1));
                         }

@@ -699,6 +699,9 @@ public class TeradataJDBCUtil {
                     String columnName = rs.getString("ColumnName");
                     int length = rs.getInt("ColumnLength");
                     int charType = rs.getInt("CharType");
+                    if (charType == 2) { // If CharType is 2, it means the column is a Unicode character type
+                        length /= 2; // Convert to byte length
+                    }
                     Logger.logMessage(Logger.LogLevel.INFO,
                             String.format("Column: %s, Length: %d, CharType: %d", columnName, length, charType));
 
