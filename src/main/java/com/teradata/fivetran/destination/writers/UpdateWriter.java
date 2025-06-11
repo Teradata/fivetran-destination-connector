@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import fivetran_sdk.v2.Column;
+import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
 
 import java.sql.Connection;
@@ -18,7 +19,11 @@ import java.util.Map;
  * Class to handle writing updates for a table.
  */
 public class UpdateWriter extends Writer {
+    private Connection conn;
+    private String database;
+    private String table;
     private List<Column> headerColumns = new ArrayList<>();
+    private Map<String, ColumnMetadata> varcharColumnLengths = new HashMap<>();
 
     /**
      * Constructor to initialize UpdateWriter.
@@ -34,6 +39,9 @@ public class UpdateWriter extends Writer {
     public UpdateWriter(Connection conn, String database, String table, List<Column> columns,
                         FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
         super(conn, database, table, columns, params, secretKeys, batchSize);
+        this.conn = conn;
+        this.database = database;
+        this.table = table;
         Logger.logMessage(Logger.LogLevel.INFO, String.format("UpdateWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
     }
 
@@ -53,6 +61,8 @@ public class UpdateWriter extends Writer {
         for (String name : header) {
             headerColumns.add(nameToColumn.get(name));
         }
+
+        varcharColumnLengths = TeradataJDBCUtil.getVarcharColumnLengths(conn, database, table);
         Logger.logMessage(Logger.LogLevel.INFO, "Header columns set: " + headerColumns);
     }
 
@@ -108,10 +118,12 @@ public class UpdateWriter extends Writer {
         int paramIndex = 0;
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             for (int i = 0; i < row.size(); i++) {
+                Column c = headerColumns.get(i);
                 String value = row.get(i);
                 if (value.equals(params.getUnmodifiedString())) {
                     continue;
                 }
+                resizeVarcharIfNeeded(c, value);
 
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
@@ -120,10 +132,12 @@ public class UpdateWriter extends Writer {
             }
 
             for (int i = 0; i < row.size(); i++) {
+                Column c = headerColumns.get(i);
                 String value = row.get(i);
                 if (!headerColumns.get(i).getPrimaryKey()) {
                     continue;
                 }
+                resizeVarcharIfNeeded(c, value);
 
                 paramIndex++;
                 TeradataJDBCUtil.setParameter(stmt, paramIndex, headerColumns.get(i).getType(), value,
@@ -151,5 +165,24 @@ public class UpdateWriter extends Writer {
     @Override
     public void commit() {
         Logger.logMessage(Logger.LogLevel.INFO, "Commit called for UpdateWriter.");
+    }
+
+    /**
+     * Resizes VARCHAR columns if the value length exceeds the current length.
+     */
+    private void resizeVarcharIfNeeded(Column c, String value) throws SQLException {
+        if (c != null && c.getType() == DataType.STRING) {
+            int valueLength = value.length();
+            String columnName = c.getName();
+            ColumnMetadata meta = varcharColumnLengths.get(columnName);
+            int maxAllowed = meta.getMaxAllowedLength();
+            int currentLen = meta.getLength();
+            int safeLength = Math.min(valueLength, maxAllowed);
+
+            if (safeLength > currentLen && currentLen < maxAllowed) {
+                TeradataJDBCUtil.resizeVarcharColumn(conn, database, table,null, columnName, currentLen, safeLength);
+                varcharColumnLengths.put(columnName, new ColumnMetadata(safeLength, meta.isUnicode() ? 2 : 1));
+            }
+        }
     }
 }

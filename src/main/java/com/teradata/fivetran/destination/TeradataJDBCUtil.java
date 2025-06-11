@@ -1,6 +1,7 @@
 package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
+import com.teradata.fivetran.destination.writers.ColumnMetadata;
 import com.teradata.fivetran.destination.writers.JSONStruct;
 import fivetran_sdk.v2.*;
 
@@ -420,16 +421,30 @@ public class TeradataJDBCUtil {
             case UNSPECIFIED:
             case STRING:
             default:
+                String varcharCharacterSet = Optional.ofNullable(TeradataConfiguration.varcharCharacterSet())
+                    .map(String::toUpperCase)
+                    .filter(cs -> cs.equals("LATIN") || cs.equals("UNICODE"))
+                    .orElseGet(() -> {
+                        String cs = TeradataConfiguration.varcharCharacterSet();
+                        if (cs != null && !cs.isEmpty()) {
+
+                            Logger.logMessage(Logger.LogLevel.WARNING, "Unsupported VARCHAR character set: " + cs + ". Defaulting to LATIN.");
+                        }
+                        return "LATIN";
+                    });
+
+                int defaultVarcharSize = TeradataConfiguration.defaultVarcharSize();
+
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
-                    if (stringByteLength <= 64000) {
-                        return "VARCHAR(" + stringByteLength + ")";
+                    if (stringByteLength <= 256) {
+                        return "VARCHAR(" + stringByteLength + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
                     }
                     else {
-                        return "VARCHAR(64000)";
+                        return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
                     }
                 }
-                return "VARCHAR(64000)";
+                return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
         }
     }
 
@@ -666,6 +681,84 @@ public class TeradataJDBCUtil {
           utcDeleteBefore);
         Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL statement: " + query);
         return query;
+    }
+
+    public static Map<String, ColumnMetadata> getVarcharColumnLengths(Connection conn, String dbName, String tableName) {
+        Map<String, ColumnMetadata> map = new HashMap<>();
+
+        String query = "SELECT ColumnName, ColumnLength, CharType FROM DBC.ColumnsV " +
+                "WHERE UPPER(DatabaseName) = UPPER(?) AND UPPER(TableName) = UPPER(?) AND ColumnType = 'CV'";
+        Logger.logMessage(Logger.LogLevel.INFO,
+                String.format("Prepared SQL statement for getting VarcharColumnLengths: %s", query));
+
+        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setString(1, dbName);
+            pstmt.setString(2, tableName);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        "--------------------------------------------------------------------------");
+                while (rs.next()) {
+                    String columnName = rs.getString("ColumnName");
+                    int length = rs.getInt("ColumnLength");
+                    int charType = rs.getInt("CharType");
+                    if (charType == 2) { // If CharType is 2, it means the column is a Unicode character type
+                        length /= 2; // Convert to byte length
+                    }
+                    Logger.logMessage(Logger.LogLevel.INFO,
+                            String.format("Column: %s, Length: %d, CharType: %d", columnName, length, charType));
+
+                    map.put(columnName, new ColumnMetadata(length, charType));
+                }
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        "--------------------------------------------------------------------------");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+        return map;
+    }
+
+    public static void resizeVarcharColumn(Connection conn,
+                                           String database,
+                                           String table,
+                                           String temp_table,
+                                           String columnName,
+                                           int currentLength,
+                                           int newLength) throws SQLException {
+        String[] tables;
+        if (temp_table == null) {
+            tables = new String[]{table};
+        } else {
+            tables = new String[]{table, temp_table};
+        }
+        for (String tableName : tables) {
+            String tmpColumn = columnName + "_tmp";
+            try (Statement stmt = conn.createStatement()) {
+                // 1. Add new temp column
+                String addCol = String.format("ALTER TABLE %s.%s ADD %s VARCHAR(%d)", database, tableName, tmpColumn, newLength);
+                stmt.executeUpdate(addCol);
+                conn.commit();  // commit after DDL
+
+                // 2. Copy data to temp column
+                String copyData = String.format("UPDATE %s.%s SET %s = %s", database, tableName, tmpColumn, columnName);
+                stmt.executeUpdate(copyData);
+
+                // 3. Drop old column
+                String dropOld = String.format("ALTER TABLE %s.%s DROP %s", database, tableName, columnName);
+                stmt.executeUpdate(dropOld);
+                conn.commit();  // commit after DDL
+
+                // 4. Rename temp column to original name
+                String renameCol = String.format("ALTER TABLE %s.%s RENAME %s TO %s", database, tableName, tmpColumn, columnName);
+                stmt.executeUpdate(renameCol);
+                conn.commit();  // commit after DDL
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        String.format("Column '%s' in table '%s' resized to VARCHAR(%d) successfully.%n",
+                                columnName, tableName, newLength));
+            }
+        }
     }
 
     /**
