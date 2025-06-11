@@ -130,8 +130,17 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("DEFAULT"))
                 .build();
 
+        FormField defaultVarcharSize =  FormField.newBuilder().setName("default.varchar.size").setLabel("Default VARCHAR Size")
+                .setRequired(false)
+                .setDescription("Specifies the default size for VARCHAR columns.\n"
+                                + "For UNICODE character set, the maximum size is 32000 characters.\n"
+                                + "For LATIN character set, the maximum size is 64000 characters.\n"
+                                + "The default value is 256 characters.")
+                .setTextField(TextField.PlainText)
+                .build();
+
         FormField varcharCharacterSet =  FormField.newBuilder().setName("varchar.character.set").setLabel("Varchar column CHARACTER SET")
-                .setRequired(true)
+                .setRequired(false)
                 .setDescription(
                         "Specifies the character set for VARCHAR columns.\n"
                                 + "Options include:\n"
@@ -237,7 +246,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, defaultVarcharSize, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();
@@ -265,13 +274,25 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
         if ("connect".equals(testName)) {
             TeradataConfiguration configuration = new TeradataConfiguration(request.getConfigurationMap());
-            try (Connection conn = TeradataJDBCUtil.createConnection(configuration);
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute("SELECT 1");
-                responseObserver.onNext(TestResponse.newBuilder().setSuccess(true).build());
-            } catch (Exception e) {
-                Logger.logMessage(Logger.LogLevel.SEVERE, String.format("Test failed with exception %s", e.getMessage()));
-                responseObserver.onNext(TestResponse.newBuilder().setSuccess(false).setFailure(e.getMessage()).build());
+            if (TeradataConfiguration.varcharCharacterSet().equals("UNICODE") &&
+                    TeradataConfiguration.defaultVarcharSize() > 32000) {
+                String errorMessage = "Default VARCHAR size cannot be greater than 32000 for UNICODE character set";
+                Logger.logMessage(Logger.LogLevel.SEVERE, errorMessage);
+                responseObserver.onNext(TestResponse.newBuilder().setSuccess(false).setFailure(errorMessage).build());
+            } else if (TeradataConfiguration.varcharCharacterSet().equals("LATIN") &&
+                    TeradataConfiguration.defaultVarcharSize() > 64000) {
+                String errorMessage = "Default VARCHAR size cannot be greater than 64000 for LATIN character set";
+                Logger.logMessage(Logger.LogLevel.SEVERE, errorMessage);
+                responseObserver.onNext(TestResponse.newBuilder().setSuccess(false).setFailure(errorMessage).build());
+            } else {
+                try (Connection conn = TeradataJDBCUtil.createConnection(configuration);
+                     Statement stmt = conn.createStatement()) {
+                    stmt.execute("SELECT 1");
+                    responseObserver.onNext(TestResponse.newBuilder().setSuccess(true).build());
+                } catch (Exception e) {
+                    Logger.logMessage(Logger.LogLevel.SEVERE, String.format("Test failed with exception %s", e.getMessage()));
+                    responseObserver.onNext(TestResponse.newBuilder().setSuccess(false).setFailure(e.getMessage()).build());
+                }
             }
             responseObserver.onCompleted();
         }
