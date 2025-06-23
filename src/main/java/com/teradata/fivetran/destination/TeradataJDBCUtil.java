@@ -322,7 +322,7 @@ public class TeradataJDBCUtil {
      */
     static String generateCreateTableQuery(String database, String tableName, Table table) {
         String columnDefinitions = getColumnDefinitions(table.getColumnsList());
-        return String.format("CREATE Multiset TABLE %s (%s)", escapeTable(database, tableName), columnDefinitions);
+        return String.format("CREATE MULTISET TABLE %s (%s)", escapeTable(database, tableName), columnDefinitions);
     }
 
     /**

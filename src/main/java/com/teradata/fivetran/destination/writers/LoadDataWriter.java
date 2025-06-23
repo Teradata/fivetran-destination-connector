@@ -78,7 +78,7 @@ public class LoadDataWriter<T> extends Writer {
 
         temp_table = String.format("%s_%s", "td_tmp", UUID.randomUUID().toString().replace("-", "_"));
 
-        String createTempTable = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
+        String createTempTable = String.format("CREATE MULTISET TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
                 TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("Creating temporary table: %s", createTempTable));
