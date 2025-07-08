@@ -20,6 +20,7 @@ public class LoadDataWriter<T> extends Writer {
     private String table;
     private String temp_table;
     private List<Column> headerColumns;
+    private String columnNames;
     private Map<String, ColumnMetadata> varcharColumnLengths;
     private final WarningHandler<T> warningHandler;
     private int currentBatchSize = 0;
@@ -67,7 +68,7 @@ public class LoadDataWriter<T> extends Writer {
             headerColumns.add(nameToColumn.get(name));
         }
 
-        String columnNames = headerColumns.stream()
+        columnNames = headerColumns.stream()
                 .map(Column::getName)
                 .map(TeradataJDBCUtil::escapeIdentifier)
                 .collect(Collectors.joining(", "));
@@ -78,12 +79,17 @@ public class LoadDataWriter<T> extends Writer {
 
         temp_table = String.format("%s_%s", "td_tmp", UUID.randomUUID().toString().replace("-", "_"));
 
-        String createTempTable = String.format("CREATE MULTISET TABLE %s AS (SELECT * FROM %s) WITH NO DATA;",
-                TeradataJDBCUtil.escapeTable(database, temp_table), TeradataJDBCUtil.escapeTable(database, table));
+        String columnDefinitions = TeradataJDBCUtil.getColumnDefinitions(headerColumns);
         Logger.logMessage(Logger.LogLevel.INFO,
-                String.format("Creating temporary table: %s", createTempTable));
+                String.format("Column definitions for temporary table: %s", columnDefinitions));
+
+        String createTempTable = String.format("CREATE MULTISET TABLE %s (%s)",
+                TeradataJDBCUtil.escapeTable(database, temp_table), columnDefinitions);
+
         try {
             dropTempTable();
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("Creating temporary table: %s", createTempTable));
             conn.createStatement().execute(createTempTable);
         } catch (SQLException e) {
             Logger.logMessage(Logger.LogLevel.SEVERE,
@@ -302,8 +308,11 @@ public class LoadDataWriter<T> extends Writer {
             }
         }
 
-        String insertQuery = String.format("INSERT INTO %s SELECT * FROM %s",
-                TeradataJDBCUtil.escapeTable(database, table), TeradataJDBCUtil.escapeTable(database, temp_table));
+        String insertQuery = String.format("INSERT INTO %s (%s) SELECT %s FROM %s",
+                TeradataJDBCUtil.escapeTable(database, table),
+                columnNames,
+                columnNames,
+                TeradataJDBCUtil.escapeTable(database, temp_table));
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("Prepared SQL insert statement: %s", insertQuery));
         try {

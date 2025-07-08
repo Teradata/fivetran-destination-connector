@@ -351,7 +351,7 @@ public class TeradataJDBCUtil {
      * @param columns The list of columns.
      * @return The column definitions.
      */
-    static String getColumnDefinitions(List<Column> columns) {
+    public static String getColumnDefinitions(List<Column> columns) {
         List<String> columnsDefinitions = columns.stream().map(TeradataJDBCUtil::getColumnDefinition).collect(Collectors.toList());
 
         List<String> primaryKeyColumns = columns.stream().filter(Column::getPrimaryKey)
