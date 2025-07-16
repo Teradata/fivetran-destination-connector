@@ -438,13 +438,13 @@ public class TeradataJDBCUtil {
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
                     if (stringByteLength <= 256) {
-                        return "VARCHAR(" + stringByteLength + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
+                        return "VARCHAR(" + stringByteLength + ") CHARACTER SET " + varcharCharacterSet;
                     }
                     else {
-                        return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
+                        return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet;
                     }
                 }
-                return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet + " NOT CASESPECIFIC";
+                return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet;
         }
     }
 
