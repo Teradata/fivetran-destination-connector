@@ -486,9 +486,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                             new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
-            for (String file : request.getReplaceFilesList()) {
-                w.write(file);
-            }
+
+            //--------------------------------------------------------------------------
+            FastLoadDataWriter fw = new FastLoadDataWriter(conf, conn, database, table, request.getTable().getColumnsList(),
+                    request.getFileParams(), request.getKeysMap(), conf.batchSize(), request.getReplaceFilesList());
+            //---------------------------------------------------------------------------
+//            for (String file : request.getReplaceFilesList()) {
+//                w.write(file);
+//            }
             if(!request.getReplaceFilesList().isEmpty()) {
                 w.deleteInsert();
                 w.dropTempTable();
