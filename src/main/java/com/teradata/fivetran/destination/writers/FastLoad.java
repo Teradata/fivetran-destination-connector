@@ -201,6 +201,7 @@ public class FastLoad {
 
             preparedStatement.addBatch();
             batchCount++;
+            Logger.logMessage(Logger.debugLogLevel, "Added row to batch. Current batch count: " + batchCount);
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -237,6 +238,8 @@ public class FastLoad {
             while ((tokens = csvReader.readNext()) != null) {
                 List<String> row = new ArrayList<>(Arrays.asList(tokens));
                 writeRow(row);
+                Logger.logMessage(Logger.debugLogLevel,"batch size: " + batchSize);
+                Logger.logMessage(Logger.debugLogLevel, "Current batch count after writing row: " + batchCount);
                 if (batchCount >= batchSize) {
                     try {
                         preparedStatement.executeBatch();

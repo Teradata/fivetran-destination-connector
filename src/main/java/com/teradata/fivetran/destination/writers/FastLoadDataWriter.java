@@ -1,11 +1,7 @@
 package com.teradata.fivetran.destination.writers;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.*;
 
 import com.google.protobuf.ByteString;
@@ -42,10 +38,13 @@ public class FastLoadDataWriter {
         String dbsHost = conf.host();
         String username = conf.user();
         String password = conf.password();
-        String targetTable = table;
-        String outputTableName = String.format("%s_%s", "td_tmp", UUID.randomUUID().toString().replace("-", "_"));
+        String outputTableName = table;
+        //String outputTableName = String.format("%s_%s", "td_tmp", UUID.randomUUID().toString().replace("-", "_"));
         String errorTable1 = outputTableName + "_ERR1";
         String errorTable2 = outputTableName + "_ERR2";
+        Logger.logMessage(Logger.LogLevel.INFO,"Output Table Name: " + outputTableName);
+        Logger.logMessage(Logger.LogLevel.INFO,"Error Table 1: " + errorTable1);
+        Logger.logMessage(Logger.LogLevel.INFO,"Error Table 2: " + errorTable2);
 
         int instances = sourceFilesList.size();
 
@@ -163,21 +162,25 @@ public class FastLoadDataWriter {
     private static String getusingInsertSQL(Connection con, String outputTableName) {
         try {
             Statement stmt = con.createStatement();
+            Logger.logMessage(Logger.LogLevel.INFO, "getusingInsertSQL, Getting column names for table: " + outputTableName);
+            Logger.logMessage(Logger.LogLevel.INFO, "getusingInsertSQL, Query: " + "select count(*) from dbc.columns where tablename='"
+                    + outputTableName + "';");
             ResultSet res = stmt
                     .executeQuery("select count(*) from dbc.columns where tablename='" + outputTableName + "';");
             res.next();
+            Logger.logMessage(Logger.LogLevel.INFO, "Number of columns: " + res.getInt(1));
             String[] colNames = new String[res.getInt(1)];
             res = null;
             res = stmt.executeQuery("select columnName from dbc.columns where tablename='" + outputTableName + "';");
             int c = 0;
 
             while (res.next()) {
-                colNames[c] = res.getString("columnName");
+                colNames[c] = "\"" + res.getString("columnName").trim() +"\"";
                 c++;
             }
-            Logger.logMessage(Logger.LogLevel.INFO, Arrays.toString(colNames));
-            TeradataColumnDesc[] fieldDescs = CommonDBSchemaUtils.getColumnDesc(outputTableName, colNames, con);
-
+            Logger.logMessage(Logger.LogLevel.INFO, "Columns: " + Arrays.toString(colNames));
+            TeradataColumnDesc[] fieldDescs = getColumnDesc(outputTableName, colNames, con);
+            Logger.logMessage(Logger.LogLevel.INFO, "Field Descriptions: " + Arrays.toString(fieldDescs));
             String[] fieldTypes4Using = new String[fieldDescs.length];
             String[] fieldNames = new String[fieldDescs.length];
 
@@ -220,5 +223,75 @@ public class FastLoadDataWriter {
             sqle.printStackTrace();
         }
         return null;
+    }
+
+    public static String getSelectSQL(String tableName, String[] columns) {
+        Logger.logMessage(Logger.LogLevel.INFO,"Getting Select SQL for table: " + tableName);
+        Logger.logMessage(Logger.LogLevel.INFO,"Columns: " + Arrays.toString(columns));
+        StringBuilder colExpBuilder = new StringBuilder();
+
+        if (columns != null && columns.length != 0) {
+            for (int i = 0; i < columns.length; i++) {
+                if (i > 0) {
+                    colExpBuilder.append(", ");
+                }
+                colExpBuilder.append(columns[i]);
+            }
+        } else {
+            colExpBuilder.append('*');
+        }
+        String SQL_SELECT_FROM_SOURCE_WHERE = "SELECT %s FROM %s %s";
+        return String.format(SQL_SELECT_FROM_SOURCE_WHERE, colExpBuilder.toString(), tableName, "");
+    }
+
+    protected static TeradataColumnDesc[] getColumnDescs(ResultSetMetaData metadata) throws SQLException {
+        int columnCount = metadata.getColumnCount();
+
+        TeradataColumnDesc[] columns = new TeradataColumnDesc[columnCount];
+
+        for (int i = 1; i <= columnCount; i++) {
+
+            TeradataColumnDesc column = new TeradataColumnDesc();
+
+            column.setName(metadata.getColumnName(i));
+            column.setType(metadata.getColumnType(i));
+            column.setTypeName(metadata.getColumnTypeName(i));
+            column.setClassName(metadata.getColumnClassName(i));
+            column.setNullable(metadata.isNullable(i) > 0);
+
+            /* Only valid for types that have length */
+            column.setLength(metadata.getColumnDisplaySize(i));
+
+            /* Only valid for String (non-CLOB types) */
+            column.setCaseSensitive(metadata.isCaseSensitive(i));
+
+            /* Only valid for numeric/decimal types */
+            column.setPrecision(metadata.getPrecision(i));
+            column.setScale(metadata.getScale(i));
+
+            columns[i - 1] = column;
+        }
+        return columns;
+    }
+
+    public static TeradataColumnDesc[] getColumnDescsForSQL(String sql, Connection connection) throws SQLException {
+        if (connection != null) {
+            PreparedStatement stmt = connection.prepareStatement(sql);
+            ResultSetMetaData metadata = stmt.getMetaData();
+            TeradataColumnDesc[] desc = getColumnDescs(metadata);
+            stmt.close();
+            return desc;
+        }
+
+        return null;
+    }
+
+    public static TeradataColumnDesc[] getColumnDesc(String tableName, String[] fieldNames,
+                                                     Connection connection) throws SQLException {
+        Logger.logMessage(Logger.LogLevel.INFO,"getColumnDesc, Getting Column Descriptions for table: " + tableName);
+        Logger.logMessage(Logger.LogLevel.INFO,"getColumnDesc, Field Names: " + Arrays.toString(fieldNames));
+        Logger.logMessage(Logger.LogLevel.INFO,"getColumnDesc, Generated SQL: " + getSelectSQL(tableName, fieldNames));
+        return getColumnDescsForSQL(getSelectSQL(tableName, fieldNames),
+                connection);
     }
 }
