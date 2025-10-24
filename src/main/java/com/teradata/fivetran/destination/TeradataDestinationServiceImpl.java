@@ -481,6 +481,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(column -> column.getPrimaryKey())) {
                 throw new Exception("No primary key found");
             }
+
+            // Set TIME ZONE to UTC to avoid timezone related issues
+            Statement stmt = conn.createStatement();
+            Logger.logMessage(Logger.LogLevel.INFO, "Setting TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+            stmt.execute("SET TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+            stmt.close();
+
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
             w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
@@ -557,6 +564,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
             }
+
+            // Set TIME ZONE to UTC to avoid timezone related issues
+            Statement stmt = conn.createStatement();
+            Logger.logMessage(Logger.LogLevel.INFO, "Setting TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+            stmt.execute("SET TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+            stmt.close();
+
             Logger.logMessage(Logger.LogLevel.INFO,"********************************In EarliestStartHistoryWriter**********************************");
             EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
