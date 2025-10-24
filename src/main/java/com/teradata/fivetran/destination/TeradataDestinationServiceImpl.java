@@ -634,17 +634,19 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     }
 
     private void setTimeZoneToUTCIfNeeded(Connection conn) throws SQLException {
-        Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery("HELP SESSION;");
-        if (rs.next()) {
-            String tz = rs.getString("Session Time Zone");
-            Logger.logMessage(Logger.LogLevel.INFO, "Current TIME ZONE: " + tz);
-            if (!"00:00".equals(tz.trim())) {
-                Logger.logMessage(Logger.LogLevel.INFO, "Setting TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
-                stmt.execute("SET TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("HELP SESSION;")) {
+
+            if (rs.next()) {
+                String tz = rs.getString("Session Time Zone");
+                Logger.logMessage(Logger.LogLevel.INFO, "Current TIME ZONE: " + tz);
+
+                if (tz != null && !"00:00".equals(tz.trim())) {
+                    Logger.logMessage(Logger.LogLevel.INFO, "Setting TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+                    stmt.execute("SET TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+                }
             }
         }
-        stmt.close();
     }
 
     private static String getStackTraceOneLine(Exception ex) {
