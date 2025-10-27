@@ -9,6 +9,7 @@ import io.grpc.stub.StreamObserver;
 
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
@@ -481,6 +482,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(column -> column.getPrimaryKey())) {
                 throw new Exception("No primary key found");
             }
+
+            setTimeZoneToUTCIfNeeded(conn);
+
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
             w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
@@ -557,6 +561,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
             }
+
+            setTimeZoneToUTCIfNeeded(conn);
+
             Logger.logMessage(Logger.LogLevel.INFO,"********************************In EarliestStartHistoryWriter**********************************");
             EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
@@ -622,6 +629,22 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         finally {
             if (w != null && !request.getReplaceFilesList().isEmpty()) {
                 w.dropTempTable();
+            }
+        }
+    }
+
+    private void setTimeZoneToUTCIfNeeded(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("HELP SESSION;")) {
+
+            if (rs.next()) {
+                String tz = rs.getString("Session Time Zone");
+                Logger.logMessage(Logger.LogLevel.INFO, "Current TIME ZONE: " + tz);
+
+                if (tz != null && !"00:00".equals(tz.trim())) {
+                    Logger.logMessage(Logger.LogLevel.INFO, "Setting TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+                    stmt.execute("SET TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+                }
             }
         }
     }
