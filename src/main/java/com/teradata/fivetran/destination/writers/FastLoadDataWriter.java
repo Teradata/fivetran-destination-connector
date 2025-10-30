@@ -1,19 +1,32 @@
 package com.teradata.fivetran.destination.writers;
 
-import java.io.IOException;
+import java.io.*;
+import java.security.SecureRandom;
 import java.sql.*;
 import java.util.*;
+import java.util.zip.GZIPInputStream;
 
+import com.github.luben.zstd.ZstdInputStream;
 import com.google.protobuf.ByteString;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 import com.teradata.fivetran.destination.TeradataConfiguration;
-import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import fivetran_sdk.v2.Column;
+import fivetran_sdk.v2.Compression;
+import fivetran_sdk.v2.Encryption;
 import fivetran_sdk.v2.FileParams;
 import com.teradata.fivetran.destination.Logger;
 
-import com.teradata.connector.sample.plugin.utils.CommonDBSchemaUtils;
 import com.teradata.connector.teradata.db.TeradataConnection;
 import com.teradata.connector.teradata.schema.TeradataColumnDesc;
+import jdk.jpackage.internal.Log;
+
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class FastLoadDataWriter {
     protected static String SQL_GET_LSN = "{fn teradata_logon_sequence_number()}";
@@ -54,14 +67,15 @@ public class FastLoadDataWriter {
         Statement stmt = null;
 
         String lsnUrl = "jdbc:teradata://" + dbsHost
-                + "/CHARSET=UTF8,LSS_TYPE=L,TMODE=TERA,CONNECT_FUNCTION=1,TSNANO=3"; // Control Session
+                + "/LSS_TYPE=L,TMODE=TERA,CONNECT_FUNCTION=1,TSNANO=6,TNANO=0"; // Control Session
         try {
             Class.forName(jdbcDriver);
             lsnConnection = DriverManager.getConnection(lsnUrl, username, password);
+
             String lsnNumber = lsnConnection.nativeSQL(SQL_GET_LSN);
             Logger.logMessage(Logger.LogLevel.INFO,"FastLoad LSN: " + lsnNumber);
             String fastLoadURL = "jdbc:teradata://" + dbsHost
-                    + "/CHARSET=UTF8,LSS_TYPE=L,PARTITION=FASTLOAD,CONNECT_FUNCTION=2,TSNANO=3,LOGON_SEQUENCE_NUMBER="
+                    + "/LSS_TYPE=L,PARTITION=FASTLOAD,CONNECT_FUNCTION=2,TSNANO=6,TNANO=0,LOGON_SEQUENCE_NUMBER="
                     + lsnNumber; // FastLoad Session
             // Session
             String beginLoading = "BEGIN LOADING " + outputTableName + " ERRORFILES " + errorTable1 + ", " + errorTable2
@@ -78,18 +92,25 @@ public class FastLoadDataWriter {
 
             for (int i = 0; i < instances; i++) {
                 Logger.logMessage(Logger.LogLevel.INFO,"calling createFastLoadConnection() for instance : " + i);
-                fastLoad[i].createFastLoadConnection(i + 1, fastLoadURL, username, password);
+                fastLoad[i].createFastLoadConnection(i + 1, fastLoadURL, username, password, batchSize);
             }
+
+            Logger.logMessage(Logger.LogLevel.INFO, "Getting header from file: " + sourceFilesList.get(0));
+            List<String> header = getHeader(sourceFilesList.get(0), params, secretKeys); // to check if file is empty
+            if (header == null) {
+                Logger.logMessage(Logger.LogLevel.SEVERE, "Source file is empty. Exiting FastLoadDataWriter.");
+                return;
+            }
+            Logger.logMessage(Logger.LogLevel.INFO, "Header: " + header);
 
             // Submitting beginLoading
             stmt = lsnConnection.createStatement();
+            stmt.executeUpdate("SET SESSION DateForm = IntegerDate");
             lsnConnection.setAutoCommit(true);
             stmt.execute(beginLoading);
 
-            String usingInsertSQL = getusingInsertSQL(lsnConnection, outputTableName);
-            //String usingInsertSQL = "USING \"Associate_Id\" (INTEGER), \"Associate_Name\" (VARCHAR(100)) INSERT INTO \"large_td_table_export\" ( \"Associate_Id\", \"Associate_Name\") VALUES ( :\"Associate_Id\", :\"Associate_Name\")";
+            String usingInsertSQL = getusingInsertSQL(lsnConnection, outputTableName, header);
             Logger.logMessage(Logger.LogLevel.INFO,"usingInsertSQL: " + usingInsertSQL);
-
             // submitting usingInsertSQL
             lsnConnection.setAutoCommit(false);
             stmt.executeUpdate(usingInsertSQL);
@@ -100,16 +121,13 @@ public class FastLoadDataWriter {
                 Logger.logMessage(Logger.LogLevel.INFO,"Starting Thread: " + i);
                 fastLoadThread[i].start();
             }
-            System.out.println("**********************: Threads done");
             int count = 0;
             while (true) {
-                System.out.println("**********************: in while");
                 try {
                     Thread.sleep(10000);
                 } catch (InterruptedException e) {
                 }
                 for (int i = 0; i < instances; i++) {
-                    System.out.println("**********************: in for");
                     if (fastLoad[i].getLoadCompleted()) {
                         count++;
                     }
@@ -156,31 +174,57 @@ public class FastLoadDataWriter {
             ex.printStackTrace();
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
-    private static String getusingInsertSQL(Connection con, String outputTableName) {
+    private static String getusingInsertSQL(Connection con, String outputTableName, List<String> header) {
         try {
             Statement stmt = con.createStatement();
-            Logger.logMessage(Logger.LogLevel.INFO, "getusingInsertSQL, Getting column names for table: " + outputTableName);
-            Logger.logMessage(Logger.LogLevel.INFO, "getusingInsertSQL, Query: " + "select count(*) from dbc.columns where tablename='"
-                    + outputTableName + "';");
             ResultSet res = stmt
                     .executeQuery("select count(*) from dbc.columns where tablename='" + outputTableName + "';");
             res.next();
-            Logger.logMessage(Logger.LogLevel.INFO, "Number of columns: " + res.getInt(1));
-            String[] colNames = new String[res.getInt(1)];
+            Logger.logMessage(Logger.LogLevel.INFO,"Total columns in table " + outputTableName + ": " + res.getInt(1));
+
+            // First, get all available columns from the database
             res = null;
             res = stmt.executeQuery("select columnName from dbc.columns where tablename='" + outputTableName + "';");
-            int c = 0;
 
+            List<String> availableColumns = new ArrayList<>();
             while (res.next()) {
-                colNames[c] = "\"" + res.getString("columnName").trim() +"\"";
-                c++;
+                Logger.logMessage(Logger.LogLevel.INFO, "Found column in table: " + res.getString("columnName"));
+                availableColumns.add(res.getString("columnName").trim());
             }
-            Logger.logMessage(Logger.LogLevel.INFO, "Columns: " + Arrays.toString(colNames));
+            Logger.logMessage(Logger.LogLevel.INFO,"Available columns in table " + outputTableName + ": " + availableColumns);
+
+            // Filter and order columns based on header, while ensuring they exist in the table
+            List<String> orderedColumns = new ArrayList<>();
+            for (String headerCol : header) {
+                Logger.logMessage(Logger.LogLevel.INFO,"Processing header column: " + headerCol);
+                String trimmedHeader = headerCol.trim();
+                Logger.logMessage(Logger.LogLevel.INFO,"Trimmed header column: " + trimmedHeader);
+                // Check if this column exists in the database
+                if (availableColumns.contains(trimmedHeader)) {
+                    orderedColumns.add(trimmedHeader);
+                } else {
+                    Logger.logMessage(Logger.LogLevel.WARNING, "Column '" + trimmedHeader + "' from header not found in table '" + outputTableName + "'");
+                }
+            }
+
+            // Check if we found any valid columns
+            if (orderedColumns.isEmpty()) {
+                Logger.logMessage(Logger.LogLevel.SEVERE, "No valid columns found matching header for table: " + outputTableName);
+                return null;
+            }
+
+            // Convert to quoted column names array
+            String[] colNames = new String[orderedColumns.size()];
+            for (int i = 0; i < orderedColumns.size(); i++) {
+                colNames[i] = "\"" + orderedColumns.get(i) + "\"";
+            }
+
             TeradataColumnDesc[] fieldDescs = getColumnDesc(outputTableName, colNames, con);
-            Logger.logMessage(Logger.LogLevel.INFO, "Field Descriptions: " + Arrays.toString(fieldDescs));
             String[] fieldTypes4Using = new String[fieldDescs.length];
             String[] fieldNames = new String[fieldDescs.length];
 
@@ -226,8 +270,6 @@ public class FastLoadDataWriter {
     }
 
     public static String getSelectSQL(String tableName, String[] columns) {
-        Logger.logMessage(Logger.LogLevel.INFO,"Getting Select SQL for table: " + tableName);
-        Logger.logMessage(Logger.LogLevel.INFO,"Columns: " + Arrays.toString(columns));
         StringBuilder colExpBuilder = new StringBuilder();
 
         if (columns != null && columns.length != 0) {
@@ -288,10 +330,57 @@ public class FastLoadDataWriter {
 
     public static TeradataColumnDesc[] getColumnDesc(String tableName, String[] fieldNames,
                                                      Connection connection) throws SQLException {
-        Logger.logMessage(Logger.LogLevel.INFO,"getColumnDesc, Getting Column Descriptions for table: " + tableName);
-        Logger.logMessage(Logger.LogLevel.INFO,"getColumnDesc, Field Names: " + Arrays.toString(fieldNames));
-        Logger.logMessage(Logger.LogLevel.INFO,"getColumnDesc, Generated SQL: " + getSelectSQL(tableName, fieldNames));
         return getColumnDescsForSQL(getSelectSQL(tableName, fieldNames),
                 connection);
+    }
+
+    public static List<String> getHeader(String file, FileParams params, Map<String, ByteString> secretKeys) throws Exception {
+        FileInputStream is = new FileInputStream(file);
+        InputStream decoded = is ;
+        if (params.getEncryption() == Encryption.AES) {
+            decoded = decodeAES(is, secretKeys.get(file).toByteArray(), file);
+        }
+
+        InputStream uncompressed = decoded;
+        if (params.getCompression() == Compression.ZSTD) {
+            uncompressed = new ZstdInputStream(decoded);
+        } else if (params.getCompression() == Compression.GZIP) {
+            uncompressed = new GZIPInputStream(decoded);
+        }
+
+        try (CSVReader csvReader = new CSVReaderBuilder(new BufferedReader(new InputStreamReader(uncompressed)))
+                .withCSVParser(new CSVParserBuilder().withEscapeChar('\0').build())
+                .build()) {
+            String[] headerString = csvReader.readNext();
+            if (headerString == null) {
+                // Finish if file is empty
+                return null;
+            }
+            List<String> header = new ArrayList<>(Arrays.asList(headerString));
+            return header;
+        }
+    }
+
+    private static InputStream decodeAES(InputStream is, byte[] secretKeyBytes, String file) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        IvParameterSpec iv = readIV(is, file);
+        SecretKey secretKey = new SecretKeySpec(secretKeyBytes, "AES");
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, iv);
+        return new CipherInputStream(is, cipher);
+    }
+
+    private static IvParameterSpec readIV(InputStream is, String file) throws Exception {
+        byte[] ivBytes = new byte[16];
+        SecureRandom secureRandom = new SecureRandom();
+        secureRandom.nextBytes(ivBytes); // Generate a random IV
+        int bytesRead = 0;
+        while (bytesRead < ivBytes.length) {
+            int read = is.read(ivBytes, bytesRead, ivBytes.length - bytesRead);
+            if (read == -1) {
+                throw new Exception(String.format("Failed to read initialization vector. File '%s' has only %d bytes", file, bytesRead));
+            }
+            bytesRead += read;
+        }
+        return new IvParameterSpec(ivBytes);
     }
 }

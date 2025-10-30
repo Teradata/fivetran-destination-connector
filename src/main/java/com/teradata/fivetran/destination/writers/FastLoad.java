@@ -29,7 +29,7 @@ public class FastLoad {
     PreparedStatement preparedStatement;
     int instanceNumber;
     int batchCount;
-    int batchSize = 10000;
+    int batchSize;
     boolean loadCompleteStatus = false;
     private List<Column> headerColumns;
     private String columnNames;
@@ -46,11 +46,12 @@ public class FastLoad {
     int[] nullJdbcTypes = null;
     int[] nullJdbcScales = null;
 
-    public boolean createFastLoadConnection(int instanceNumber, String url, String username, String password) {
+    public boolean createFastLoadConnection(int instanceNumber, String url, String username, String password, int batchSize) {
         Logger.logMessage(Logger.LogLevel.INFO,"in createFastLoadConnection()");
         this.url = url;
         this.username = username;
         this.password = password;
+        this.batchSize = batchSize;
 
         this.instanceNumber = instanceNumber;
         try {
@@ -147,9 +148,11 @@ public class FastLoad {
                 switch (type) {
                     case BOOLEAN:
                         if (value.equalsIgnoreCase("true")) {
-                            preparedStatement.setInt(i + 1, 1);
+                            Logger.logMessage(Logger.debugLogLevel, String.format("Setting BOOLEAN value at index %d: %s", i + 1, value));
+                            preparedStatement.setByte(i + 1, (byte) 1);
                         } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setInt(i + 1, 0);
+                            Logger.logMessage(Logger.debugLogLevel, String.format("Setting BOOLEAN value at index %d: %s", i + 1, value));
+                            preparedStatement.setByte(i + 1, (byte) 0);
                         }
                         break;
                     case SHORT:
@@ -176,6 +179,8 @@ public class FastLoad {
                         break;
                     case NAIVE_DATETIME:
                     case UTC_DATETIME:
+                        Logger.logMessage(Logger.debugLogLevel, String.format("Setting DATETIME value at index %d: %s", i + 1, value));
+                    Logger.logMessage(Logger.debugLogLevel, String.format("Formatted DATETIME value: %s", TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value))));
                         preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                         break;
                     case BINARY:
@@ -245,7 +250,18 @@ public class FastLoad {
                         preparedStatement.executeBatch();
                         Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
                         batchCount = 0;
-                    } catch (SQLException e) {
+                    } catch (BatchUpdateException bue) {
+                        String actualError = "";
+                        if (bue.getNextException() != null) {
+                            Exception nextException = bue.getNextException();
+                            actualError = nextException.getMessage();
+                        } else {
+                            actualError = bue.getMessage();
+                        }
+                        Logger.logMessage(Logger.LogLevel.SEVERE,
+                                String.format("WriteBatch failed with exception %s", actualError));
+                    }
+                    catch (SQLException e) {
                         e.printStackTrace();
                     }
                 }
@@ -268,7 +284,18 @@ public class FastLoad {
             try {
                 preparedStatement.executeBatch();
                 Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
-            } catch (SQLException e) {
+            } catch (BatchUpdateException bue) {
+                String actualError = "";
+                if (bue.getNextException() != null) {
+                    Exception nextException = bue.getNextException();
+                    actualError = nextException.getMessage();
+                } else {
+                    actualError = bue.getMessage();
+                }
+                Logger.logMessage(Logger.LogLevel.SEVERE,
+                        String.format("WriteBatch failed with exception %s", actualError));
+            }
+            catch (SQLException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
             }

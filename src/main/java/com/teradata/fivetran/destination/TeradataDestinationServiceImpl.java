@@ -494,10 +494,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 //            for (String file : request.getReplaceFilesList()) {
 //                w.write(file);
 //            }
-            if(!request.getReplaceFilesList().isEmpty()) {
-                w.deleteInsert();
-                w.dropTempTable();
-            }
+//            if(!request.getReplaceFilesList().isEmpty()) {
+//                w.deleteInsert();
+//                w.dropTempTable();
+//            }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In UpdateWriter**********************************");
             UpdateWriter u =
                     new UpdateWriter(conn, database, table, request.getTable().getColumnsList(),

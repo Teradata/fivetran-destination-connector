@@ -151,9 +151,9 @@ public class LoadDataWriter<T> extends Writer {
                 switch (type) {
                     case BOOLEAN:
                         if (value.equalsIgnoreCase("true")) {
-                            preparedStatement.setInt(i + 1, 1);
+                            preparedStatement.setByte(i + 1, (byte) 1);
                         } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setInt(i + 1, 0);
+                            preparedStatement.setByte(i + 1, (byte) 1);
                         }
                         break;
                     case SHORT:
