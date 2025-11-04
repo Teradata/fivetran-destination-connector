@@ -196,6 +196,17 @@ public class FastLoadDataWriter {
                 Logger.logMessage(Logger.LogLevel.INFO, "Found column in table: " + res.getString("columnName"));
                 availableColumns.add(res.getString("columnName").trim());
             }
+
+            if (availableColumns.isEmpty()) {
+                Logger.logMessage(Logger.debugLogLevel, "No columns found in table: " + outputTableName);
+                Thread.sleep(10000); // wait for 10 seconds before retrying
+                res = stmt.executeQuery("select columnName from dbc.columns where tablename='" + outputTableName + "';");
+                while (res.next()) {
+                    Logger.logMessage(Logger.LogLevel.INFO, "Found column in table after wait: " + res.getString("columnName"));
+                    availableColumns.add(res.getString("columnName").trim());
+                }
+            }
+
             Logger.logMessage(Logger.LogLevel.INFO,"Available columns in table " + outputTableName + ": " + availableColumns);
 
             // Filter and order columns based on header, while ensuring they exist in the table
@@ -265,6 +276,8 @@ public class FastLoadDataWriter {
             return TeradataConnection.getUsingSQL(outputTableName, fieldNames, fieldTypes4Using, "UTF-8");
         } catch (SQLException sqle) {
             sqle.printStackTrace();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
         return null;
     }
