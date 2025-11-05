@@ -482,9 +482,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 throw new Exception("No primary key found");
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
-                            request.getFileParams(), request.getKeysMap(), conf.batchSize(),
-                            new WriteBatchWarningHandler(responseObserver));
+            Logger.logMessage(Logger.LogLevel.INFO, "Start: Timestamp: " + System.currentTimeMillis());
+//            w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
+//                            request.getFileParams(), request.getKeysMap(), conf.batchSize(),
+//                            new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
 
             //--------------------------------------------------------------------------
@@ -517,6 +518,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
+            Logger.logMessage(Logger.LogLevel.INFO, "End: Timestamp: " + System.currentTimeMillis());
         }
         catch (BatchUpdateException bue) {
             String actualError = "";
