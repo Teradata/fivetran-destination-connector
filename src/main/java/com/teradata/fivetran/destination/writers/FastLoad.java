@@ -162,10 +162,14 @@ public class FastLoad {
                         break;
 
                     case SHORT:
+                        preparedStatement.setShort(i + 1, Short.parseShort(value));
+                        Logger.logMessage(Logger.debugLogLevel,
+                                String.format("Set parameter (DataType: SHORT) at index %d: %s", i + 1, value));
+                        break;
                     case INT:
                         preparedStatement.setInt(i + 1, Integer.parseInt(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: SHORT/INT) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: INT) at index %d: %s", i + 1, value));
                         break;
 
                     case LONG:
@@ -249,17 +253,6 @@ public class FastLoad {
             }
 
             preparedStatement.addBatch();
-
-
-            StringBuilder debugSql = new StringBuilder("Executing SQL: ");
-            debugSql.append(preparedStatement.toString()); // Shows SQL with ? placeholders
-            debugSql.append("\nBound Parameters: ");
-            for (int i = 0; i < row.size(); i++) {
-                debugSql.append(String.format("[%d: %s]", i + 1, row.get(i)));
-                if (i < row.size() - 1) debugSql.append(", ");
-            }
-            Logger.logMessage(Logger.debugLogLevel, debugSql.toString());
-
             batchCount++;
             Logger.logMessage(Logger.debugLogLevel, "Added row to batch. Current batch count: " + batchCount);
 
