@@ -104,6 +104,7 @@ public class LoadDataWriter<T> extends Writer {
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("Prepared SQL statement: %s", query));
         preparedStatement = conn.prepareStatement(query);
+        conn.setAutoCommit(false);
     }
 
     private int getSqlTypeFromDataType(DataType type) {

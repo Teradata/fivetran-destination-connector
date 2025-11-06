@@ -39,6 +39,8 @@ public class TeradataJDBCUtil {
 
         connectionProps.put("tmode", conf.tmode());
         connectionProps.put("FLATTEN","ON");
+        connectionProps.put("TYPE", "FASTLOAD");
+        connectionProps.put("SESSIONS", "1");
         connectionProps.put("sslMode", conf.sslMode());
         Set<String> CaModes = new HashSet<>(Arrays.asList("DISABLE", "ALLOW", "PREFER", "REQUIRE"));
         if (!CaModes.contains(conf.sslMode())) {

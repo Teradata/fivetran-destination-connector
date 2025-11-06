@@ -486,6 +486,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             setTimeZoneToUTCIfNeeded(conn);
 
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
+            Logger.logMessage(Logger.LogLevel.INFO, "Start: Timestamp: " + System.currentTimeMillis());
             w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
                             request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                             new WriteBatchWarningHandler(responseObserver));
@@ -493,6 +494,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
             }
+            conn.commit();
+            conn.setAutoCommit(true);
+            Logger.logMessage(Logger.LogLevel.INFO, "Data End: Timestamp: " + System.currentTimeMillis());
             if(!request.getReplaceFilesList().isEmpty()) {
                 w.deleteInsert();
                 w.dropTempTable();
