@@ -153,7 +153,7 @@ public class LoadDataWriter<T> extends Writer {
                         if (value.equalsIgnoreCase("true")) {
                             preparedStatement.setByte(i + 1, (byte) 1);
                         } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setByte(i + 1, (byte) 1);
+                            preparedStatement.setByte(i + 1, (byte) 0);
                         }
                         break;
                     case SHORT:
