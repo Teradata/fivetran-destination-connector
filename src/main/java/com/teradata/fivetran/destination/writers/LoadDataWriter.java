@@ -2,6 +2,7 @@ package com.teradata.fivetran.destination.writers;
 
 import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.Logger;
+import com.teradata.fivetran.destination.TeradataConfiguration;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import fivetran_sdk.v2.*;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 
 public class LoadDataWriter<T> extends Writer {
     private Connection conn;
+    private Connection fastLoadConn = null;
     private PreparedStatement preparedStatement;
     private String database;
     private String table;
@@ -26,6 +28,7 @@ public class LoadDataWriter<T> extends Writer {
     private int currentBatchSize = 0;
     private List<Column> columns;
     private List<Column> matchingCols;
+    private boolean useFastLoad;
 
     /**
      * Constructor for LoadDataWriter.
@@ -40,9 +43,9 @@ public class LoadDataWriter<T> extends Writer {
      * @param warningHandler The warning handler.
      * @throws IOException If an I/O error occurs.
      */
-    public LoadDataWriter(Connection conn, String database, String table, List<Column> columns,
-                          FileParams params, Map<String, ByteString> secretKeys, Integer batchSize,
-                          WarningHandler<T> warningHandler) throws IOException {
+    public LoadDataWriter(TeradataConfiguration conf,  Connection conn, String database, String table, List<Column> columns,
+                          FileParams params, Map<String, ByteString> secretKeys, Integer batchSize, boolean useFastLoad,
+                          WarningHandler<T> warningHandler) throws Exception {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         this.conn = conn;
         this.database = database;
@@ -50,8 +53,14 @@ public class LoadDataWriter<T> extends Writer {
         this.warningHandler = warningHandler;
         this.columns = columns;
         this.batchSize=batchSize;
+        this.useFastLoad = useFastLoad;
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("LoadDataWriter initialized with database: %s, table: %s, batchSize: %s", database, table, batchSize));
+
+        if (useFastLoad) {
+            Logger.logMessage(Logger.LogLevel.INFO, "Establishing FastLoad connection.");
+            this.fastLoadConn = TeradataJDBCUtil.createFastLoadConnection(conf);
+        }
     }
 
     @Override
@@ -103,8 +112,16 @@ public class LoadDataWriter<T> extends Writer {
                 TeradataJDBCUtil.escapeTable(database, temp_table), columnNames, placeholders);
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("Prepared SQL statement: %s", query));
-        preparedStatement = conn.prepareStatement(query);
-        conn.setAutoCommit(false);
+
+        if (useFastLoad) {
+            if (fastLoadConn == null || fastLoadConn.isClosed()) {
+                throw new SQLException("FastLoad connection is not established.");
+            }
+            preparedStatement = fastLoadConn.prepareStatement(query);
+            fastLoadConn.setAutoCommit(false);
+        } else {
+            preparedStatement = conn.prepareStatement(query);
+        }
     }
 
     private int getSqlTypeFromDataType(DataType type) {
@@ -355,6 +372,24 @@ public class LoadDataWriter<T> extends Writer {
         } catch (SQLException e) {
             if (e.getErrorCode() != 3807) {
                 Logger.logMessage(Logger.LogLevel.SEVERE,"Failed to delete or drop temporary table: " + e.getMessage());
+            }
+        }
+    }
+
+    public void endFastLoadSession() throws Exception {
+        try {
+            if (fastLoadConn != null && !fastLoadConn.isClosed()) {
+                fastLoadConn.commit();
+                preparedStatement.close();
+                fastLoadConn.close();
+                Logger.logMessage(Logger.LogLevel.INFO, "FastLoad connection ended successfully.");
+            }
+        } catch (SQLException e) {
+            Logger.logMessage(Logger.LogLevel.SEVERE, "FastLoad error: " + e.getMessage());
+            SQLException next = e.getNextException();
+            while (next != null) {
+                Logger.logMessage(Logger.LogLevel.SEVERE, "Caused by: " + next.getMessage());
+                throw new SQLException(next.getMessage(), next);
             }
         }
     }

@@ -153,6 +153,24 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("UNICODE"))
                 .build();
 
+        FormField useFastLoad = FormField.newBuilder()
+                .setName("use.fastload")
+                .setLabel("Use FastLoad")
+                .setRequired(false)
+                .setDescription(
+                        "Specifies whether to use Teradata FastLoad for loading data into empty tables.\n"
+                                + "FastLoad provides high-speed loading but requires the target table to be empty.\n"
+                                + "Limitations:\n"
+                                + " * FastLoad does not support tables containing LOB (CLOB or BLOB) columns.\n"
+                                + " * It cannot be used for tables that already contain data.\n"
+                                + "If disabled, standard insert operations will be used instead.\n"
+                                + "The default is 'false'.")
+                .setDropdownField(DropdownField.newBuilder()
+                                .addDropdownField("false")
+                                .addDropdownField("true")
+                        )
+                .build();
+
 
         FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
                 .setLabel("SSL Server's Certificate").setRequired(true)
@@ -247,7 +265,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, defaultVarcharSize, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, defaultVarcharSize, useFastLoad, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();
@@ -487,15 +505,16 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
             Logger.logMessage(Logger.LogLevel.INFO, "Start: Timestamp: " + System.currentTimeMillis());
-            w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
-                            request.getFileParams(), request.getKeysMap(), conf.batchSize(),
+            w = new LoadDataWriter(conf, conn, database, table, request.getTable().getColumnsList(),
+                            request.getFileParams(), request.getKeysMap(), conf.batchSize(), conf.useFastLoad(),
                             new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
             }
-            conn.commit();
-            conn.setAutoCommit(true);
+            if (conf.useFastLoad()) {
+                w.endFastLoadSession();
+            }
             Logger.logMessage(Logger.LogLevel.INFO, "Data End: Timestamp: " + System.currentTimeMillis());
             if(!request.getReplaceFilesList().isEmpty()) {
                 w.deleteInsert();
@@ -583,12 +602,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 u.write(file);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
-                    request.getFileParams(), request.getKeysMap(), conf.batchSize(),
+            w = new LoadDataWriter<>(conf, conn, database, table, request.getTable().getColumnsList(),
+                    request.getFileParams(), request.getKeysMap(), conf.batchSize(), conf.useFastLoad(),
                     new WriteBatchWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with history: " + request.getReplaceFilesList().size());
             for (String file : request.getReplaceFilesList()) {
                 w.write(file);
+            }
+            if (conf.useFastLoad()) {
+                w.endFastLoadSession();
             }
             if(!request.getReplaceFilesList().isEmpty()) {
                 w.deleteInsert();

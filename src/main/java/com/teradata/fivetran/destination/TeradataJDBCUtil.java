@@ -27,6 +27,14 @@ public class TeradataJDBCUtil {
      * @throws ClassNotFoundException If the JDBC driver class is not found.
      */
     static Connection createConnection(TeradataConfiguration conf) throws Exception {
+        return createConnectionInternal(conf, false);
+    }
+
+    public static Connection createFastLoadConnection(TeradataConfiguration conf) throws Exception {
+        return createConnectionInternal(conf, true);
+    }
+
+    private static Connection createConnectionInternal(TeradataConfiguration conf, boolean useFastLoad) throws Exception {
         Properties connectionProps = new Properties();
 
         connectionProps.put("logmech", conf.logmech());
@@ -38,20 +46,10 @@ public class TeradataJDBCUtil {
         }
 
         connectionProps.put("tmode", conf.tmode());
-        connectionProps.put("FLATTEN","ON");
-        connectionProps.put("TYPE", "FASTLOAD");
-        connectionProps.put("SESSIONS", "1");
+        connectionProps.put("FLATTEN", "ON");
         connectionProps.put("sslMode", conf.sslMode());
         Set<String> CaModes = new HashSet<>(Arrays.asList("DISABLE", "ALLOW", "PREFER", "REQUIRE"));
         if (!CaModes.contains(conf.sslMode())) {
-            /*
-            String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
-            connectionProps.put("sslcapath", sslCertPaths[0]);
-            connectionProps.put("sslca", sslCertPaths[1]);
-            Logger.logMessage(Logger.LogLevel.INFO, "SSLCAPATH: " + sslCertPaths[0]);
-            Logger.logMessage(Logger.LogLevel.INFO, "SSLCA: " + sslCertPaths[1]);
-             */
-
             connectionProps.put("SSLBASE64", conf.sslServerCert());
         }
 
@@ -66,6 +64,11 @@ public class TeradataJDBCUtil {
             }
         }
 
+        // ✅ Add FastLoad property when required
+        if (useFastLoad) {
+            connectionProps.put("TYPE", "FASTLOAD");
+        }
+
         String queryBandText = handleQueryBand(conf.queryBand());
 
         String url = String.format("jdbc:teradata://%s", conf.host());
@@ -73,10 +76,11 @@ public class TeradataJDBCUtil {
         Connection conn = DriverManager.getConnection(url, connectionProps);
         Statement stmt = conn.createStatement();
 
-        try{
+        try {
             stmt.execute(String.format("SET QUERY_BAND = '%s' FOR SESSION;", queryBandText));
         } catch (SQLException e) {
-            Logger.logMessage(Logger.LogLevel.SEVERE, "Failed to set query band, please check the format for setting query band: " + e.getMessage());
+            Logger.logMessage(Logger.LogLevel.SEVERE,
+                    "Failed to set query band, please check the format for setting query band: " + e.getMessage());
         }
 
         return conn;
