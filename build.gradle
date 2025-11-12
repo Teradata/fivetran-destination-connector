@@ -25,7 +25,6 @@ def protobufVersion = '3.25.5'
 def protocVersion = protobufVersion
 
 dependencies {
-    implementation files ('lib/tdch-1.5.12.jar')
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"

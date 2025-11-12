@@ -4,6 +4,8 @@ import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
+import com.teradata.fivetran.destination.writers.util.ColumnMetadata;
+import com.teradata.fivetran.destination.writers.util.JSONStruct;
 import fivetran_sdk.v2.*;
 
 import java.io.IOException;

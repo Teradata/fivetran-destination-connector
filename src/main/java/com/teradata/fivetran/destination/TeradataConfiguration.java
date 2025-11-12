@@ -10,6 +10,7 @@ public class TeradataConfiguration {
     private final String td2password;
     private final String ldappassword;
     private final String tmode;
+    private final boolean useFastLoad;
     private static int defaultVarcharSize = 256; // Default value for TMODE
     private static String varcharCharacterSet = "LATIN"; // Default value for VARCHAR character set
     private final String sslMode;
@@ -31,6 +32,7 @@ public class TeradataConfiguration {
         this.ldappassword = conf.get("ldappassword");
         this.database = getOrDefault(conf.get("database"), conf.get("user"));
         this.tmode = getOrDefault(conf.get("tmode"), "DEFAULT");
+        this.useFastLoad = Boolean.parseBoolean(getOrDefault(conf.get("use.fastload"), "false"));
         defaultVarcharSize = Integer.parseInt(getOrDefault(conf.get("default.varchar.size"), "256"));
         varcharCharacterSet = getOrDefault(conf.get("varchar.character.set"), "LATIN");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
@@ -123,6 +125,10 @@ public class TeradataConfiguration {
     */
     public Integer batchSize() {
         return batchSize;
+    }
+
+    public boolean useFastLoad() {
+        return useFastLoad;
     }
 
     public String queryBand(){ return queryBand; }

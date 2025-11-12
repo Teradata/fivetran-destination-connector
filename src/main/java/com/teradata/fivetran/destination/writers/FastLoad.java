@@ -7,6 +7,7 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
+import com.teradata.fivetran.destination.writers.util.JSONStruct;
 import fivetran_sdk.v2.*;
 
 import javax.crypto.Cipher;
