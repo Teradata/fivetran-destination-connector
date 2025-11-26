@@ -1,50 +1,49 @@
 package com.teradata.fivetran.destination.writers;
 
-import java.io.*;
-import java.security.SecureRandom;
-import java.sql.*;
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.zip.GZIPInputStream;
-
-import com.github.luben.zstd.ZstdInputStream;
 import com.google.protobuf.ByteString;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
+import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataConfiguration;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
-import com.teradata.fivetran.destination.writers.util.TeradataColumnDesc;
-import com.teradata.fivetran.destination.writers.util.ConnectorSchemaParser;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.Compression;
+import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.Encryption;
 import fivetran_sdk.v2.FileParams;
-import com.teradata.fivetran.destination.Logger;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.security.SecureRandom;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
+import com.github.luben.zstd.ZstdInputStream;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 
 /**
- * FastLoadDataWriter - Handles high-performance data loading using Teradata FastLoad
- * This class manages parallel data loading from multiple files with support for
- * encryption, compression, and error handling through FastLoad sessions.
+ * Handles data loading into Teradata using the FastLoad protocol.
+ * This class manages the entire lifecycle of a FastLoad operation including:
+ * - Creating temporary and error tables
+ * - Managing FastLoad sessions
+ * - Distributing files across multiple threads
+ * - Handling data loading and error checking
+ * - Performing final merge (upsert) operations
  */
 public class FastLoadDataWriter {
-
-    // ========== CONSTANT DECLARATIONS ==========
-
-    /** SQL function to retrieve Logon Sequence Number for FastLoad sessions */
-    protected static String SQL_GET_LSN = "{fn teradata_logon_sequence_number()}";
-
-    /** SQL template for USING INSERT statement in FastLoad operations */
-    protected static final String SQL_USING_INSERT_INTO_TABLE = "USING %s INSERT INTO %s ( %s ) VALUES ( %s )";
-
-    /** SQL template for SELECT statements */
-    protected static final String SQL_SELECT_FROM_SOURCE_WHERE = "SELECT %s FROM %s %s";
+    // SQL constants for Teradata interactions
+    private static final String SQL_GET_LSN = "{fn teradata_lsn}";
 
     /** JDBC driver class name for Teradata connections */
     protected static String jdbcDriver = "com.teradata.jdbc.TeraDriver";
@@ -60,49 +59,51 @@ public class FastLoadDataWriter {
     // ========== INSTANCE VARIABLE DECLARATIONS ==========
 
     // Database connections
-    private Connection conn;                    // Main database connection for DDL operations
-    private Connection lsnConnection = null;    // LSN control session connection
-    private Statement stmt = null;              // Statement object for SQL execution
+    private Connection conn; // Main database connection for DDL operations
+    private Connection lsnConnection = null; // LSN control session connection
+    private Statement stmt = null; // Statement object for SQL execution
 
     // Schema and table information
-    private String database;                    // Target database name
-    private String table;                       // Target table name
-    private List<Column> columns;               // Column definitions from schema
-    private List<Column> matchingCols;          // Primary key columns for upsert operations
-    private FileParams params;                  // File parameters (compression, encryption)
+    private String database; // Target database name
+    private String table; // Target table name
+    private List<Column> columns; // Column definitions from schema
+    private List<Column> matchingCols; // Primary key columns for upsert operations
+    private FileParams params; // File parameters (compression, encryption)
     private Map<String, ByteString> secretKeys; // Encryption keys for file decryption
-    private Integer batchSize;                  // Batch size for loading operations
+    private Integer batchSize; // Batch size for loading operations
 
     // Header and column information
-    private List<Column> headerColumns;         // Columns extracted from CSV header
-    private String columnNames;                 // Comma-separated column names for SQL
+    private List<Column> headerColumns; // Columns extracted from CSV header
+    private String columnNames; // Comma-separated column names for SQL
 
     // Connection configuration
-    private String dbsHost;                     // Teradata host address
-    private String username;                    // Database username
-    protected String password;                  // Database password
+    private String dbsHost; // Teradata host address
+    private String username; // Database username
+    protected String password; // Database password
 
     // Temporary table names
-    private String outputTableName;             // Temporary output table for FastLoad
-    private String errorTable1;                 // First error table for FastLoad
-    private String errorTable2;                 // Second error table for FastLoad
+    private String outputTableName; // Temporary output table for FastLoad
+    private String errorTable1; // First error table for FastLoad
+    private String errorTable2; // Second error table for FastLoad
 
     // ========== CONSTRUCTOR ==========
 
     /**
-     * Constructs a FastLoadDataWriter with the specified configuration and parameters.
+     * Constructs a FastLoadDataWriter with the specified configuration and
+     * parameters.
      *
-     * @param conf      Teradata configuration containing connection details
-     * @param conn      Database connection for table operations
-     * @param database  Target database name
-     * @param table     Target table name
-     * @param columns   List of column definitions from schema
-     * @param params    File parameters for compression and encryption
+     * @param conf       Teradata configuration containing connection details
+     * @param conn       Database connection for table operations
+     * @param database   Target database name
+     * @param table      Target table name
+     * @param columns    List of column definitions from schema
+     * @param params     File parameters for compression and encryption
      * @param secretKeys Map of file names to encryption keys for AES decryption
-     * @param batchSize Batch size for loading operations
+     * @param batchSize  Batch size for loading operations
      */
-    public FastLoadDataWriter(TeradataConfiguration conf, Connection conn, String database, String table, List<Column> columns,
-                              FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
+    public FastLoadDataWriter(TeradataConfiguration conf, Connection conn, String database, String table,
+            List<Column> columns,
+            FileParams params, Map<String, ByteString> secretKeys, Integer batchSize) {
 
         this.conn = conn;
         this.database = database;
@@ -121,7 +122,8 @@ public class FastLoadDataWriter {
 
     /**
      * Main method to write data from multiple source files using Teradata FastLoad.
-     * This method coordinates the entire FastLoad process including temporary table creation,
+     * This method coordinates the entire FastLoad process including temporary table
+     * creation,
      * parallel file loading, and cleanup.
      *
      * @param sourceFilesList List of source file paths to be loaded
@@ -181,11 +183,11 @@ public class FastLoadDataWriter {
             Logger.logMessage(Logger.LogLevel.SEVERE,
                     String.format("Failed to create temporary table: %s", e.getMessage()));
             throw new SQLException("Failed to create temporary table: " + e.getMessage() + " , with SQL: " +
-                    createTempTableSQL , e);
+                    createTempTableSQL, e);
         }
 
-        int instances = sourceFilesList.size();
-        String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL", outputTableName, errorTable1, errorTable2);
+        String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL", outputTableName,
+                errorTable1, errorTable2);
         String endLoading = "END LOADING";
 
         String lsnUrl = "jdbc:teradata://" + dbsHost
@@ -194,21 +196,28 @@ public class FastLoadDataWriter {
             Class.forName(jdbcDriver);
             lsnConnection = DriverManager.getConnection(lsnUrl, username, password);
 
+            // Determine number of sessions based on workload
+            // int maxSessions = getFastloadSessionCount(sourceFilesList.size());
+            int maxSessions = 1;
+            int numSessions = Math.min(sourceFilesList.size(), maxSessions);
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    "Using " + numSessions + " FastLoad sessions for " + sourceFilesList.size() + " files.");
+
             String lsnNumber = lsnConnection.nativeSQL(SQL_GET_LSN);
-            Logger.logMessage(Logger.LogLevel.INFO,"FastLoad LSN: " + lsnNumber);
+            Logger.logMessage(Logger.LogLevel.INFO, "FastLoad LSN: " + lsnNumber);
             String fastLoadURL = "jdbc:teradata://" + dbsHost
                     + "/LSS_TYPE=L,PARTITION=FASTLOAD,CONNECT_FUNCTION=2,TSNANO=6,TNANO=0,LOGON_SEQUENCE_NUMBER="
                     + lsnNumber; // FastLoad Session
 
             // Creating FastLoad Connections
-            FastLoad fastLoad[] = new FastLoad[instances];
-            for (int i = 0; i < instances; i++) {
+            FastLoad fastLoad[] = new FastLoad[numSessions];
+            for (int i = 0; i < numSessions; i++) {
                 fastLoad[i] = new FastLoad();
             }
-            Logger.logMessage(Logger.LogLevel.INFO,"fastLoadURL: " + fastLoadURL);
+            Logger.logMessage(Logger.LogLevel.INFO, "fastLoadURL: " + fastLoadURL);
 
-            for (int i = 0; i < instances; i++) {
-                Logger.logMessage(Logger.LogLevel.INFO,"calling createFastLoadConnection() for instance : " + i + 1);
+            for (int i = 0; i < numSessions; i++) {
+                Logger.logMessage(Logger.LogLevel.INFO, "calling createFastLoadConnection() for instance : " + (i + 1));
                 fastLoad[i].createFastLoadConnection(i + 1, fastLoadURL, username, password, batchSize);
             }
 
@@ -219,15 +228,24 @@ public class FastLoadDataWriter {
             stmt.execute(beginLoading);
 
             String usingInsertSQL = getusingInsertSQL(lsnConnection, database, outputTableName, header);
-            Logger.logMessage(Logger.LogLevel.INFO,"usingInsertSQL: " + usingInsertSQL);
+            Logger.logMessage(Logger.LogLevel.INFO, "usingInsertSQL: " + usingInsertSQL);
             // submitting usingInsertSQL
             lsnConnection.setAutoCommit(false);
             stmt.executeUpdate(usingInsertSQL);
 
-            FastLoadThread fastLoadThread[] = new FastLoadThread[instances];
-            for (int i = 0; i < instances; i++) {
-                fastLoadThread[i] = new FastLoadThread(fastLoad[i], sourceFilesList.get(i), columns, params, secretKeys);
-                Logger.logMessage(Logger.LogLevel.INFO,"Starting Thread: " + i);
+            // Distribute files to sessions
+            List<List<String>> fileBatches = new ArrayList<>();
+            for (int i = 0; i < numSessions; i++) {
+                fileBatches.add(new ArrayList<>());
+            }
+            for (int i = 0; i < sourceFilesList.size(); i++) {
+                fileBatches.get(i % numSessions).add(sourceFilesList.get(i));
+            }
+
+            FastLoadThread fastLoadThread[] = new FastLoadThread[numSessions];
+            for (int i = 0; i < numSessions; i++) {
+                fastLoadThread[i] = new FastLoadThread(fastLoad[i], fileBatches.get(i), columns, params, secretKeys);
+                Logger.logMessage(Logger.LogLevel.INFO, "Starting Thread: " + i);
                 fastLoadThread[i].start();
             }
             int count = 0;
@@ -236,20 +254,15 @@ public class FastLoadDataWriter {
                     Thread.sleep(10000);
                 } catch (InterruptedException e) {
                 }
-                for (int i = 0; i < instances; i++) {
+                for (int i = 0; i < numSessions; i++) {
                     if (fastLoad[i].getLoadCompleted()) {
                         count++;
                     }
                 }
-                if (count == instances) {
+                if (count == numSessions) {
                     break;
                 }
                 count = 0;
-            }
-
-            // Load left over rows
-            for (int i = 0; i < instances; i++) {
-                fastLoad[i].loadLeftOverRows();
             }
 
             stmt.executeUpdate("CHECKPOINT LOADING END");
@@ -261,16 +274,17 @@ public class FastLoadDataWriter {
 
             lsnConnection.setAutoCommit(true);
             stmt.close();
-
-            for (int i = 0; i < instances; i++) {
+            for (int i = 0; i < numSessions; i++) {
                 fastLoad[i].closeFastLoadConnection();
             }
 
             lsnConnection.close();
         } catch (SQLException ex) {
             try {
-                stmt.executeUpdate(endLoading);
-                lsnConnection.commit();
+                if (stmt != null && !stmt.isClosed()) {
+                    stmt.executeUpdate(endLoading);
+                    lsnConnection.commit();
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -282,9 +296,64 @@ public class FastLoadDataWriter {
         }
     }
 
+    private int getFastloadSessionCount(int requestedSessions) throws SQLException {
+        int numSugSessn = requestedSessions;
+        String CHECK_WORKLOAD = "CHECK WORKLOAD FOR ";
+        String CHECK_WORKLOAD_END = "CHECK WORKLOAD END";
+        String SQL_BEGIN_LOADING = "BEGIN LOADING";
+
+        boolean isGoverned = "true".equals(lsnConnection.nativeSQL("{fn teradata_provide(governed)}"));
+        String check_workload_end = (!isGoverned ? "{fn teradata_failfast}" : "") + CHECK_WORKLOAD_END;
+
+        String checkWorkLoad = CHECK_WORKLOAD + SQL_BEGIN_LOADING + " " + outputTableName
+                + " ERRORFILES " + errorTable1 + ", " + errorTable2 + " WITH INTERVAL";
+
+        Logger.logMessage(Logger.debugLogLevel,
+                "FastLoadDataWriter.getFastloadSessionCount(): create Statement object from lsnConnection");
+        Statement controlStmt = lsnConnection.createStatement();
+        Logger.logMessage(Logger.debugLogLevel,
+                "FastLoadDataWriter.getFastloadSessionCount(): executing checkWorkLoad");
+        controlStmt.executeUpdate(checkWorkLoad);
+        Logger.logMessage(Logger.debugLogLevel,
+                "FastLoadDataWriter.getFastloadSessionCount(): executing check_workload_end");
+        ResultSet rs = controlStmt.executeQuery(check_workload_end);
+
+        ResultSetMetaData rsmd = rs.getMetaData();
+        if (rs.next() && rsmd.getColumnCount() >= 2 && rs.getString(1) != null) {
+            if (rs.getString(1).trim().equalsIgnoreCase("Y")) {
+                int count = rs.getInt(2);
+                if (count > 0) {
+                    numSugSessn = Math.min(requestedSessions, count);
+
+                    if (numSugSessn < requestedSessions) {
+                        Logger.logMessage(Logger.LogLevel.INFO, "User provided number of sessions [" +
+                                requestedSessions + "] is overridden by [" + numSugSessn +
+                                "] returned from DBS");
+                    } else {
+                        Logger.logMessage(Logger.LogLevel.INFO,
+                                "User provided number of sessions is NOT overridden by [" + count + "] DBS.");
+                    }
+                    return numSugSessn;
+                } else {
+                    Logger.logMessage(Logger.LogLevel.INFO, "invalid number " + count + " returned from DBS");
+                }
+            } else {
+                Logger.logMessage(Logger.LogLevel.INFO, "returned TASM-flag is N");
+            }
+        } else {
+            Logger.logMessage(Logger.LogLevel.INFO, "unrecognized column returned");
+        }
+
+        rs.close();
+        controlStmt.close();
+        return numSugSessn;
+    }
+
     /**
-     * Performs delete-insert operation (upsert) from temporary table to target table.
-     * Deletes existing records based on primary key matches and inserts all records from temporary table.
+     * Performs delete-insert operation (upsert) from temporary table to target
+     * table.
+     * Deletes existing records based on primary key matches and inserts all records
+     * from temporary table.
      *
      * @throws SQLException If any SQL operation fails during delete or insert
      */
@@ -306,8 +375,7 @@ public class FastLoadDataWriter {
                         "DELETE FROM %s AS t WHERE EXISTS (SELECT 1 FROM %s AS tmp WHERE %s)",
                         TeradataJDBCUtil.escapeTable(database, table),
                         TeradataJDBCUtil.escapeTable(database, outputTableName),
-                        condition
-                );
+                        condition);
                 Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL delete statement: " + deleteQuery);
                 try {
                     conn.createStatement().execute(deleteQuery);
@@ -352,32 +420,31 @@ public class FastLoadDataWriter {
         dropErrorTables();
     }
 
-    /**
-     * Drops the temporary output table if it exists.
-     * Handles SQLException gracefully for cases where table doesn't exist.
-     */
     public void dropTempTable() {
         try {
             if (conn == null || conn.isClosed()) {
-                Logger.logMessage(Logger.debugLogLevel,"Connection is closed. Cannot drop temporary table.");
+                Logger.logMessage(Logger.debugLogLevel, "Connection is closed. Cannot drop temporary table.");
                 return;
             }
-            if(database == null || outputTableName == null) {
-                Logger.logMessage(Logger.debugLogLevel,"Database or temporary table name is null. Cannot drop temporary table.");
+            if (database == null || outputTableName == null) {
+                Logger.logMessage(Logger.debugLogLevel,
+                        "Database or temporary table name is null. Cannot drop temporary table.");
                 return;
             }
-            String deleteQuery = String.format("DELETE FROM %s", TeradataJDBCUtil.escapeTable(database, outputTableName));
+            String deleteQuery = String.format("DELETE FROM %s",
+                    TeradataJDBCUtil.escapeTable(database, outputTableName));
             String dropQuery = String.format("DROP TABLE %s", TeradataJDBCUtil.escapeTable(database, outputTableName));
-            Logger.logMessage(Logger.debugLogLevel,"Prepared SQL delete statement: " + deleteQuery);
-            Logger.logMessage(Logger.debugLogLevel,"Prepared SQL drop statement: " + dropQuery);
+            Logger.logMessage(Logger.debugLogLevel, "Prepared SQL delete statement: " + deleteQuery);
+            Logger.logMessage(Logger.debugLogLevel, "Prepared SQL drop statement: " + dropQuery);
 
             conn.createStatement().execute(deleteQuery);
-            Logger.logMessage(Logger.debugLogLevel,"Temporary table deleted successfully.");
+            Logger.logMessage(Logger.debugLogLevel, "Temporary table deleted successfully.");
             conn.createStatement().execute(dropQuery);
-            Logger.logMessage(Logger.debugLogLevel,"Temporary table dropped successfully.");
+            Logger.logMessage(Logger.debugLogLevel, "Temporary table dropped successfully.");
         } catch (SQLException e) {
             if (e.getErrorCode() != 3807) {
-                Logger.logMessage(Logger.LogLevel.SEVERE,"Failed to delete or drop temporary table: " + e.getMessage());
+                Logger.logMessage(Logger.LogLevel.SEVERE,
+                        "Failed to delete or drop temporary table: " + e.getMessage());
             }
         }
     }
@@ -394,11 +461,12 @@ public class FastLoadDataWriter {
             }
 
             if (errorTable1 == null && errorTable2 == null) {
-                Logger.logMessage(Logger.debugLogLevel, "Database or error table names are null. Cannot drop error tables.");
+                Logger.logMessage(Logger.debugLogLevel,
+                        "Database or error table names are null. Cannot drop error tables.");
                 return;
             }
 
-            String[] errorTables = {errorTable1, errorTable2};
+            String[] errorTables = { errorTable1, errorTable2 };
 
             for (String errorTable : errorTables) {
                 if (errorTable == null || errorTable.isEmpty()) {
@@ -411,8 +479,7 @@ public class FastLoadDataWriter {
                     // Check if error table exists
                     String checkExistQuery = String.format(
                             "SELECT COUNT(*) FROM DBC.TablesV WHERE DatabaseName = '%s' AND TableName = '%s';",
-                            database, errorTable
-                    );
+                            database, errorTable);
                     Logger.logMessage(Logger.debugLogLevel, "Checking existence of error table: " + errorTable);
 
                     ResultSet rs = stmt.executeQuery(checkExistQuery);
@@ -420,12 +487,12 @@ public class FastLoadDataWriter {
                     int exists = rs.getInt(1);
 
                     if (exists == 0) {
-                        Logger.logMessage(Logger.debugLogLevel, "Error table " + errorTable + " does not exist. Skipping.");
+                        Logger.logMessage(Logger.debugLogLevel, "Error table " + errorTable + " does not exist.");
                         continue;
                     }
 
-                    // Count rows in error table
-                    String countQuery = "SELECT COUNT(*) FROM " + escapedTable + ";";
+                    // Check if error table has rows
+                    String countQuery = String.format("SELECT COUNT(*) FROM %s;", escapedTable);
                     Logger.logMessage(Logger.debugLogLevel, "Checking row count for: " + errorTable);
 
                     rs = stmt.executeQuery(countQuery);
@@ -437,48 +504,37 @@ public class FastLoadDataWriter {
                         String deleteQuery = String.format("DELETE FROM %s;", escapedTable);
                         String dropQuery = String.format("DROP TABLE %s;", escapedTable);
 
-                        Logger.logMessage(Logger.debugLogLevel, "Deleting and dropping empty error table: " + errorTable);
+                        Logger.logMessage(Logger.debugLogLevel,
+                                "Error table " + errorTable + " is empty. Dropping it.");
                         stmt.execute(deleteQuery);
                         stmt.execute(dropQuery);
                         Logger.logMessage(Logger.debugLogLevel, "Error table " + errorTable + " dropped successfully.");
                     } else {
-                        // Throw exception if table has rows
+                        // Error table has rows - this indicates data loading issues
                         String message = String.format(
-                                "Error table %s contains %d error rows. Aborting cleanup for analysis.",
-                                errorTable, rowCount
-                        );
+                                "Error table %s contains %d rows. Please check the table for loading errors.",
+                                errorTable, rowCount);
                         Logger.logMessage(Logger.LogLevel.SEVERE, message);
                         throw new SQLException(message);
                     }
-
                 } catch (SQLException e) {
-                    if (e.getErrorCode() != 3807) { // 3807 = table not found
-                        throw new SQLException("Failed to drop error table " + errorTable + ": " + e.getMessage(), e);
+                    if (e.getErrorCode() != 3807) { // Ignore "Table does not exist" error if it happens during drop
+                        Logger.logMessage(Logger.LogLevel.WARNING,
+                                "Failed to drop error table " + errorTable + ": " + e.getMessage());
                     } else {
-                        Logger.logMessage(Logger.debugLogLevel, "Error table " + errorTable + " not found (Error 3807).");
+                        Logger.logMessage(Logger.debugLogLevel, "Error table " + errorTable + " already dropped.");
                     }
                 }
             }
-
         } catch (SQLException e) {
-            throw new RuntimeException("Error table cleanup failed: " + e.getMessage(), e);
+            Logger.logMessage(Logger.LogLevel.WARNING, "Error checking/dropping error tables: " + e.getMessage());
         }
     }
 
-    // ========== STATIC UTILITY METHODS ==========
-
-    /**
-     * Reads the header row from a CSV file with support for encryption and compression.
-     *
-     * @param file      Path to the CSV file
-     * @param params    File parameters specifying compression and encryption
-     * @param secretKeys Map of file names to encryption keys
-     * @return List of column names from the header, or null if file is empty
-     * @throws Exception If file reading, decryption, or decompression fails
-     */
-    public static List<String> getHeader(String file, FileParams params, Map<String, ByteString> secretKeys) throws Exception {
+    public static List<String> getHeader(String file, FileParams params, Map<String, ByteString> secretKeys)
+            throws Exception {
         FileInputStream is = new FileInputStream(file);
-        InputStream decoded = is ;
+        InputStream decoded = is;
         if (params.getEncryption() == Encryption.AES) {
             decoded = decodeAES(is, secretKeys.get(file).toByteArray(), file);
         }
@@ -493,343 +549,18 @@ public class FastLoadDataWriter {
         try (CSVReader csvReader = new CSVReaderBuilder(new BufferedReader(new InputStreamReader(uncompressed)))
                 .withCSVParser(new CSVParserBuilder().withEscapeChar('\0').build())
                 .build()) {
-            String[] headerString = csvReader.readNext();
-            if (headerString == null) {
-                // Finish if file is empty
+            String[] header = csvReader.readNext();
+            if (header == null) {
                 return null;
             }
-            List<String> header = new ArrayList<>(Arrays.asList(headerString));
-            return header;
+            List<String> headerList = new ArrayList<>();
+            for (String s : header) {
+                headerList.add(s);
+            }
+            return headerList;
         }
     }
 
-    /**
-     * Generates the USING INSERT SQL statement for FastLoad operations.
-     * This method queries the database to get column metadata and constructs the appropriate USING clause.
-     *
-     * @param con            Database connection
-     * @param database       Database name
-     * @param outputTableName Temporary table name
-     * @param header         List of column names from header
-     * @return USING INSERT SQL statement, or null if no valid columns found
-     */
-    private static String getusingInsertSQL(Connection con, String database, String outputTableName, List<String> header) {
-        try {
-            Statement stmt = con.createStatement();
-            Logger.logMessage(Logger.LogLevel.INFO,"Query: " + "select count(*) from dbc.ColumnsV where tablename='" + database + "." + outputTableName + "';");
-            ResultSet res = stmt
-                    .executeQuery("select count(*) from dbc.columns where tablename='" + database + "." + outputTableName + "';");
-            res.next();
-            Logger.logMessage(Logger.LogLevel.INFO,"Total columns in table " + outputTableName + ": " + res.getInt(1));
-
-            // First, get all available columns from the database
-            res = null;
-            Logger.logMessage(Logger.LogLevel.INFO,"Query: " + "select columnName from dbc.columns where databasename = '"+ database + "' and tablename='" + outputTableName + "';");
-            res = stmt.executeQuery("select columnName from dbc.ColumnsV where databasename = '"+ database + "' and tablename='" + outputTableName + "';");
-
-            List<String> availableColumns = new ArrayList<>();
-            while (res.next()) {
-                Logger.logMessage(Logger.LogLevel.INFO, "Found column in table: " + res.getString("columnName"));
-                availableColumns.add(res.getString("columnName").trim());
-            }
-
-            if (availableColumns.isEmpty()) {
-                Logger.logMessage(Logger.debugLogLevel, "No columns found in table: " + outputTableName);
-                Thread.sleep(10000); // wait for 10 seconds before retrying
-                res = stmt.executeQuery("select columnName from dbc.columns where tablename='" + outputTableName + "';");
-                while (res.next()) {
-                    Logger.logMessage(Logger.LogLevel.INFO, "Found column in table after wait: " + res.getString("columnName"));
-                    availableColumns.add(res.getString("columnName").trim());
-                }
-            }
-
-            Logger.logMessage(Logger.LogLevel.INFO,"Available columns in table " + outputTableName + ": " + availableColumns);
-
-            // Filter and order columns based on header, while ensuring they exist in the table
-            List<String> orderedColumns = new ArrayList<>();
-            for (String headerCol : header) {
-                Logger.logMessage(Logger.LogLevel.INFO,"Processing header column: " + headerCol);
-                String trimmedHeader = headerCol.trim();
-                Logger.logMessage(Logger.LogLevel.INFO,"Trimmed header column: " + trimmedHeader);
-                // Check if this column exists in the database
-                if (availableColumns.contains(trimmedHeader)) {
-                    orderedColumns.add(trimmedHeader);
-                } else {
-                    Logger.logMessage(Logger.LogLevel.WARNING, "Column '" + trimmedHeader + "' from header not found in table '" + outputTableName + "'");
-                }
-            }
-
-            // Check if we found any valid columns
-            if (orderedColumns.isEmpty()) {
-                Logger.logMessage(Logger.LogLevel.SEVERE, "No valid columns found matching header for table: " + outputTableName);
-                return null;
-            }
-
-            // Convert to quoted column names array
-            String[] colNames = new String[orderedColumns.size()];
-            for (int i = 0; i < orderedColumns.size(); i++) {
-                colNames[i] = "\"" + orderedColumns.get(i) + "\"";
-            }
-
-            TeradataColumnDesc[] fieldDescs = getColumnDesc(outputTableName, colNames, con);
-            String[] fieldTypes4Using = new String[fieldDescs.length];
-            String[] fieldNames = new String[fieldDescs.length];
-
-            int index;
-
-            /*
-             * Determine the lowest timestamp precision (scale) to set for all
-             * time/timestamp columns in USING statement
-             */
-            int lowestScaleForTime = TeradataColumnDesc.TIME_SCALE_DEFAULT;
-            int lowestScaleForTimeStamp = TeradataColumnDesc.TIME_SCALE_DEFAULT;
-            for (index = 0; index < fieldDescs.length; index++) {
-                TeradataColumnDesc fieldDesc = fieldDescs[index];
-                if (fieldDesc.getType() == Types.TIME) {
-                    if (fieldDesc.getScale() < lowestScaleForTime) {
-                        lowestScaleForTime = fieldDesc.getScale();
-                    }
-                } else if (fieldDesc.getType() == Types.TIMESTAMP) {
-                    if (fieldDesc.getScale() < lowestScaleForTimeStamp) {
-                        lowestScaleForTimeStamp = fieldDesc.getScale();
-                    }
-                }
-            }
-
-            /*
-             * Loop through all fields and get type string; if this is a TIME or TIMESTAMP
-             * field, use the lowest scale calculated above
-             */
-            for (index = 0; index < fieldDescs.length; index++) {
-                TeradataColumnDesc fieldDesc = fieldDescs[index];
-                fieldNames[index] = fieldDesc.getName();
-                fieldTypes4Using[index] = fieldDesc.getTypeString4Using("UTF-8", lowestScaleForTime,
-                        lowestScaleForTimeStamp);
-            }
-
-            Logger.logMessage(Logger.LogLevel.INFO,"Field Names: " + Arrays.toString(fieldNames));
-            Logger.logMessage(Logger.LogLevel.INFO,"Field Types: " + Arrays.toString(fieldTypes4Using));
-            return getUsingSQL(outputTableName, fieldNames, fieldTypes4Using, "UTF-8");
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        return null;
-    }
-
-    /**
-     * Constructs a USING SQL statement for FastLoad operations.
-     *
-     * @param tableName    Target table name
-     * @param columns      Array of column names
-     * @param types4Using  Array of column type definitions for USING clause
-     * @param charset      Character set for the data
-     * @return Complete USING INSERT SQL statement
-     */
-    public static String getUsingSQL(String tableName, String[] columns, String[] types4Using, String charset) {
-
-        StringBuilder targetColExpBuilder = new StringBuilder();
-        StringBuilder usingColExpBuilder = new StringBuilder();
-        StringBuilder usingValExpBuilder = new StringBuilder();
-        for (int i = 0; i < columns.length; i++) {
-            if (i > 0) {
-                targetColExpBuilder.append(", ");
-                usingColExpBuilder.append(", ");
-                usingValExpBuilder.append(", ");
-            }
-            String quotedUsingCol = getQuotedName(columns[i]);
-            String quotedCol = getQuotedName(columns[i]);
-            targetColExpBuilder.append(quotedCol);
-            //TDCH-2003 - Start
-            if(types4Using[i].contains("LONG VARCHAR")) {
-                types4Using[i] = "LONG VARCHAR";
-            }
-            //TDCH-2003 - End
-            usingColExpBuilder.append(quotedUsingCol).append(" (").append(types4Using[i]).append(')');
-            usingValExpBuilder.append(':').append(quotedUsingCol);
-        }
-
-        return String.format(
-                SQL_USING_INSERT_INTO_TABLE,
-                usingColExpBuilder.toString(),
-                tableName,
-                targetColExpBuilder.toString(),
-                usingValExpBuilder.toString());
-    }
-
-    /**
-     * Generates a SELECT SQL statement for the specified table and columns.
-     *
-     * @param tableName Table name to select from
-     * @param columns   Array of column names to select, or null for all columns
-     * @return Complete SELECT SQL statement
-     */
-    public static String getSelectSQL(String tableName, String[] columns) {
-        StringBuilder colExpBuilder = new StringBuilder();
-
-        if (columns != null && columns.length != 0) {
-            for (int i = 0; i < columns.length; i++) {
-                if (i > 0) {
-                    colExpBuilder.append(", ");
-                }
-                colExpBuilder.append(columns[i]);
-            }
-        } else {
-            colExpBuilder.append('*');
-        }
-        return String.format(SQL_SELECT_FROM_SOURCE_WHERE, colExpBuilder.toString(), tableName, "");
-    }
-
-    /**
-     * Extracts column descriptions from ResultSet metadata.
-     *
-     * @param metadata ResultSet metadata containing column information
-     * @return Array of TeradataColumnDesc objects describing each column
-     * @throws SQLException If metadata access fails
-     */
-    protected static TeradataColumnDesc[] getColumnDescs(ResultSetMetaData metadata) throws SQLException {
-        int columnCount = metadata.getColumnCount();
-
-        TeradataColumnDesc[] columns = new TeradataColumnDesc[columnCount];
-
-        for (int i = 1; i <= columnCount; i++) {
-
-            TeradataColumnDesc column = new TeradataColumnDesc();
-
-            column.setName(metadata.getColumnName(i));
-            column.setType(metadata.getColumnType(i));
-            column.setTypeName(metadata.getColumnTypeName(i));
-            column.setClassName(metadata.getColumnClassName(i));
-            column.setNullable(metadata.isNullable(i) > 0);
-
-            /* Only valid for types that have length */
-            column.setLength(metadata.getColumnDisplaySize(i));
-
-            /* Only valid for String (non-CLOB types) */
-            column.setCaseSensitive(metadata.isCaseSensitive(i));
-
-            /* Only valid for numeric/decimal types */
-            column.setPrecision(metadata.getPrecision(i));
-            column.setScale(metadata.getScale(i));
-
-            columns[i - 1] = column;
-        }
-        return columns;
-    }
-
-    /**
-     * Gets column descriptions for a specific SQL query.
-     *
-     * @param sql        SQL query to analyze
-     * @param connection Database connection
-     * @return Array of TeradataColumnDesc objects, or null if connection is null
-     * @throws SQLException If SQL preparation or metadata extraction fails
-     */
-    public static TeradataColumnDesc[] getColumnDescsForSQL(String sql, Connection connection) throws SQLException {
-        if (connection != null) {
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            ResultSetMetaData metadata = stmt.getMetaData();
-            TeradataColumnDesc[] desc = getColumnDescs(metadata);
-            stmt.close();
-            return desc;
-        }
-
-        return null;
-    }
-
-    /**
-     * Gets column descriptions for a specific table and field names.
-     *
-     * @param tableName   Table name
-     * @param fieldNames  Array of field names to get descriptions for
-     * @param connection  Database connection
-     * @return Array of TeradataColumnDesc objects for the specified fields
-     * @throws SQLException If SQL execution or metadata extraction fails
-     */
-    public static TeradataColumnDesc[] getColumnDesc(String tableName, String[] fieldNames,
-                                                     Connection connection) throws SQLException {
-        return getColumnDescsForSQL(getSelectSQL(tableName, fieldNames),
-                connection);
-    }
-
-    // ========== QUOTING AND ESCAPING METHODS ==========
-
-    /**
-     * Quotes a field name for use in SQL statements with proper escaping.
-     *
-     * @param fieldName Field name to quote
-     * @return Properly quoted field name for SQL
-     */
-    public static String quoteFieldNameForSql(String fieldName) {
-        return quoteFieldName(fieldName, REPLACE_DOUBLE_QUOTE_SQL);
-    }
-
-    /**
-     * Quotes a field name with specified quote replacement string.
-     *
-     * @param fieldName          Field name to quote
-     * @param replaceQuoteString String to replace quotes with
-     * @return Properly quoted and escaped field name
-     */
-    public static String quoteFieldName(String fieldName, String replaceQuoteString) {
-        if (fieldName == null || fieldName.isEmpty()) {
-            return String.format("%c%c", DOUBLE_QUOTE, DOUBLE_QUOTE);
-        }
-
-        ConnectorSchemaParser parser = new ConnectorSchemaParser();
-        parser.setDelimChar(DOT_CHAR);
-        parser.setEscapeChar(ESCAPE_CHAR);
-
-        List<String> tokens = parser.tokenize(fieldName);
-        StringBuilder builder = new StringBuilder();
-
-        for (String token : tokens) {
-            if (token.length() > 1) {
-                char begin = token.charAt(0);
-                char end = token.charAt(token.length() - 1);
-                if ((begin == SINGLE_QUOTE || begin == DOUBLE_QUOTE) && begin == end) {
-                    /*
-                     * already quoted, assume what's inside is correct but
-                     * requote it
-                     */
-                    token = token.substring(1, token.length() - 1);
-                }
-            }
-            /*
-             * For Teradata SQL, double the double quote
-             */
-            builder.append(DOUBLE_QUOTE).append(token.replace(String.valueOf(DOUBLE_QUOTE), replaceQuoteString))
-                    .append(DOUBLE_QUOTE).append(DOT_CHAR);
-        }
-
-        if (builder.length() > 0) {
-            builder.setLength(builder.length() - 1);
-        }
-        return builder.toString();
-    }
-
-    /**
-     * Returns a quoted name for use in SQL statements.
-     *
-     * @param name Name to quote
-     * @return Quoted name suitable for SQL
-     */
-    public static String getQuotedName(String name) {
-        return quoteFieldNameForSql(name);
-    }
-
-    // ========== ENCRYPTION/DECRYPTION METHODS ==========
-
-    /**
-     * Decodes an AES-encrypted input stream using the provided secret key.
-     *
-     * @param is             Input stream containing encrypted data
-     * @param secretKeyBytes AES secret key bytes
-     * @param file           File name for error reporting
-     * @return Decrypted input stream
-     * @throws Exception If decryption setup or execution fails
-     */
     private static InputStream decodeAES(InputStream is, byte[] secretKeyBytes, String file) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         IvParameterSpec iv = readIV(is, file);
@@ -838,14 +569,6 @@ public class FastLoadDataWriter {
         return new CipherInputStream(is, cipher);
     }
 
-    /**
-     * Reads the initialization vector (IV) from the input stream.
-     *
-     * @param is   Input stream containing the IV
-     * @param file File name for error reporting
-     * @return IV parameter specification for AES decryption
-     * @throws Exception If IV reading fails or insufficient bytes are available
-     */
     private static IvParameterSpec readIV(InputStream is, String file) throws Exception {
         byte[] ivBytes = new byte[16];
         SecureRandom secureRandom = new SecureRandom();
@@ -854,10 +577,27 @@ public class FastLoadDataWriter {
         while (bytesRead < ivBytes.length) {
             int read = is.read(ivBytes, bytesRead, ivBytes.length - bytesRead);
             if (read == -1) {
-                throw new Exception(String.format("Failed to read initialization vector. File '%s' has only %d bytes", file, bytesRead));
+                throw new Exception(String.format("Failed to read initialization vector. File '%s' has only %d bytes",
+                        file, bytesRead));
             }
             bytesRead += read;
         }
         return new IvParameterSpec(ivBytes);
+    }
+
+    private String getusingInsertSQL(Connection lsnConnection, String database, String outputTableName,
+            List<String> header) throws SQLException {
+        String usingInsertSQL = "INSERT INTO " + TeradataJDBCUtil.escapeTable(database, outputTableName) + " (";
+        String valuesSQL = "VALUES (";
+        for (int i = 0; i < header.size(); i++) {
+            usingInsertSQL += TeradataJDBCUtil.escapeIdentifier(header.get(i));
+            valuesSQL += ":" + TeradataJDBCUtil.escapeIdentifier(header.get(i));
+            if (i < header.size() - 1) {
+                usingInsertSQL += ",";
+                valuesSQL += ",";
+            }
+        }
+        usingInsertSQL += ") " + valuesSQL + ")";
+        return usingInsertSQL;
     }
 }

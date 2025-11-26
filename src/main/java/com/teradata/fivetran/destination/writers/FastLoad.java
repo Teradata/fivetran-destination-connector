@@ -24,7 +24,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
-
 public class FastLoad {
     Connection fastLoadConnection;
     PreparedStatement preparedStatement;
@@ -47,8 +46,9 @@ public class FastLoad {
     int[] nullJdbcTypes = null;
     int[] nullJdbcScales = null;
 
-    public boolean createFastLoadConnection(int instanceNumber, String url, String username, String password, int batchSize) {
-        Logger.logMessage(Logger.LogLevel.INFO,"in createFastLoadConnection()");
+    public boolean createFastLoadConnection(int instanceNumber, String url, String username, String password,
+            int batchSize) {
+        Logger.logMessage(Logger.LogLevel.INFO, "in createFastLoadConnection()");
         this.url = url;
         this.username = username;
         this.password = password;
@@ -58,7 +58,7 @@ public class FastLoad {
         try {
             Class.forName("com.teradata.jdbc.TeraDriver");
             fastLoadConnection = DriverManager.getConnection(url, username, password);
-            Logger.logMessage(Logger.LogLevel.INFO,"fastLoadConnection done, session no: "
+            Logger.logMessage(Logger.LogLevel.INFO, "fastLoadConnection done, session no: "
                     + fastLoadConnection.nativeSQL("{fn teradata_session_number}"));
             preparedStatement = fastLoadConnection.prepareStatement(null);
         } catch (SQLException e) {
@@ -68,12 +68,12 @@ public class FastLoad {
             e.printStackTrace();
             return false;
         }
-        Logger.logMessage(Logger.LogLevel.INFO,"Created FastLoad connection with session: " + instanceNumber);
+        Logger.logMessage(Logger.LogLevel.INFO, "Created FastLoad connection with session: " + instanceNumber);
         return true;
     }
 
     public boolean closeFastLoadConnection() {
-        Logger.logMessage(Logger.LogLevel.INFO,"in closeFastLoadConnection()");
+        Logger.logMessage(Logger.LogLevel.INFO, "in closeFastLoadConnection()");
         try {
             preparedStatement.close();
             fastLoadConnection.close();
@@ -131,143 +131,18 @@ public class FastLoad {
                 .map(Column::getName)
                 .map(TeradataJDBCUtil::escapeIdentifier)
                 .collect(Collectors.joining(", "));
-
-        String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
     }
 
-    public void writeRow(List<String> row) {
-        Logger.logMessage(Logger.debugLogLevel, "#########################LoadDataWriter.writeRow#########################");
-        try {
-            for (int i = 0; i < row.size(); i++) {
-                DataType type = headerColumns.get(i).getType();
-                String value = row.get(i);
-
-                if (value == null || value.equals("null") || value.equals(params.getNullString())) {
-                    preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
-                    Logger.logMessage(Logger.debugLogLevel,
-                            String.format("Set parameter at index %d to NULL (DataType: %s)", i + 1, type));
-                    continue;
-                }
-
-                switch (type) {
-                    case BOOLEAN:
-                        if (value.equalsIgnoreCase("true")) {
-                            preparedStatement.setByte(i + 1, (byte) 1);
-                            Logger.logMessage(Logger.debugLogLevel,
-                                    String.format("Set BOOLEAN parameter at index %d: %s (as byte 1)", i + 1, value));
-                        } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setByte(i + 1, (byte) 0);
-                            Logger.logMessage(Logger.debugLogLevel,
-                                    String.format("Set BOOLEAN parameter at index %d: %s (as byte 0)", i + 1, value));
-                        }
-                        break;
-
-                    case SHORT:
-                        preparedStatement.setShort(i + 1, Short.parseShort(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: SHORT) at index %d: %s", i + 1, value));
-                        break;
-                    case INT:
-                        preparedStatement.setInt(i + 1, Integer.parseInt(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: INT) at index %d: %s", i + 1, value));
-                        break;
-
-                    case LONG:
-                        preparedStatement.setLong(i + 1, Long.parseLong(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: LONG) at index %d: %s", i + 1, value));
-                        break;
-
-                    case DECIMAL:
-                        preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: DECIMAL) at index %d: %s", i + 1, value));
-                        break;
-
-                    case FLOAT:
-                        preparedStatement.setFloat(i + 1, Float.parseFloat(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: FLOAT) at index %d: %s", i + 1, value));
-                        break;
-
-                    case DOUBLE:
-                        preparedStatement.setDouble(i + 1, Double.parseDouble(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: DOUBLE) at index %d: %s", i + 1, value));
-                        break;
-
-                    case NAIVE_TIME:
-                        preparedStatement.setTime(i + 1, Time.valueOf(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: NAIVE_TIME) at index %d: %s", i + 1, value));
-                        break;
-
-                    case NAIVE_DATE:
-                        preparedStatement.setDate(i + 1, Date.valueOf(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: NAIVE_DATE) at index %d: %s", i + 1, value));
-                        break;
-
-                    case NAIVE_DATETIME:
-                    case UTC_DATETIME:
-                        Timestamp ts = TeradataJDBCUtil.getTimestampFromObject(
-                                TeradataJDBCUtil.formatISODateTime(value));
-                        preparedStatement.setTimestamp(i + 1, ts);
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: NAIVE_DATETIME/UTC_DATETIME) at index %d: %s (Formatted: %s)",
-                                        i + 1, value, ts));
-                        break;
-
-                    case BINARY:
-                        preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: BINARY) at index %d (Base64-decoded)", i + 1));
-                        break;
-
-                    case XML:
-                        SQLXML sqlxml = preparedStatement.getConnection().createSQLXML();
-                        sqlxml.setString(value);
-                        preparedStatement.setSQLXML(i + 1, sqlxml);
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: XML) at index %d", i + 1));
-                        break;
-
-                    case STRING:
-                        preparedStatement.setString(i + 1, value);
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: STRING) at index %d: %s", i + 1, value));
-                        break;
-
-                    case JSON:
-                        preparedStatement.setObject(i + 1, new JSONStruct("JSON", new Object[]{value}));
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: JSON) at index %d: %s", i + 1, value));
-                        break;
-
-                    default:
-                        preparedStatement.setObject(i + 1, value);
-                        Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: %s) at index %d: %s", type, i + 1, value));
-                        break;
-                }
-            }
-
-            preparedStatement.addBatch();
-            batchCount++;
-            Logger.logMessage(Logger.debugLogLevel, "Added row to batch. Current batch count: " + batchCount);
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    public void loadData(String file, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys) throws Exception {
-        this.params = params;
+    public void loadData(String file, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys)
+            throws Exception {
         this.columns = columns;
+        this.params = params;
+
+        List<String> header = FastLoadDataWriter.getHeader(file, params, secretKeys);
+        setHeader(header);
+
         FileInputStream is = new FileInputStream(file);
-        InputStream decoded = is ;
+        InputStream decoded = is;
         if (params.getEncryption() == Encryption.AES) {
             decoded = decodeAES(is, secretKeys.get(file).toByteArray(), file);
         }
@@ -282,59 +157,143 @@ public class FastLoad {
         try (CSVReader csvReader = new CSVReaderBuilder(new BufferedReader(new InputStreamReader(uncompressed)))
                 .withCSVParser(new CSVParserBuilder().withEscapeChar('\0').build())
                 .build()) {
-            String[] headerString = csvReader.readNext();
-            if (headerString == null) {
-                // Finish if file is empty
-                return;
-            }
-            List<String> header = new ArrayList<>(Arrays.asList(headerString));
-            setHeader(header);
-
-            String[] tokens;
-            while ((tokens = csvReader.readNext()) != null) {
-                List<String> row = new ArrayList<>(Arrays.asList(tokens));
-                writeRow(row);
-                Logger.logMessage(Logger.debugLogLevel,"batch size: " + batchSize);
-                Logger.logMessage(Logger.debugLogLevel, "Current batch count after writing row: " + batchCount);
-                if (batchCount >= batchSize) {
-                    try {
-                        preparedStatement.executeBatch();
-                        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
-                        batchCount = 0;
-                    } catch (BatchUpdateException bue) {
-                        String actualError = "";
-                        if (bue.getNextException() != null) {
-                            Exception nextException = bue.getNextException();
-                            actualError = nextException.getMessage();
-                        } else {
-                            actualError = bue.getMessage();
-                        }
-                        Logger.logMessage(Logger.LogLevel.SEVERE,
-                                String.format("WriteBatch failed with exception %s", actualError));
-                    }
-                    catch (SQLException e) {
-                        e.printStackTrace();
-                    }
-                }
+            csvReader.readNext(); // Skip header
+            String[] row;
+            while ((row = csvReader.readNext()) != null) {
+                List<String> rowList = new ArrayList<>(Arrays.asList(row));
+                writeRow(rowList);
             }
         }
-        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] loadData completed, calling setLoadCompleted(true)");
-        setLoadCompleted(true);
     }
 
-    private void setLoadCompleted(boolean loadCompleteStatus) {
-        this.loadCompleteStatus = loadCompleteStatus;
-    }
+    public void writeRow(List<String> row) throws SQLException {
+        Logger.logMessage(Logger.debugLogLevel,
+                "#########################LoadDataWriter.writeRow#########################");
+        for (int i = 0; i < row.size(); i++) {
+            DataType type = headerColumns.get(i).getType();
+            String value = row.get(i);
 
-    public boolean getLoadCompleted() {
-        return loadCompleteStatus;
-    }
+            if (value == null || value.equals("null") || value.equals(params.getNullString())) {
+                preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
+                Logger.logMessage(Logger.debugLogLevel,
+                        String.format("Set parameter at index %d to NULL (DataType: %s)", i + 1, type));
+                continue;
+            }
 
-    public void loadLeftOverRows() {
-        if (batchCount > 0) {
+            switch (type) {
+                case BOOLEAN:
+                    if (value.equalsIgnoreCase("true")) {
+                        preparedStatement.setByte(i + 1, (byte) 1);
+                        Logger.logMessage(Logger.debugLogLevel,
+                                String.format("Set BOOLEAN parameter at index %d: %s (as byte 1)", i + 1, value));
+                    } else if (value.equalsIgnoreCase("false")) {
+                        preparedStatement.setByte(i + 1, (byte) 0);
+                        Logger.logMessage(Logger.debugLogLevel,
+                                String.format("Set BOOLEAN parameter at index %d: %s (as byte 0)", i + 1, value));
+                    }
+                    break;
+
+                case SHORT:
+                    preparedStatement.setShort(i + 1, Short.parseShort(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: SHORT) at index %d: %s", i + 1, value));
+                    break;
+                case INT:
+                    preparedStatement.setInt(i + 1, Integer.parseInt(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: INT) at index %d: %s", i + 1, value));
+                    break;
+
+                case LONG:
+                    preparedStatement.setLong(i + 1, Long.parseLong(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: LONG) at index %d: %s", i + 1, value));
+                    break;
+
+                case DECIMAL:
+                    preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: DECIMAL) at index %d: %s", i + 1, value));
+                    break;
+
+                case FLOAT:
+                    preparedStatement.setFloat(i + 1, Float.parseFloat(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: FLOAT) at index %d: %s", i + 1, value));
+                    break;
+
+                case DOUBLE:
+                    preparedStatement.setDouble(i + 1, Double.parseDouble(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: DOUBLE) at index %d: %s", i + 1, value));
+                    break;
+
+                case NAIVE_TIME:
+                    preparedStatement.setTime(i + 1, Time.valueOf(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: NAIVE_TIME) at index %d: %s", i + 1, value));
+                    break;
+
+                case NAIVE_DATE:
+                    preparedStatement.setDate(i + 1, Date.valueOf(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: NAIVE_DATE) at index %d: %s", i + 1, value));
+                    break;
+
+                case NAIVE_DATETIME:
+                case UTC_DATETIME:
+                    Timestamp ts = TeradataJDBCUtil.getTimestampFromObject(
+                            TeradataJDBCUtil.formatISODateTime(value));
+                    preparedStatement.setTimestamp(i + 1, ts);
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format(
+                                    "Set parameter (DataType: NAIVE_DATETIME/UTC_DATETIME) at index %d: %s (Formatted: %s)",
+                                    i + 1, value, ts));
+                    break;
+
+                case BINARY:
+                    preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: BINARY) at index %d (Base64-decoded)", i + 1));
+                    break;
+
+                case XML:
+                    SQLXML sqlxml = preparedStatement.getConnection().createSQLXML();
+                    sqlxml.setString(value);
+                    preparedStatement.setSQLXML(i + 1, sqlxml);
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: XML) at index %d", i + 1));
+                    break;
+
+                case STRING:
+                    preparedStatement.setString(i + 1, value);
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: STRING) at index %d: %s", i + 1, value));
+                    break;
+
+                case JSON:
+                    preparedStatement.setObject(i + 1, new JSONStruct("JSON", new Object[] { value }));
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: JSON) at index %d: %s", i + 1, value));
+                    break;
+
+                default:
+                    preparedStatement.setObject(i + 1, value);
+                    Logger.logMessage(Logger.debugLogLevel,
+                            String.format("Set parameter (DataType: %s) at index %d: %s", type, i + 1, value));
+                    break;
+            }
+        }
+        preparedStatement.addBatch();
+        batchCount++;
+        Logger.logMessage(Logger.debugLogLevel, "Added row to batch. Current batch count: " + batchCount);
+
+        if (batchCount >= batchSize) {
             try {
                 preparedStatement.executeBatch();
-                Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        "Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
+                batchCount = 0;
             } catch (BatchUpdateException bue) {
                 String actualError = "";
                 if (bue.getNextException() != null) {
@@ -345,9 +304,37 @@ public class FastLoad {
                 }
                 Logger.logMessage(Logger.LogLevel.SEVERE,
                         String.format("WriteBatch failed with exception %s", actualError));
+                throw bue;
             }
-            catch (SQLException e) {
-                // TODO Auto-generated catch block
+        }
+    }
+
+    public void markLoadCompleted() {
+        this.loadCompleteStatus = true;
+    }
+
+    public boolean getLoadCompleted() {
+        return loadCompleteStatus;
+    }
+
+    public void loadLeftOverRows() {
+        if (batchCount > 0) {
+            try {
+                preparedStatement.executeBatch();
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        "Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
+                batchCount = 0;
+            } catch (BatchUpdateException bue) {
+                String actualError = "";
+                if (bue.getNextException() != null) {
+                    Exception nextException = bue.getNextException();
+                    actualError = nextException.getMessage();
+                } else {
+                    actualError = bue.getMessage();
+                }
+                Logger.logMessage(Logger.LogLevel.SEVERE,
+                        String.format("WriteBatch failed with exception %s", actualError));
+            } catch (SQLException e) {
                 e.printStackTrace();
             }
         }
@@ -369,7 +356,8 @@ public class FastLoad {
         while (bytesRead < ivBytes.length) {
             int read = is.read(ivBytes, bytesRead, ivBytes.length - bytesRead);
             if (read == -1) {
-                throw new Exception(String.format("Failed to read initialization vector. File '%s' has only %d bytes", file, bytesRead));
+                throw new Exception(String.format("Failed to read initialization vector. File '%s' has only %d bytes",
+                        file, bytesRead));
             }
             bytesRead += read;
         }
