@@ -17,6 +17,7 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.CipherInputStream;
 import java.io.*;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.sql.*;
 import java.sql.Date;
@@ -36,6 +37,7 @@ public class FastLoad {
     private String columnNames;
     private List<Column> matchingCols;
     private List<Column> columns;
+    Map<String, Integer> decimalScales;
     FileParams params;
 
     String url;
@@ -47,12 +49,13 @@ public class FastLoad {
     int[] nullJdbcTypes = null;
     int[] nullJdbcScales = null;
 
-    public boolean createFastLoadConnection(int instanceNumber, String url, String username, String password, int batchSize) {
+    public boolean createFastLoadConnection(int instanceNumber, String url, String username, String password, int batchSize, Map<String, Integer> decimalScales) {
         Logger.logMessage(Logger.LogLevel.INFO,"in createFastLoadConnection()");
         this.url = url;
         this.username = username;
         this.password = password;
         this.batchSize = batchSize;
+        this.decimalScales = decimalScales;
 
         this.instanceNumber = instanceNumber;
         try {
@@ -135,10 +138,11 @@ public class FastLoad {
         String placeholders = headerColumns.stream().map(c -> "?").collect(Collectors.joining(", "));
     }
 
-    public void writeRow(List<String> row) {
+    public void writeRow(List<String> row) throws Exception {
         Logger.logMessage(Logger.debugLogLevel, "#########################LoadDataWriter.writeRow#########################");
         try {
             for (int i = 0; i < row.size(); i++) {
+                String columnName = headerColumns.get(i).getName();
                 DataType type = headerColumns.get(i).getType();
                 String value = row.get(i);
 
@@ -180,9 +184,11 @@ public class FastLoad {
                         break;
 
                     case DECIMAL:
-                        preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
+                        int scale = decimalScales.get(columnName.toLowerCase());
+                        BigDecimal bd = new BigDecimal(value).setScale(scale, RoundingMode.HALF_UP);
+                        preparedStatement.setBigDecimal(i + 1, bd);
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: DECIMAL) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: DECIMAL) at index %d: %s", i + 1, bd.toString()));
                         break;
 
                     case FLOAT:
@@ -258,14 +264,16 @@ public class FastLoad {
             Logger.logMessage(Logger.debugLogLevel, "Added row to batch. Current batch count: " + batchCount);
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new Exception("Failed to write row to FastLoad: " + e.getMessage(), e);
         }
     }
 
 
     public void loadData(String file, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys) throws Exception {
+        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] in loadData() for file: " + file);
         this.params = params;
         this.columns = columns;
+        batchCount = 0;
         FileInputStream is = new FileInputStream(file);
         InputStream decoded = is ;
         if (params.getEncryption() == Encryption.AES) {
@@ -299,7 +307,7 @@ public class FastLoad {
                 if (batchCount >= batchSize) {
                     try {
                         preparedStatement.executeBatch();
-                        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
+                        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS");
                         batchCount = 0;
                     } catch (BatchUpdateException bue) {
                         String actualError = "";
@@ -313,17 +321,20 @@ public class FastLoad {
                                 String.format("WriteBatch failed with exception %s", actualError));
                     }
                     catch (SQLException e) {
-                        e.printStackTrace();
+                        throw new Exception("Failed to execute batch: " + e.getMessage(), e);
                     }
                 }
             }
         }
-        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] loadData completed, calling setLoadCompleted(true)");
-        setLoadCompleted(true);
+        Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] loadData completed for file: " + file);
     }
 
     private void setLoadCompleted(boolean loadCompleteStatus) {
         this.loadCompleteStatus = loadCompleteStatus;
+    }
+
+    public void markLoadCompleted() {
+        this.loadCompleteStatus = true;
     }
 
     public boolean getLoadCompleted() {
@@ -334,7 +345,8 @@ public class FastLoad {
         if (batchCount > 0) {
             try {
                 preparedStatement.executeBatch();
-                Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS ");
+                Logger.logMessage(Logger.LogLevel.INFO,"Instance[" + instanceNumber + "] inserted " + batchCount + " rows in DBS from loadLeftOverRows()");
+                batchCount = 0;
             } catch (BatchUpdateException bue) {
                 String actualError = "";
                 if (bue.getNextException() != null) {

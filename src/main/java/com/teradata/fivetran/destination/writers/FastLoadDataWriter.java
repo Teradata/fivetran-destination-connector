@@ -82,6 +82,9 @@ public class FastLoadDataWriter {
     private String username;                    // Database username
     protected String password;                  // Database password
 
+    //Requested FastLoad sessions
+    private int requestedSessions;
+
     // Temporary table names
     private String outputTableName;             // Temporary output table for FastLoad
     private String errorTable1;                 // First error table for FastLoad
@@ -128,7 +131,11 @@ public class FastLoadDataWriter {
      * @throws Exception If any error occurs during the loading process
      */
     public void writeData(List<String> sourceFilesList) throws Exception {
-        Logger.logMessage(Logger.LogLevel.INFO, "Getting header from file: " + sourceFilesList.get(0));
+
+        // Log the number of source files and requested FastLoad sessions
+        Logger.logMessage(Logger.LogLevel.INFO, "Number of source files to load: " + sourceFilesList.size());
+        Logger.logMessage(Logger.LogLevel.INFO, "Number of requested FastLoad sessions: " + sourceFilesList.size());
+        this.requestedSessions = sourceFilesList.size();
 
         // Read header from first file to validate file and setup column mapping
         List<String> header = getHeader(sourceFilesList.get(0), params, secretKeys);
@@ -184,7 +191,6 @@ public class FastLoadDataWriter {
                     createTempTableSQL , e);
         }
 
-        int instances = sourceFilesList.size();
         String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL", outputTableName, errorTable1, errorTable2);
         String endLoading = "END LOADING";
 
@@ -194,22 +200,64 @@ public class FastLoadDataWriter {
             Class.forName(jdbcDriver);
             lsnConnection = DriverManager.getConnection(lsnUrl, username, password);
 
+            Map<String, Integer> decimalScales = new HashMap<>();
+
+            DatabaseMetaData meta = lsnConnection.getMetaData();
+
+            ResultSet rs = meta.getColumns(null,
+                    database.toUpperCase(),  // IMPORTANT
+                    table.toUpperCase(),   // IMPORTANT
+                    null);
+            while (rs.next()) {
+                String colName = rs.getString("COLUMN_NAME");
+                int dataType = rs.getInt("DATA_TYPE");
+                int scale = rs.getInt("DECIMAL_DIGITS");
+
+                if (dataType == Types.DECIMAL || dataType == Types.NUMERIC) {
+                    decimalScales.put(colName.toLowerCase(), scale);
+                }
+                Logger.logMessage(Logger.LogLevel.INFO, "Col=" + colName +
+                        ", Type=" + dataType +
+                        ", Scale=" + scale);
+            }
+            rs.close();
+
             String lsnNumber = lsnConnection.nativeSQL(SQL_GET_LSN);
             Logger.logMessage(Logger.LogLevel.INFO,"FastLoad LSN: " + lsnNumber);
             String fastLoadURL = "jdbc:teradata://" + dbsHost
                     + "/LSS_TYPE=L,PARTITION=FASTLOAD,CONNECT_FUNCTION=2,TSNANO=6,TNANO=0,LOGON_SEQUENCE_NUMBER="
                     + lsnNumber; // FastLoad Session
 
+            // Step 1: Get TASM FastLoad session limit from configuration
+            int tasmLimit = getTASMFastLoadLimit();
+
+            // Step 2: Check system-level session limits
+            int systemLimit = getSystemSessionLimit();
+
+            // Step 3: Check workload governance (for comparison)
+            int checkWorkloadLimit = getGovernedSessionCount();
+
+            // Step 4: Use the most restrictive limit
+            int numSessions = Math.min(Math.min(systemLimit, tasmLimit), checkWorkloadLimit);
+
+            Logger.logMessage(Logger.LogLevel.INFO,"=== Session Count Summary ===");
+            Logger.logMessage(Logger.LogLevel.INFO,"Requested:              " + requestedSessions);
+            Logger.logMessage(Logger.LogLevel.INFO,"System Limit:           " + systemLimit);
+            Logger.logMessage(Logger.LogLevel.INFO,"TASM Config Limit:      " + tasmLimit);
+            Logger.logMessage(Logger.LogLevel.INFO,"CHECK WORKLOAD Limit:   " + checkWorkloadLimit);
+            Logger.logMessage(Logger.LogLevel.INFO,"Final (Most Restrictive): " + numSessions);
+            Logger.logMessage(Logger.LogLevel.INFO,"=============================");
+
             // Creating FastLoad Connections
-            FastLoad fastLoad[] = new FastLoad[instances];
-            for (int i = 0; i < instances; i++) {
+            FastLoad fastLoad[] = new FastLoad[numSessions];
+            for (int i = 0; i < numSessions; i++) {
                 fastLoad[i] = new FastLoad();
             }
             Logger.logMessage(Logger.LogLevel.INFO,"fastLoadURL: " + fastLoadURL);
 
-            for (int i = 0; i < instances; i++) {
+            for (int i = 0; i < numSessions; i++) {
                 Logger.logMessage(Logger.LogLevel.INFO,"calling createFastLoadConnection() for instance : " + i + 1);
-                fastLoad[i].createFastLoadConnection(i + 1, fastLoadURL, username, password, batchSize);
+                fastLoad[i].createFastLoadConnection(i + 1, fastLoadURL, username, password, batchSize, decimalScales);
             }
 
             // Submitting beginLoading
@@ -224,9 +272,19 @@ public class FastLoadDataWriter {
             lsnConnection.setAutoCommit(false);
             stmt.executeUpdate(usingInsertSQL);
 
-            FastLoadThread fastLoadThread[] = new FastLoadThread[instances];
-            for (int i = 0; i < instances; i++) {
-                fastLoadThread[i] = new FastLoadThread(fastLoad[i], sourceFilesList.get(i), columns, params, secretKeys);
+            // Distribute files to sessions
+            List<List<String>> fileBatches = new ArrayList<>();
+            for (int i = 0; i < numSessions; i++) {
+                fileBatches.add(new ArrayList<>());
+            }
+            for (int i = 0; i < sourceFilesList.size(); i++) {
+                fileBatches.get(i % numSessions).add(sourceFilesList.get(i));
+            }
+
+
+            FastLoadThread fastLoadThread[] = new FastLoadThread[numSessions];
+            for (int i = 0; i < numSessions; i++) {
+                fastLoadThread[i] = new FastLoadThread(fastLoad[i], fileBatches.get(i), columns, params, secretKeys);
                 Logger.logMessage(Logger.LogLevel.INFO,"Starting Thread: " + i);
                 fastLoadThread[i].start();
             }
@@ -236,20 +294,15 @@ public class FastLoadDataWriter {
                     Thread.sleep(10000);
                 } catch (InterruptedException e) {
                 }
-                for (int i = 0; i < instances; i++) {
+                for (int i = 0; i < numSessions; i++) {
                     if (fastLoad[i].getLoadCompleted()) {
                         count++;
                     }
                 }
-                if (count == instances) {
+                if (count == numSessions) {
                     break;
                 }
                 count = 0;
-            }
-
-            // Load left over rows
-            for (int i = 0; i < instances; i++) {
-                fastLoad[i].loadLeftOverRows();
             }
 
             stmt.executeUpdate("CHECKPOINT LOADING END");
@@ -262,7 +315,7 @@ public class FastLoadDataWriter {
             lsnConnection.setAutoCommit(true);
             stmt.close();
 
-            for (int i = 0; i < instances; i++) {
+            for (int i = 0; i < numSessions; i++) {
                 fastLoad[i].closeFastLoadConnection();
             }
 
@@ -280,6 +333,181 @@ public class FastLoadDataWriter {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private int getTASMFastLoadLimit() {
+        int tasmLimit = requestedSessions;
+
+        try {
+            Statement stmt = lsnConnection.createStatement();
+
+             Logger.logMessage(Logger.LogLevel.INFO,"\n=== TASM Ruleset Configuration ===");
+
+            // Query TASM ruleset for FastLoad session limit
+            String query = "SELECT rulename, configName, UtilSessions " +
+                    "FROM TDWM.Configurations TC, TDWM.RuleDefs TD " +
+                    "WHERE TC.configID = TD.configID " +
+                    "AND TD.RuleName LIKE '%fastloadlimit%' " +
+                    "AND utilsessions > 0";
+
+             Logger.logMessage(Logger.LogLevel.INFO,"Query: " + query);
+
+            ResultSet rs = stmt.executeQuery(query);
+
+            boolean found = false;
+            while (rs.next()) {
+                found = true;
+                String ruleName = rs.getString(1);
+                String rulesetName = rs.getString(2);
+                Integer flLimit = (Integer) rs.getObject(3);
+
+                 Logger.logMessage(Logger.LogLevel.INFO,"\nRuleset Name: " + rulesetName);
+                 Logger.logMessage(Logger.LogLevel.INFO,"Rule Name: " + ruleName);
+                 Logger.logMessage(Logger.LogLevel.INFO,"FastLoad Session Limit: " +
+                        (flLimit != null ? flLimit : "Not Set"));
+
+                if (flLimit != null && flLimit > 0 && flLimit < tasmLimit) {
+                    tasmLimit = flLimit;
+                     Logger.logMessage(Logger.LogLevel.INFO,"*** Using TASM configured limit: " + tasmLimit + " ***");
+                }
+            }
+
+            if (!found) {
+                 Logger.logMessage(Logger.LogLevel.INFO,"No TASM rulesets with FastLoad limits found");
+            }
+
+             Logger.logMessage(Logger.LogLevel.INFO,"==================================\n");
+
+            rs.close();
+            stmt.close();
+
+        } catch (SQLException e) {
+             Logger.logMessage(Logger.LogLevel.INFO,"Could not query TASM ruleset info: " + e.getMessage());
+        }
+
+        return tasmLimit;
+    }
+
+    /**
+     * Query system-level FastLoad session limits from DBS Control
+     */
+    private int getSystemSessionLimit() throws SQLException {
+        int systemLimit = requestedSessions;
+
+        try {
+            Statement stmt = lsnConnection.createStatement();
+
+            // Query DBS Control for FastLoad session limits
+            String query = "SELECT InfoData FROM DBC.DBCInfoV WHERE InfoKey = 'MAXIMUM LOAD TASKS'";
+
+             Logger.logMessage(Logger.LogLevel.INFO,"\nQuerying system-level FastLoad limits...");
+             Logger.logMessage(Logger.LogLevel.INFO,"Query: " + query);
+
+            ResultSet rs = stmt.executeQuery(query);
+
+            if (rs.next()) {
+                String maxLoadTasks = rs.getString(1);
+                if (maxLoadTasks != null && !maxLoadTasks.trim().isEmpty()) {
+                    try {
+                        int maxTasks = Integer.parseInt(maxLoadTasks.trim());
+                         Logger.logMessage(Logger.LogLevel.INFO,"System Maximum Load Tasks: " + maxTasks);
+
+                        if (maxTasks > 0) {
+                            systemLimit = Math.min(requestedSessions, maxTasks);
+                             Logger.logMessage(Logger.LogLevel.INFO,"Adjusted session limit: " + systemLimit);
+                        }
+                    } catch (NumberFormatException e) {
+                         Logger.logMessage(Logger.LogLevel.INFO,"Warning: Could not parse max load tasks: " + maxLoadTasks);
+                    }
+                }
+            } else {
+                 Logger.logMessage(Logger.LogLevel.INFO,"No system limit found in DBC.DBCInfoV");
+            }
+
+            rs.close();
+            stmt.close();
+
+        } catch (SQLException e) {
+             Logger.logMessage(Logger.LogLevel.INFO,"Warning: Could not query system limits: " + e.getMessage());
+             Logger.logMessage(Logger.LogLevel.INFO,"Will attempt with requested sessions: " + requestedSessions);
+        }
+
+        return systemLimit;
+    }
+
+    /**
+     * Get TASM-governed session count using CHECK WORKLOAD
+     */
+    private int getGovernedSessionCount() throws SQLException {
+        int governedSessions = requestedSessions;
+
+        String CHECK_WORKLOAD = "CHECK WORKLOAD FOR ";
+        String CHECK_WORKLOAD_END = "CHECK WORKLOAD END";
+        String SQL_BEGIN_LOADING = "BEGIN LOADING";
+
+        try {
+            // Check if connection is governed by TASM
+            String governedValue = lsnConnection.nativeSQL("{fn teradata_provide(governed)}");
+             Logger.logMessage(Logger.LogLevel.INFO,"\nTASM Governed: " + governedValue);
+            boolean isGoverned = "true".equals(governedValue);
+
+            // Build check workload statement
+            String checkWorkload = CHECK_WORKLOAD + SQL_BEGIN_LOADING + " " + outputTableName
+                    + " ERRORFILES " + errorTable1 + ", " + errorTable2;
+
+            String checkWorkloadEnd = (!isGoverned ? "{fn teradata_failfast}" : "") + CHECK_WORKLOAD_END;
+
+             Logger.logMessage(Logger.LogLevel.INFO,"Checking TASM workload rules...");
+             Logger.logMessage(Logger.LogLevel.INFO,"Query: " + checkWorkload);
+
+            Statement stmt = lsnConnection.createStatement();
+            stmt.executeUpdate(checkWorkload);
+
+            ResultSet rs = stmt.executeQuery(checkWorkloadEnd);
+
+            ResultSetMetaData rsmd = rs.getMetaData();
+             Logger.logMessage(Logger.LogLevel.INFO,"Result set columns: " + rsmd.getColumnCount());
+
+            if (rs.next() && rsmd.getColumnCount() >= 2) {
+                String tasmFlag = rs.getString(1);
+                int suggestedCount = rs.getInt(2);
+                String rulesetName = rsmd.getColumnCount() >= 3 ? rs.getString(3) : null;
+
+                 Logger.logMessage(Logger.LogLevel.INFO,"TASM Flag: " + (tasmFlag != null ? tasmFlag.trim() : "NULL"));
+                 Logger.logMessage(Logger.LogLevel.INFO,"TASM Suggested Count: " + suggestedCount);
+                 Logger.logMessage(Logger.LogLevel.INFO,"Ruleset Name: " + (rulesetName != null ? rulesetName : "Not Available"));
+
+                // Use suggested count if it's valid and less than requested
+                // The count is returned regardless of Y/N flag
+                if (suggestedCount > 0 && suggestedCount < requestedSessions) {
+                    governedSessions = suggestedCount;
+
+                    if (tasmFlag != null && tasmFlag.trim().equalsIgnoreCase("Y")) {
+                         Logger.logMessage(Logger.LogLevel.INFO,"*** TASM WORKLOAD CLASSIFICATION ACTIVE ***");
+                         Logger.logMessage(Logger.LogLevel.INFO,"Active workload rule is limiting sessions");
+                    } else {
+                         Logger.logMessage(Logger.LogLevel.INFO,"*** TASM RULESET LIMIT ACTIVE ***");
+                         Logger.logMessage(Logger.LogLevel.INFO,"System-level TASM ruleset is limiting sessions");
+                    }
+                     Logger.logMessage(Logger.LogLevel.INFO,"DBS will use: " + governedSessions + " sessions");
+                } else if (suggestedCount > 0) {
+                     Logger.logMessage(Logger.LogLevel.INFO,"TASM allows up to " + suggestedCount + " sessions");
+                     Logger.logMessage(Logger.LogLevel.INFO,"Using requested: " + requestedSessions + " sessions");
+                } else {
+                     Logger.logMessage(Logger.LogLevel.INFO,"Warning: Invalid session count returned: " + suggestedCount);
+                }
+            } else {
+                 Logger.logMessage(Logger.LogLevel.INFO,"Warning: Unrecognized result set structure");
+            }
+
+            rs.close();
+            stmt.close();
+
+        } catch (SQLException e) {
+             Logger.logMessage(Logger.LogLevel.INFO,"Warning: Could not check TASM governance: " + e.getMessage());
+        }
+
+        return governedSessions;
     }
 
     /**
@@ -529,7 +757,7 @@ public class FastLoadDataWriter {
 
             List<String> availableColumns = new ArrayList<>();
             while (res.next()) {
-                Logger.logMessage(Logger.LogLevel.INFO, "Found column in table: " + res.getString("columnName"));
+                Logger.logMessage(Logger.debugLogLevel, "Found column in table: " + res.getString("columnName"));
                 availableColumns.add(res.getString("columnName").trim());
             }
 
@@ -548,9 +776,9 @@ public class FastLoadDataWriter {
             // Filter and order columns based on header, while ensuring they exist in the table
             List<String> orderedColumns = new ArrayList<>();
             for (String headerCol : header) {
-                Logger.logMessage(Logger.LogLevel.INFO,"Processing header column: " + headerCol);
+                Logger.logMessage(Logger.debugLogLevel,"Processing header column: " + headerCol);
                 String trimmedHeader = headerCol.trim();
-                Logger.logMessage(Logger.LogLevel.INFO,"Trimmed header column: " + trimmedHeader);
+                Logger.logMessage(Logger.debugLogLevel,"Trimmed header column: " + trimmedHeader);
                 // Check if this column exists in the database
                 if (availableColumns.contains(trimmedHeader)) {
                     orderedColumns.add(trimmedHeader);
