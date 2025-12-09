@@ -467,6 +467,42 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
     }
 
     /**
+     * Handles the migrate request.
+     *
+     * @param request          The migrate request.
+     * @param responseObserver The response observer to send the response.
+     */
+    @Override
+    public void migrate(MigrateRequest request, StreamObserver<MigrateResponse> responseObserver) {
+        Logger.logMessage(Logger.LogLevel.INFO,
+                "#########################migrate#############################################################");
+        TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
+        MigrationDetails details = request.getDetails();
+        String schema = details.getSchema();
+        String table = details.getTable();
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            TeradataMigrationUtil.handleMigration(conn, stmt, details, schema, table);
+
+            responseObserver.onNext(MigrateResponse.newBuilder().setSuccess(true).build());
+        } catch (Exception e) {
+            String errorMsg = String.format("Migrate failed for %s.%s with exception %s", schema, table,
+                    e.getMessage());
+            Logger.logMessage(Logger.LogLevel.SEVERE, errorMsg);
+            responseObserver.onNext(MigrateResponse.newBuilder()
+                    .setTask(Task.newBuilder()
+                            .setMessage("migrate :: Table: "
+                                    + TeradataJDBCUtil.escapeTable(schema, table)
+                                    + ", Error: " + getStackTraceOneLine(e))
+                            .build())
+                    .build());
+        }
+        responseObserver.onCompleted();
+    }
+
+    /**
      * Handles the write batch request.
      *
      * @param request The write batch request.
