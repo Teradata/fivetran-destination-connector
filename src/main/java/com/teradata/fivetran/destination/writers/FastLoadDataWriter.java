@@ -228,22 +228,12 @@ public class FastLoadDataWriter {
                     + "/LSS_TYPE=L,PARTITION=FASTLOAD,CONNECT_FUNCTION=2,TSNANO=6,TNANO=0,LOGON_SEQUENCE_NUMBER="
                     + lsnNumber; // FastLoad Session
 
-            // Step 1: Get TASM FastLoad session limit from configuration
-            int tasmLimit = getTASMFastLoadLimit();
-
-            // Step 2: Check system-level session limits
-            int systemLimit = getSystemSessionLimit();
-
-            // Step 3: Check workload governance (for comparison)
             int checkWorkloadLimit = getGovernedSessionCount();
 
-            // Step 4: Use the most restrictive limit
-            int numSessions = Math.min(Math.min(systemLimit, tasmLimit), checkWorkloadLimit);
+            int numSessions = Math.min(requestedSessions, checkWorkloadLimit);
 
             Logger.logMessage(Logger.LogLevel.INFO,"=== Session Count Summary ===");
             Logger.logMessage(Logger.LogLevel.INFO,"Requested:              " + requestedSessions);
-            Logger.logMessage(Logger.LogLevel.INFO,"System Limit:           " + systemLimit);
-            Logger.logMessage(Logger.LogLevel.INFO,"TASM Config Limit:      " + tasmLimit);
             Logger.logMessage(Logger.LogLevel.INFO,"CHECK WORKLOAD Limit:   " + checkWorkloadLimit);
             Logger.logMessage(Logger.LogLevel.INFO,"Final (Most Restrictive): " + numSessions);
             Logger.logMessage(Logger.LogLevel.INFO,"=============================");
@@ -333,106 +323,6 @@ public class FastLoadDataWriter {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private int getTASMFastLoadLimit() {
-        int tasmLimit = requestedSessions;
-
-        try {
-            Statement stmt = lsnConnection.createStatement();
-
-             Logger.logMessage(Logger.LogLevel.INFO,"\n=== TASM Ruleset Configuration ===");
-
-            // Query TASM ruleset for FastLoad session limit
-            String query = "SELECT rulename, configName, UtilSessions " +
-                    "FROM TDWM.Configurations TC, TDWM.RuleDefs TD " +
-                    "WHERE TC.configID = TD.configID " +
-                    "AND TD.RuleName LIKE '%fastloadlimit%' " +
-                    "AND utilsessions > 0";
-
-             Logger.logMessage(Logger.LogLevel.INFO,"Query: " + query);
-
-            ResultSet rs = stmt.executeQuery(query);
-
-            boolean found = false;
-            while (rs.next()) {
-                found = true;
-                String ruleName = rs.getString(1);
-                String rulesetName = rs.getString(2);
-                Integer flLimit = (Integer) rs.getObject(3);
-
-                 Logger.logMessage(Logger.LogLevel.INFO,"\nRuleset Name: " + rulesetName);
-                 Logger.logMessage(Logger.LogLevel.INFO,"Rule Name: " + ruleName);
-                 Logger.logMessage(Logger.LogLevel.INFO,"FastLoad Session Limit: " +
-                        (flLimit != null ? flLimit : "Not Set"));
-
-                if (flLimit != null && flLimit > 0 && flLimit < tasmLimit) {
-                    tasmLimit = flLimit;
-                     Logger.logMessage(Logger.LogLevel.INFO,"*** Using TASM configured limit: " + tasmLimit + " ***");
-                }
-            }
-
-            if (!found) {
-                 Logger.logMessage(Logger.LogLevel.INFO,"No TASM rulesets with FastLoad limits found");
-            }
-
-             Logger.logMessage(Logger.LogLevel.INFO,"==================================\n");
-
-            rs.close();
-            stmt.close();
-
-        } catch (SQLException e) {
-             Logger.logMessage(Logger.LogLevel.INFO,"Could not query TASM ruleset info: " + e.getMessage());
-        }
-
-        return tasmLimit;
-    }
-
-    /**
-     * Query system-level FastLoad session limits from DBS Control
-     */
-    private int getSystemSessionLimit() throws SQLException {
-        int systemLimit = requestedSessions;
-
-        try {
-            Statement stmt = lsnConnection.createStatement();
-
-            // Query DBS Control for FastLoad session limits
-            String query = "SELECT InfoData FROM DBC.DBCInfoV WHERE InfoKey = 'MAXIMUM LOAD TASKS'";
-
-             Logger.logMessage(Logger.LogLevel.INFO,"\nQuerying system-level FastLoad limits...");
-             Logger.logMessage(Logger.LogLevel.INFO,"Query: " + query);
-
-            ResultSet rs = stmt.executeQuery(query);
-
-            if (rs.next()) {
-                String maxLoadTasks = rs.getString(1);
-                if (maxLoadTasks != null && !maxLoadTasks.trim().isEmpty()) {
-                    try {
-                        int maxTasks = Integer.parseInt(maxLoadTasks.trim());
-                         Logger.logMessage(Logger.LogLevel.INFO,"System Maximum Load Tasks: " + maxTasks);
-
-                        if (maxTasks > 0) {
-                            systemLimit = Math.min(requestedSessions, maxTasks);
-                             Logger.logMessage(Logger.LogLevel.INFO,"Adjusted session limit: " + systemLimit);
-                        }
-                    } catch (NumberFormatException e) {
-                         Logger.logMessage(Logger.LogLevel.INFO,"Warning: Could not parse max load tasks: " + maxLoadTasks);
-                    }
-                }
-            } else {
-                 Logger.logMessage(Logger.LogLevel.INFO,"No system limit found in DBC.DBCInfoV");
-            }
-
-            rs.close();
-            stmt.close();
-
-        } catch (SQLException e) {
-             Logger.logMessage(Logger.LogLevel.INFO,"Warning: Could not query system limits: " + e.getMessage());
-             Logger.logMessage(Logger.LogLevel.INFO,"Will attempt with requested sessions: " + requestedSessions);
-        }
-
-        return systemLimit;
     }
 
     /**
