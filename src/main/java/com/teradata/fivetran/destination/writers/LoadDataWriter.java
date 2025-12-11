@@ -22,7 +22,7 @@ public class LoadDataWriter<T> extends Writer {
     private List<Column> headerColumns;
     private String columnNames;
     private Map<String, ColumnMetadata> varcharColumnLengths;
-    private final WarningHandler<T> warningHandler;
+    private final WarningHandler warningHandler;
     private int currentBatchSize = 0;
     private List<Column> columns;
     private List<Column> matchingCols;
@@ -42,7 +42,7 @@ public class LoadDataWriter<T> extends Writer {
      */
     public LoadDataWriter(Connection conn, String database, String table, List<Column> columns,
                           FileParams params, Map<String, ByteString> secretKeys, Integer batchSize,
-                          WarningHandler<T> warningHandler) throws IOException {
+                          WarningHandler warningHandler) throws IOException {
         super(conn, database, table, columns, params, secretKeys, batchSize);
         this.conn = conn;
         this.database = database;

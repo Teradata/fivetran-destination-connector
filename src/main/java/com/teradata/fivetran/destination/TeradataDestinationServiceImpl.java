@@ -1,11 +1,11 @@
 package com.teradata.fivetran.destination;
 
-import com.teradata.fivetran.destination.warning_util.AlterTableWarningHandler;
-import com.teradata.fivetran.destination.warning_util.DescribeTableWarningHandler;
+import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import com.teradata.fivetran.destination.warning_util.WriteBatchWarningHandler;
 import com.teradata.fivetran.destination.writers.*;
 import fivetran_sdk.v2.*;
 import io.grpc.stub.StreamObserver;
+import jdk.jpackage.internal.Log;
 
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Implementation of the gRPC service for Teradata destination connector.
@@ -318,7 +319,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         Logger.logMessage(Logger.LogLevel.INFO, String.format("Database: %s, Table: %s", database, table));
 
         try {
-            Table t = TeradataJDBCUtil.getTable(conf, database, table, request.getTableName(), new DescribeTableWarningHandler(responseObserver));
+            Table t = TeradataJDBCUtil.getTable(conf, database, table, request.getTableName(), new WarningHandler());
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Table %s exists", TeradataJDBCUtil.escapeTable(database, table)));
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Table %s description: %s", TeradataJDBCUtil.escapeTable(database, table), t));
             DescribeTableResponse response = DescribeTableResponse.newBuilder().setTable(t).build();
@@ -373,29 +374,37 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         responseObserver.onCompleted();
     }
 
-    /**
-     * Handles the alter table request.
-     *
-     * @param request The alter table request.
-     * @param responseObserver The response observer to send the response.
-     */
     @Override
     public void alterTable(AlterTableRequest request,
                            StreamObserver<AlterTableResponse> responseObserver) {
-        Logger.logMessage(Logger.LogLevel.INFO,"#########################alterTable#############################################################");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
-        String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
+            WarningHandler wh = new WarningHandler();
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, wh);
+            if (queries != null && !queries.isEmpty()) {
+                for (TeradataJDBCUtil.QueryWithCleanup queryWithCleanup : queries) {
+                    try {
+                        String query = queryWithCleanup.getQuery();
+                        Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", query));
+                        stmt.execute(query);
+                    } catch (SQLException e) {
+                        // Perform cleanup if query execution fails
+                        String cleanupQuery = queryWithCleanup.getCleanupQuery();
+                        if (cleanupQuery != null) {
+                            try (Statement cleanupStmt = conn.createStatement()) {
+                                Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing cleanup SQL:\n %s", cleanupQuery));
+                                cleanupStmt.execute(cleanupQuery);
+                            }
+                        }
 
-            query = TeradataJDBCUtil.generateAlterTableQuery(request, new AlterTableWarningHandler(responseObserver));
-            // query is null when table is not changed
-            if (query != null) {
-                String[] queries = query.split(";");
-                for (String q : queries) {
-                    Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", q));
-                    if (!q.trim().isEmpty()) {
-                        stmt.execute(q.trim() + ";");
+                        String warning = queryWithCleanup.getWarningMessage();
+
+                        if (warning != null) {
+                            wh.handle(warning);
+                        }
+
+                        throw e;
                     }
                 }
             }
@@ -403,13 +412,84 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(AlterTableResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
-            Logger.logMessage(Logger.LogLevel.SEVERE, String.format("AlterTable failed with exception %s", e.getMessage()));
+            String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
+            String table = TeradataJDBCUtil.getTableName(request.getSchemaName(),
+                    request.getTable().getName());
+            Logger.logMessage(Logger.LogLevel.WARNING, String.format("AlterTable failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e));
+
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("alterTable :: Table: " 
-                                    + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) 
-                                    + ", SQL: " + query.replace("\n", " ")
-                                    + ", Error: " + getStackTraceOneLine(e)).build())
+                            .setMessage(e.getMessage()).build())
+                    .build());
+            responseObserver.onNext(AlterTableResponse.newBuilder()
+                    .setSuccess(false)
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void migrate(MigrateRequest request, StreamObserver<MigrateResponse> responseObserver) {
+        TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
+            conn.setAutoCommit(false);
+
+            WarningHandler wh = new WarningHandler();
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, wh);
+            try {
+                if (queries != null && !queries.isEmpty()) {
+                    for (TeradataJDBCUtil.QueryWithCleanup queryWithCleanup : queries) {
+                        try {
+                            Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", queryWithCleanup.getQuery()));
+                            queryWithCleanup.execute(conn);
+                        } catch (SQLException e) {
+                            // Perform cleanup if query execution fails
+                            String cleanupQuery = queryWithCleanup.getCleanupQuery();
+                            if (cleanupQuery != null) {
+                                try (Statement cleanupStmt = conn.createStatement()) {
+                                    Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing cleanup SQL:\n %s", cleanupQuery));
+                                    cleanupStmt.execute(cleanupQuery);
+                                }
+                            }
+
+                            String warning = queryWithCleanup.getWarningMessage();
+                            if (warning != null) {
+                                wh.handle(warning);
+                            }
+
+                            throw e;
+                        }
+                    }
+                }
+
+                conn.commit();
+            } catch (SQLException e) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    // keep original error, attach rollback failure as suppressed
+                    e.addSuppressed(rollbackEx);
+                }
+                throw e; // propagate to caller
+            }
+
+
+            responseObserver.onNext(MigrateResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            String database = TeradataJDBCUtil.getDatabaseName(conf, request.getDetails().getSchema());
+            String table = TeradataJDBCUtil.getTableName(request.getDetails().getSchema(),
+                    request.getDetails().getTable());
+            Logger.logMessage(Logger.LogLevel.WARNING, String.format("Migrate failed for %s with exception %s",
+                    TeradataJDBCUtil.escapeTable(database, table), e));
+
+            responseObserver.onNext(MigrateResponse.newBuilder()
+                    .setTask(Task.newBuilder()
+                            .setMessage(e.getMessage()).build())
+                    .build());
+            responseObserver.onNext(MigrateResponse.newBuilder()
+                    .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
         }
@@ -464,42 +544,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .build());
             responseObserver.onCompleted();
         }
-    }
-
-    /**
-     * Handles the migrate request.
-     *
-     * @param request          The migrate request.
-     * @param responseObserver The response observer to send the response.
-     */
-    @Override
-    public void migrate(MigrateRequest request, StreamObserver<MigrateResponse> responseObserver) {
-        Logger.logMessage(Logger.LogLevel.INFO,
-                "#########################migrate#############################################################");
-        TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
-        MigrationDetails details = request.getDetails();
-        String schema = details.getSchema();
-        String table = details.getTable();
-
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, schema, table);
-
-            responseObserver.onNext(MigrateResponse.newBuilder().setSuccess(true).build());
-        } catch (Exception e) {
-            String errorMsg = String.format("Migrate failed for %s.%s with exception %s", schema, table,
-                    e.getMessage());
-            Logger.logMessage(Logger.LogLevel.SEVERE, errorMsg);
-            responseObserver.onNext(MigrateResponse.newBuilder()
-                    .setTask(Task.newBuilder()
-                            .setMessage("migrate :: Table: "
-                                    + TeradataJDBCUtil.escapeTable(schema, table)
-                                    + ", Error: " + getStackTraceOneLine(e))
-                            .build())
-                    .build());
-        }
-        responseObserver.onCompleted();
     }
 
     /**

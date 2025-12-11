@@ -1,416 +1,924 @@
 package com.teradata.fivetran.destination;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Arrays;
-
+import fivetran_sdk.v2.*;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import fivetran_sdk.v2.*;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 
 public class MigrateTest extends IntegrationTestBase {
+    @Test
+    public void dropTable() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE dropTable");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE dropTable(a INT)");
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("dropTable")
+                            .setSchema(database)
+                            .setDrop(
+                                    DropOperation.newBuilder()
+                                            .setDropTable(true)
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                System.out.println(q.getQuery());
+                stmt.execute(q.getQuery());
+            }
+
+            Assertions.assertThrows(TableNotExistException.class, () -> {
+                TeradataJDBCUtil.getTable(conf, database, "dropTable", "dropTable", testWarningHandle);
+            });
+        }
+    }
 
     @Test
-    public void shouldAddColumnWithDefaultValue() throws Exception {
-        String tableName = "addColumnDefault"; // Remove schema prefix
+    public void renameTable() throws Exception {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            // Create table without schema prefix - use TeradataJDBCUtil.escapeTable
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (id INT)");
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (1)");
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE renameTable");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE renameTable(a INT)");
 
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("addColumnDefault")
-                    .setAdd(AddOperation.newBuilder()
-                            .setAddColumnWithDefaultValue(AddColumnWithDefaultValue.newBuilder()
-                                    .setColumn("col_def")
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("renameTable")
+                            .setSchema(database)
+                            .setRename(
+                                    RenameOperation.newBuilder()
+                                            .setRenameTable(
+                                                    RenameTable.newBuilder()
+                                                            .setFromTable("renameTable")
+                                                            .setToTable("renameTable1")
+                                            )
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table renamed = TeradataJDBCUtil.getTable(conf, database, "renameTable1", "renameTable1", testWarningHandle);
+            Assertions.assertEquals("renameTable1", renamed.getName());
+        }
+    }
+
+    @Test
+    public void renameColumn() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE renameColumn");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE renameColumn(a INT)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("renameColumn")
+                            .setSchema(database)
+                            .setRename(
+                                    RenameOperation.newBuilder()
+                                            .setRenameColumn(
+                                                    RenameColumn.newBuilder()
+                                                            .setFromColumn("a")
+                                                            .setToColumn("b")
+                                            )
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table renamed = TeradataJDBCUtil.getTable(conf, database, "renameColumn", "renameTable1", testWarningHandle);
+            renamed.getColumnsList().forEach(c -> Assertions.assertEquals("b", c.getName()));
+        }
+    }
+
+    @Test
+    public void copyTable() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE copyTable");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE copyTable(a INT)");
+            stmt.execute("INSERT INTO copyTable VALUES (1), (2), (3)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("copyTable")
+                            .setSchema(database)
+                            .setCopy(
+                                    CopyOperation.newBuilder()
+                                            .setCopyTable(
+                                                    CopyTable.newBuilder()
+                                                            .setFromTable("copyTable")
+                                                            .setToTable("copyTable1")
+                                            )
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table originalTable = TeradataJDBCUtil.getTable(conf, database, "copyTable", "copyTable", testWarningHandle);
+            Assertions.assertEquals("copyTable", originalTable.getName());
+
+            Table copy = TeradataJDBCUtil.getTable(conf, database, "copyTable1", "copyTable1", testWarningHandle);
+            Assertions.assertEquals("copyTable1", copy.getName());
+
+            checkResult("SELECT * FROM `copyTable1` ORDER BY a",
+                    Arrays.asList(Collections.singletonList("1"),
+                            Collections.singletonList("2"),
+                            Collections.singletonList("3")));
+        }
+    }
+
+    @Test
+    public void copyColumn() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE dropTable");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE dropTable(a DECIMAL(8, 4))");
+            stmt.execute("INSERT INTO copyColumn VALUES (123), (124)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("copyColumn")
+                            .setSchema(database)
+                            .setCopy(
+                                    CopyOperation.newBuilder()
+                                            .setCopyColumn(
+                                                    CopyColumn.newBuilder()
+                                                            .setFromColumn("a")
+                                                            .setToColumn("b")
+                                            )
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table copy = TeradataJDBCUtil.getTable(conf, database, "copyColumn", "copyColumn", testWarningHandle);
+            List<Column> columns = copy.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("b", columns.get(1).getName());
+            Assertions.assertEquals(8, columns.get(1).getParams().getDecimal().getPrecision());
+            Assertions.assertEquals(4, columns.get(1).getParams().getDecimal().getScale());
+
+            checkResult("SELECT a, b FROM copyColumn ORDER BY a", Arrays.asList(
+                    Arrays.asList("123.0000", "123.0000"),
+                    Arrays.asList("124.0000", "124.0000")
+            ));
+        }
+    }
+
+    @Test
+    public void addColumnWithDefaultValue() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE addColumnWithDefaultValue");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE addColumnWithDefaultValue(a INT)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("addColumnWithDefaultValue")
+                            .setSchema(database)
+                            .setAdd(AddOperation.newBuilder()
+                                    .setAddColumnWithDefaultValue(
+                                            AddColumnWithDefaultValue.newBuilder()
+                                                    .setColumn("b")
+                                                    .setDefaultValue("1")
+                                                    .setColumnType(DataType.INT)
+                                                    .build()
+                                    )
+                            )
+                    )
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "addColumnWithDefaultValue", "addColumnWithDefaultValue", testWarningHandle);
+            Optional<Column> optionalB = t.getColumnsList().stream().filter(c -> c.getName().equals("b")).findFirst();
+            Assertions.assertTrue(optionalB.isPresent());
+            Column b = optionalB.get();
+            Assertions.assertEquals("b", b.getName());
+            Assertions.assertEquals(DataType.INT, b.getType());
+
+            request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("addColumnWithDefaultValue")
+                            .setSchema(database)
+                            .setAdd(AddOperation.newBuilder()
+                                    .setAddColumnWithDefaultValue(
+                                            AddColumnWithDefaultValue.newBuilder()
+                                                    .setColumn("c")
+                                                    .setDefaultValue("2025-11-24T10:14:54.123Z")
+                                                    .setColumnType(DataType.NAIVE_DATETIME)
+                                                    .build()
+                                    )
+                            )
+                    )
+                    .build();
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
+            }
+
+            t = TeradataJDBCUtil.getTable(conf, database, "addColumnWithDefaultValue", "addColumnWithDefaultValue", testWarningHandle);
+            Optional<Column> optionalC = t.getColumnsList().stream().filter(c -> c.getName().equals("c")).findFirst();
+            Assertions.assertTrue(optionalC.isPresent());
+            Column c = optionalC.get();
+            Assertions.assertEquals("c", c.getName());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, c.getType());
+        }
+    }
+
+    @Test
+    public void updateColumnValueOperation() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE updateColumnValueOperation");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE updateColumnValueOperation(a INT)");
+            stmt.execute("INSERT INTO updateColumnValueOperation VALUES (1), (2), (3)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("updateColumnValueOperation")
+                            .setSchema(database)
+                            .setUpdateColumnValue(UpdateColumnValueOperation.newBuilder()
+                                    .setColumn("a")
+                                    .setValue("4")
+                                    .build()
+                            )
+                    )
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
+            }
+
+            checkResult("SELECT * FROM updateColumnValueOperation ORDER BY a", Arrays.asList(
+                    Collections.singletonList("4"),
+                    Collections.singletonList("4"),
+                    Collections.singletonList("4")
+            ));
+        }
+    }
+
+    @Test
+    public void liveToSoftDelete() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE liveToSoftDelete");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE liveToSoftDelete(a INT)");
+            stmt.execute("INSERT INTO liveToSoftDelete VALUES (1), (2)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("liveToSoftDelete")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.LIVE_TO_SOFT_DELETE)
+                                            .setSoftDeletedColumn("b")
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "liveToSoftDelete", "liveToSoftDelete", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("b", columns.get(1).getName());
+
+            checkResult("SELECT a, b FROM liveToSoftDelete ORDER BY a", Arrays.asList(
+                    Arrays.asList("1", "0"),
+                    Arrays.asList("2", "0")
+            ));
+        }
+    }
+
+    @Test
+    public void liveToHistory() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE liveToHistory");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE liveToHistory(a INT PRIMARY KEY)");
+            stmt.execute("INSERT INTO liveToHistory VALUES (1), (2)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("liveToHistory")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.LIVE_TO_HISTORY)
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "liveToHistory", "liveToHistory", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(3).getName());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(1).getType());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(2).getType());
+            Assertions.assertEquals(DataType.BOOLEAN, columns.get(3).getType());
+            Assertions.assertTrue(columns.get(1).getPrimaryKey());
+
+            checkResult("SELECT a, _fivetran_end, _fivetran_active FROM liveToHistory ORDER BY a", Arrays.asList(
+                    Arrays.asList("1", "9999-12-31 23:59:59.999999", "1"),
+                    Arrays.asList("2", "9999-12-31 23:59:59.999999", "1")
+            ));
+        }
+    }
+
+    @Test
+    public void softDeleteToHistory() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE softDeleteToHistory");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE softDeleteToHistory(a INT PRIMARY KEY, _fivetran_synced DATETIME(6), _fivetran_deleted BOOL)");
+            stmt.execute("INSERT INTO softDeleteToHistory VALUES (1, '2020-01-01 01:01:01', 0), (2, '2020-01-01 01:01:01', 1)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("softDeleteToHistory")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.SOFT_DELETE_TO_HISTORY)
+                                            .setSoftDeletedColumn("_fivetran_deleted")
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "softDeleteToHistory", "softDeleteToHistory", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(3).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(4).getName());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(2).getType());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(3).getType());
+            Assertions.assertEquals(DataType.BOOLEAN, columns.get(4).getType());
+            Assertions.assertTrue(columns.get(2).getPrimaryKey());
+
+            checkResult("SELECT a, _fivetran_start, _fivetran_end, _fivetran_active FROM softDeleteToHistory ORDER BY a", Arrays.asList(
+                    Arrays.asList("1", "2020-01-01 01:01:01.000000", "9999-12-31 23:59:59.999999", "1"),
+                    Arrays.asList("2", "1000-01-01 00:00:00.000000", "1000-01-01 00:00:00.000000", "0")
+            ));
+        }
+    }
+
+    @Test
+    public void softDeleteToLive() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE softDeleteToLive");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE softDeleteToLive(a INT PRIMARY KEY, _fivetran_deleted BOOL)");
+            stmt.execute("INSERT INTO softDeleteToLive VALUES (1, 0), (2, 1)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("softDeleteToLive")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.SOFT_DELETE_TO_LIVE)
+                                            .setSoftDeletedColumn("_fivetran_deleted")
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "softDeleteToLive", "softDeleteToLive", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals(1, columns.size());
+
+            checkResult("SELECT a FROM softDeleteToLive ORDER BY a", Collections.singletonList(
+                    Collections.singletonList("1")
+            ));
+        }
+    }
+
+    @Test
+    public void historyToSoftDelete() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE historyToSoftDelete");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE historyToSoftDelete(a INT, _fivetran_start DATETIME(6), _fivetran_end DATETIME(6), _fivetran_active BOOL, PRIMARY KEY(_fivetran_start, a))");
+            stmt.execute("INSERT INTO historyToSoftDelete VALUES " +
+                    "(1, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0), " +
+                    "(1, '2021-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1), " +
+                    "(2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1), " +
+                    "(3, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("historyToSoftDelete")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.HISTORY_TO_SOFT_DELETE)
+                                            .setSoftDeletedColumn("_fivetran_deleted")
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                System.out.println(q.getQuery());
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "historyToSoftDelete", "historyToSoftDelete", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_deleted", columns.get(1).getName());
+            Assertions.assertEquals(2, columns.size());
+
+            checkResult("SELECT a, _fivetran_deleted FROM historyToSoftDelete ORDER BY a", Arrays.asList(
+                    Arrays.asList("1", "0"),
+                    Arrays.asList("2", "0"),
+                    Arrays.asList("3", "1")
+            ));
+
+            try {
+                stmt.execute("DROP TABLE historyToSoftDelete");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE historyToSoftDelete(a INT, _fivetran_start DATETIME(6), _fivetran_end DATETIME(6), _fivetran_active BOOL, PRIMARY KEY(_fivetran_start))");
+            stmt.execute("INSERT INTO historyToSoftDelete VALUES " +
+                    "(1, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0), " +
+                    "(1, '2021-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1), " +
+                    "(2, '2022-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1), " +
+                    "(3, '2023-01-01 01:01:01', '2021-01-01 01:01:01', 0)");
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                System.out.println(q.getQuery());
+                stmt.execute(q.getQuery());
+            }
+
+            t = TeradataJDBCUtil.getTable(conf, database, "historyToSoftDelete", "historyToSoftDelete", testWarningHandle);
+            columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_deleted", columns.get(1).getName());
+            Assertions.assertEquals(2, columns.size());
+
+            checkResult("SELECT a, _fivetran_deleted FROM historyToSoftDelete ORDER BY a, _fivetran_deleted", Arrays.asList(
+                    Arrays.asList("1", "0"),
+                    Arrays.asList("1", "1"),
+                    Arrays.asList("2", "0"),
+                    Arrays.asList("3", "1")
+            ));
+        }
+    }
+
+    @Test
+    public void historyToLive() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE historyToLive");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE historyToLive(a INT PRIMARY KEY, _fivetran_start DATETIME(6), _fivetran_end DATETIME(6), _fivetran_active BOOL)");
+            stmt.execute("INSERT INTO historyToLive VALUES (1, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0), (2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("historyToLive")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.HISTORY_TO_LIVE)
+                                            .setKeepDeletedRows(true)
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "historyToLive", "historyToLive", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals(1, columns.size());
+
+            checkResult("SELECT a FROM historyToLive ORDER BY a", Arrays.asList(
+                    Collections.singletonList("1"),
+                    Collections.singletonList("2")
+            ));
+            try {
+                stmt.execute("DROP TABLE historyToLive");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE historyToLive(a INT PRIMARY KEY, _fivetran_start DATETIME(6), _fivetran_end DATETIME(6), _fivetran_active BOOL)");
+            stmt.execute("INSERT INTO historyToLive VALUES (1, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0), (2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)");
+
+            request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("historyToLive")
+                            .setSchema(database)
+                            .setTableSyncModeMigration(
+                                    TableSyncModeMigrationOperation.newBuilder()
+                                            .setType(TableSyncModeMigrationType.HISTORY_TO_LIVE)
+                                            .setKeepDeletedRows(false)
+                            ))
+                    .build();
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            t = TeradataJDBCUtil.getTable(conf, database, "historyToLive", "historyToLive", testWarningHandle);
+            columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals(1, columns.size());
+
+            checkResult("SELECT a FROM historyToLive ORDER BY a", Collections.singletonList(
+                    Collections.singletonList("2")
+            ));
+        }
+    }
+
+    @Test
+    public void copyTableToHistoryMode() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE copyTableToHistoryMode");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE copyTableToHistoryMode(a INT PRIMARY KEY, _fivetran_synced DATETIME(6), _fivetran_deleted BOOL)");
+            stmt.execute("INSERT INTO copyTableToHistoryMode VALUES (1, '2020-01-01 01:01:01', 0), (2, '2020-01-01 01:01:01', 1)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("copyTableToHistoryMode")
+                            .setSchema(database)
+                            .setCopy(
+                                    CopyOperation.newBuilder()
+                                            .setCopyTableToHistoryMode(
+                                                    CopyTableToHistoryMode.newBuilder()
+                                                            .setFromTable("copyTableToHistoryMode")
+                                                            .setToTable("copyTableToHistoryModeNew")
+                                                            .setSoftDeletedColumn("_fivetran_deleted")
+                                            )
+                            ))
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "copyTableToHistoryModeNew", "copyTableToHistoryModeNew", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(3).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(4).getName());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(2).getType());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(3).getType());
+            Assertions.assertEquals(DataType.BOOLEAN, columns.get(4).getType());
+            Assertions.assertTrue(columns.get(2).getPrimaryKey());
+
+            checkResult("SELECT a, _fivetran_start, _fivetran_end, _fivetran_active FROM copyTableToHistoryModeNew ORDER BY a", Arrays.asList(
+                    Arrays.asList("1", "2020-01-01 01:01:01.000000", "9999-12-31 23:59:59.999999", "1"),
+                    Arrays.asList("2", "1000-01-01 00:00:00.000000", "1000-01-01 00:00:00.000000", "0")
+            ));
+            try {
+                stmt.execute("DROP TABLE copyTableToHistoryMode");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            try {
+                stmt.execute("DROP TABLE copyTableToHistoryModeNew");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("DROP TABLE copyTableToHistoryMode");
+            stmt.execute("DROP TABLE copyTableToHistoryModeNew");
+            stmt.execute("CREATE TABLE copyTableToHistoryMode(a INT PRIMARY KEY)");
+            stmt.execute("INSERT INTO copyTableToHistoryMode VALUES (1), (2)");
+
+            request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("copyTableToHistoryMode")
+                            .setSchema(database)
+                            .setCopy(
+                                    CopyOperation.newBuilder()
+                                            .setCopyTableToHistoryMode(
+                                                    CopyTableToHistoryMode.newBuilder()
+                                                            .setFromTable("copyTableToHistoryMode")
+                                                            .setToTable("copyTableToHistoryModeNew")
+                                            )
+                            ))
+                    .build();
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            t = TeradataJDBCUtil.getTable(conf, database, "copyTableToHistoryModeNew", "copyTableToHistoryModeNew", testWarningHandle);
+            columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(3).getName());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(1).getType());
+            Assertions.assertEquals(DataType.NAIVE_DATETIME, columns.get(2).getType());
+            Assertions.assertEquals(DataType.BOOLEAN, columns.get(3).getType());
+            Assertions.assertTrue(columns.get(1).getPrimaryKey());
+
+            checkResult("SELECT a, _fivetran_end, _fivetran_active FROM copyTableToHistoryModeNew ORDER BY a", Arrays.asList(
+                    Arrays.asList("1", "9999-12-31 23:59:59.999999", "1"),
+                    Arrays.asList("2", "9999-12-31 23:59:59.999999", "1")
+            ));
+        }
+    }
+
+    @Test
+    public void dropColumnInHistoryMode() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE dropColumnInHistoryMode");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE dropColumnInHistoryMode(a INT, b INT, _fivetran_start DATETIME(6), _fivetran_end DATETIME(6), _fivetran_active BOOL, PRIMARY KEY(_fivetran_start, a))");
+
+            final MigrateRequest emptyRequest = MigrateRequest.newBuilder()
+                .putAllConfiguration(confMap)
+                .setDetails(MigrationDetails.newBuilder()
+                    .setTable("dropColumnInHistoryMode")
+                    .setSchema(database)
+                    .setDrop(
+                        DropOperation.newBuilder()
+                            .setDropColumnInHistoryMode(
+                                DropColumnInHistoryMode.newBuilder()
+                                    .setColumn("b")
+                                    .setOperationTimestamp("2021-01-01 01:01:01")
+                            )
+                    )
+                ).build();
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(emptyRequest, testWarningHandle);
+            Assertions.assertEquals(0, queries.size());
+
+            stmt.execute("INSERT INTO dropColumnInHistoryMode VALUES (1, 1, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0), (2, 2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                .putAllConfiguration(confMap)
+                .setDetails(MigrationDetails.newBuilder()
+                    .setTable("dropColumnInHistoryMode")
+                    .setSchema(database)
+                    .setDrop(
+                        DropOperation.newBuilder()
+                            .setDropColumnInHistoryMode(
+                                DropColumnInHistoryMode.newBuilder()
+                                    .setColumn("b")
+                                    .setOperationTimestamp("2021-01-01 01:01:01")
+                            )
+                    )
+                ).build();
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
+            }
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, "dropColumnInHistoryMode", "dropColumnInHistoryMode", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("b", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(3).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(4).getName());
+            Assertions.assertEquals(5, columns.size());
+
+            checkResult("SELECT * FROM dropColumnInHistoryMode ORDER BY _fivetran_start, a", Arrays.asList(
+                Arrays.asList("1", "1", "2020-01-01 01:01:01.000000", "2021-01-01 01:01:01.000000", "0"),
+                Arrays.asList("2", "2", "2020-01-01 01:01:01.000000", "2021-01-01 01:01:00.999999", "0"),
+                Arrays.asList("2", null, "2021-01-01 01:01:01.000000", "9999-12-31 11:59:59.999999", "1")
+            ));
+
+            Assertions.assertThrows(IllegalArgumentException.class, () -> {
+                final MigrateRequest invalidRequest = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                        .setTable("dropColumnInHistoryMode")
+                        .setSchema(database)
+                        .setDrop(
+                            DropOperation.newBuilder()
+                                .setDropColumnInHistoryMode(
+                                    DropColumnInHistoryMode.newBuilder()
+                                        .setColumn("b")
+                                        .setOperationTimestamp("2001-01-01 01:01:01")
+                                )
+                        )
+                    ).build();
+                TeradataJDBCUtil.generateMigrateQueries(invalidRequest, testWarningHandle);
+            });
+        }
+    }
+
+    @Test
+    public void addColumnInHistoryMode() throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            try {
+                stmt.execute("DROP TABLE addColumnInHistoryMode");
+            } catch (Exception e) {
+                // handle or ignore
+            }
+            stmt.execute("CREATE TABLE addColumnInHistoryMode(a INT, _fivetran_start DATETIME(6), _fivetran_end DATETIME(6), _fivetran_active BOOL, PRIMARY KEY(_fivetran_start, a))");
+
+            final MigrateRequest emptyRequest = MigrateRequest.newBuilder()
+                .putAllConfiguration(confMap)
+                .setDetails(MigrationDetails.newBuilder()
+                    .setTable("addColumnInHistoryMode")
+                    .setSchema(database)
+                    .setAdd(
+                        AddOperation.newBuilder()
+                            .setAddColumnInHistoryMode(
+                                AddColumnInHistoryMode.newBuilder()
+                                    .setColumn("b")
                                     .setColumnType(DataType.INT)
-                                    .setDefaultValue("100")
-                                    .build())
-                            .build())
-                    .build();
+                                    .setOperationTimestamp("2021-01-01 01:01:01")
+                                    .setDefaultValue("3")
+                            )
+                    )
+                ).build();
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(emptyRequest, testWarningHandle);
+            Assertions.assertEquals(1, queries.size());
 
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "addColumnDefault");
+            stmt.execute("INSERT INTO addColumnInHistoryMode VALUES (1, '2020-01-01 01:01:01', '2021-01-01 01:01:01', 0), (2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)");
 
-            checkResult("SELECT col_def FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("100")));
-        }
-    }
+            MigrateRequest request = MigrateRequest.newBuilder()
+                .putAllConfiguration(confMap)
+                .setDetails(MigrationDetails.newBuilder()
+                    .setTable("addColumnInHistoryMode")
+                    .setSchema(database)
+                    .setAdd(
+                        AddOperation.newBuilder()
+                            .setAddColumnInHistoryMode(
+                                AddColumnInHistoryMode.newBuilder()
+                                    .setColumn("b")
+                                    .setColumnType(DataType.INT)
+                                    .setOperationTimestamp("2021-01-01 01:01:01")
+                                    .setDefaultValue("3")
+                            )
+                    )
+                ).build();
 
-    @Test
-    public void shouldUpdateColumnValue() throws Exception {
-        String tableName = "updateColVal"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute(
-                    "CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (id INT, val INT)");
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (1, 10)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("updateColVal")
-                    .setUpdateColumnValue(UpdateColumnValueOperation.newBuilder()
-                            .setColumn("val")
-                            .setValue("20")
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "updateColVal");
-
-            checkResult("SELECT val FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("20")));
-        }
-    }
-
-    @Test
-    public void shouldRenameTable() throws Exception {
-        String fromTable = "renameFrom"; // Remove schema prefix
-        String toTable = "renameTo"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, fromTable) + " (id INT)");
-
-            // Ensure target table doesn't exist
-            try {
-                stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, toTable));
-            } catch (SQLException e) {
-                // Ignore if not exists
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
             }
 
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("renameFrom") // Use just the table name
-                    .setRename(RenameOperation.newBuilder()
-                            .setRenameTable(RenameTable.newBuilder()
-                                    .setFromTable("renameFrom")
-                                    .setToTable("renameTo")
-                                    .build())
-                            .build())
-                    .build();
+            Table t = TeradataJDBCUtil.getTable(conf, database, "addColumnInHistoryMode", "addColumnInHistoryMode", testWarningHandle);
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("b", columns.get(4).getName());
+            Assertions.assertEquals(DataType.INT, columns.get(4).getType());
+            Assertions.assertEquals("_fivetran_start", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(3).getName());
+            Assertions.assertEquals(5, columns.size());
 
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "renameFrom");
+            checkResult("SELECT a, b, _fivetran_start, _fivetran_end, _fivetran_active FROM addColumnInHistoryMode ORDER BY _fivetran_start, a", Arrays.asList(
+                Arrays.asList("1", null, "2020-01-01 01:01:01.000000", "2021-01-01 01:01:01.000000", "0"),
+                Arrays.asList("2", null, "2020-01-01 01:01:01.000000", "2021-01-01 01:01:00.999999", "0"),
+                Arrays.asList("2", "3", "2021-01-01 01:01:01.000000", "9999-12-31 11:59:59.999999", "1")
+            ));
 
-            // Verify old table gone (should fail to select or return false check)
-            boolean oldExists = TeradataJDBCUtil.checkTableExists(stmt, IntegrationTestBase.schema, fromTable);
-            assertFalse(oldExists, "Old table should not exist");
-
-            // Verify new table exists
-            boolean newExists = TeradataJDBCUtil.checkTableExists(stmt, IntegrationTestBase.schema, toTable);
-            assertTrue(newExists, "New table should exist");
-        }
-    }
-
-    @Test
-    public void shouldRenameColumn() throws Exception {
-        String tableName = "renameCol"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (old_col INT)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("renameCol")
-                    .setRename(RenameOperation.newBuilder()
-                            .setRenameColumn(RenameColumn.newBuilder()
-                                    .setFromColumn("old_col")
-                                    .setToColumn("new_col")
-                                    .build())
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "renameCol");
-
-            Table t = TeradataJDBCUtil.getTable(conf, IntegrationTestBase.schema, tableName, "renameCol", testWarningHandle);
-            boolean found = t.getColumnsList().stream().anyMatch(c -> c.getName().equals("new_col"));
-            assertTrue(found, "Column should be renamed to new_col");
-        }
-    }
-
-    @Test
-    public void shouldCopyTable() throws Exception {
-        String fromTable = "copyFrom"; // Remove schema prefix
-        String toTable = "copyTo"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, fromTable) + " (id INT)");
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, fromTable) + " VALUES (99)");
-
-            try {
-                stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, toTable));
-            } catch (SQLException e) {
-                // Ignore
-            }
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("copyFrom")
-                    .setCopy(CopyOperation.newBuilder()
-                            .setCopyTable(CopyTable.newBuilder()
-                                    .setFromTable("copyFrom")
-                                    .setToTable("copyTo")
-                                    .build())
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "copyFrom");
-
-            checkResult("SELECT id FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, toTable),
-                    Arrays.asList(Arrays.asList("99")));
-        }
-    }
-
-    @Test
-    public void shouldCopyColumn() throws Exception {
-        String tableName = "copyCol"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            // Must create target column first as per current implementation limitation
-            stmt.execute(
-                    "CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (src INT, dst INT)");
-            stmt.execute(
-                    "INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (55, NULL)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("copyCol")
-                    .setCopy(CopyOperation.newBuilder()
-                            .setCopyColumn(CopyColumn.newBuilder()
-                                    .setFromColumn("src")
-                                    .setToColumn("dst")
-                                    .build())
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "copyCol");
-
-            checkResult("SELECT dst FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("55")));
-        }
-    }
-
-    @Test
-    public void shouldDropTable() throws Exception {
-        String tableName = "dropTable"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (id INT)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("dropTable")
-                    .setDrop(DropOperation.newBuilder()
-                            .setDropTable(true)
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "dropTable");
-
-            assertFalse(TeradataJDBCUtil.checkTableExists(stmt, IntegrationTestBase.schema, tableName));
-        }
-    }
-
-    @Test
-    public void shouldHandleTableSyncModeMigration_LiveToHistory() throws Exception {
-        String tableName = "liveToHist"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (id INT)");
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (1)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("liveToHist")
-                    .setTableSyncModeMigration(TableSyncModeMigrationOperation.newBuilder()
-                            .setType(TableSyncModeMigrationType.LIVE_TO_HISTORY)
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "liveToHist");
-
-            // Verify metadata columns exist and values are correct
-            // _fivetran_active = 1, _fivetran_end = 9999..., _fivetran_start is present
-            try (ResultSet rs = stmt.executeQuery(
-                    "SELECT _fivetran_active FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName))) {
-                assertTrue(rs.next());
-                assertEquals(1, rs.getInt(1));
-            }
-        }
-    }
-
-    @Test
-    public void shouldHandleTableSyncModeMigration_SoftDeleteToHistory() throws Exception {
-        String tableName = "softToHist"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName)
-                    + " (id INT, _fivetran_deleted BYTEINT, _fivetran_synced TIMESTAMP(6))");
-            // Row 1: deleted
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName)
-                    + " VALUES (1, 1, CURRENT_TIMESTAMP)");
-            // Row 2: active
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName)
-                    + " VALUES (2, 0, CURRENT_TIMESTAMP)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("softToHist")
-                    .setTableSyncModeMigration(TableSyncModeMigrationOperation.newBuilder()
-                            .setType(TableSyncModeMigrationType.SOFT_DELETE_TO_HISTORY)
-                            .setSoftDeletedColumn("_fivetran_deleted")
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "softToHist");
-
-            // Verify _fivetran_deleted dropped
-            Table t = TeradataJDBCUtil.getTable(conf, IntegrationTestBase.schema, tableName, "softToHist", testWarningHandle);
-            boolean hasDeletedCol = t.getColumnsList().stream().anyMatch(c -> c.getName().equals("_fivetran_deleted"));
-            assertFalse(hasDeletedCol, "_fivetran_deleted should be dropped");
-
-            // Verify values
-            try (ResultSet rs = stmt.executeQuery("SELECT _fivetran_active, id FROM "
-                    + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " ORDER BY id")) {
-                assertTrue(rs.next()); // id 1
-                assertEquals(0, rs.getInt(1)); // active=0 (was deleted)
-
-                assertTrue(rs.next()); // id 2
-                assertEquals(1, rs.getInt(1)); // active=1 (was not deleted)
-            }
-        }
-    }
-
-    @Test
-    public void shouldHandleTableSyncModeMigration_HistoryToLive() throws Exception {
-        String tableName = "histToLive"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) +
-                    " (id INT, _fivetran_active BYTEINT, _fivetran_start TIMESTAMP(6), _fivetran_end TIMESTAMP(6))");
-            // Active row
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) +
-                    " VALUES (1, 1, CURRENT_TIMESTAMP, TIMESTAMP '9999-12-31 23:59:59')");
-            // Inactive row
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) +
-                    " VALUES (1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("histToLive")
-                    .setTableSyncModeMigration(TableSyncModeMigrationOperation.newBuilder()
-                            .setType(TableSyncModeMigrationType.HISTORY_TO_LIVE)
-                            // Default keepDeletedRows = false
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "histToLive");
-
-            // Verify columns dropped
-            Table t = TeradataJDBCUtil.getTable(conf, IntegrationTestBase.schema, tableName, "histToLive", testWarningHandle);
-            boolean hasActive = t.getColumnsList().stream().anyMatch(c -> c.getName().equals("_fivetran_active"));
-            assertFalse(hasActive);
-
-            // Verify inactive row deleted, active row remains
-            checkResult("SELECT id FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("1")));
-        }
-    }
-
-    @Test
-    public void shouldHandleTableSyncModeMigration_HistoryToSoftDelete() throws Exception {
-        String tableName = "histToSoft"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) +
-                    " (id INT, _fivetran_active BYTEINT, _fivetran_start TIMESTAMP(6), _fivetran_end TIMESTAMP(6))");
-            // Active row
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) +
-                    " VALUES (1, 1, CURRENT_TIMESTAMP, TIMESTAMP '9999-12-31 23:59:59')");
-            // Inactive row
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) +
-                    " VALUES (2, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("histToSoft")
-                    .setTableSyncModeMigration(TableSyncModeMigrationOperation.newBuilder()
-                            .setType(TableSyncModeMigrationType.HISTORY_TO_SOFT_DELETE)
-                            .setSoftDeletedColumn("_fivetran_deleted")
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "histToSoft");
-
-            // Verify _fivetran_deleted exists
-            Table t = TeradataJDBCUtil.getTable(conf, IntegrationTestBase.schema, tableName, "histToSoft", testWarningHandle);
-            boolean hasDeleted = t.getColumnsList().stream().anyMatch(c -> c.getName().equals("_fivetran_deleted"));
-            assertTrue(hasDeleted);
-
-            checkResult("SELECT id, _fivetran_deleted FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("1", "0")));
-        }
-    }
-
-    @Test
-    public void shouldHandleTableSyncModeMigration_SoftDeleteToLive() throws Exception {
-        String tableName = "softToLive"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName)
-                    + " (id INT, _fivetran_deleted BYTEINT)");
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (1, 0)"); // Active
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (2, 1)"); // Deleted
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("softToLive")
-                    .setTableSyncModeMigration(TableSyncModeMigrationOperation.newBuilder()
-                            .setType(TableSyncModeMigrationType.SOFT_DELETE_TO_LIVE)
-                            .setSoftDeletedColumn("_fivetran_deleted")
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "softToLive");
-
-            // Verify _fivetran_deleted dropped
-            Table t = TeradataJDBCUtil.getTable(conf, IntegrationTestBase.schema, tableName, "softToLive", testWarningHandle);
-            boolean hasDeleted = t.getColumnsList().stream().anyMatch(c -> c.getName().equals("_fivetran_deleted"));
-            assertFalse(hasDeleted);
-
-            // Verify only active row remains
-            checkResult("SELECT id FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("1")));
-        }
-    }
-
-    @Test
-    public void shouldHandleTableSyncModeMigration_LiveToSoftDelete() throws Exception {
-        String tableName = "liveToSoft"; // Remove schema prefix
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " (id INT)");
-            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName) + " VALUES (1)");
-
-            MigrationDetails details = MigrationDetails.newBuilder()
-                    .setSchema(IntegrationTestBase.schema)
-                    .setTable("liveToSoft")
-                    .setTableSyncModeMigration(TableSyncModeMigrationOperation.newBuilder()
-                            .setType(TableSyncModeMigrationType.LIVE_TO_SOFT_DELETE)
-                            .setSoftDeletedColumn("_fivetran_deleted")
-                            .build())
-                    .build();
-
-            TeradataMigrationUtil.handleMigration(conn, stmt, details, IntegrationTestBase.schema, "liveToSoft");
-
-            // Verify _fivetran_deleted added and set to 0
-            checkResult("SELECT id, _fivetran_deleted FROM " + TeradataJDBCUtil.escapeTable(IntegrationTestBase.schema, tableName),
-                    Arrays.asList(Arrays.asList("1", "0")));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> {
+                final MigrateRequest invalidRequest = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                        .setTable("addColumnInHistoryMode")
+                        .setSchema(database)
+                        .setAdd(
+                            AddOperation.newBuilder()
+                                .setAddColumnInHistoryMode(
+                                    AddColumnInHistoryMode.newBuilder()
+                                        .setColumn("b")
+                                        .setOperationTimestamp("2001-01-01 01:01:01")
+                                        .setColumnType(DataType.INT)
+                                        .setDefaultValue("3")
+                                )
+                        )
+                    ).build();
+                TeradataJDBCUtil.generateMigrateQueries(invalidRequest, testWarningHandle);
+            });
         }
     }
 }

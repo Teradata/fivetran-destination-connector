@@ -34,12 +34,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -76,12 +73,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -114,12 +108,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -154,12 +145,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -211,12 +199,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -270,8 +255,8 @@ public class AlterTableTest extends IntegrationTestBase {
                             .setSchemaName(IntegrationTestBase.schema).setTable(utcDatetimeTable).build();
 
             // Generate the alter table query and verify it is null
-            query = TeradataJDBCUtil.generateAlterTableQuery(alterRequest, testWarningHandle);
-            assertNull(query);
+            List<TeradataJDBCUtil.QueryWithCleanup> alterQuery = TeradataJDBCUtil.generateAlterTableQuery(alterRequest, testWarningHandle);
+            assertNull(alterQuery);
         }
     }
 
@@ -297,12 +282,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure

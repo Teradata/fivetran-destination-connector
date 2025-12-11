@@ -5,8 +5,6 @@ import com.teradata.fivetran.destination.writers.ColumnMetadata;
 import com.teradata.fivetran.destination.writers.JSONStruct;
 import fivetran_sdk.v2.*;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.*;
@@ -78,6 +76,50 @@ public class TeradataJDBCUtil {
         }
 
         return conn;
+    }
+
+    public static class QueryWithCleanup {
+        private final String query;
+        private final String cleanupQuery; // nullable
+        private final String warningMessage;
+        private final List<String> parameterValues = new ArrayList<>();
+        private final List<DataType> parameterTypes = new ArrayList<>();
+
+
+        public QueryWithCleanup(String query, String cleanupQuery, String warningMessage) {
+            this.query = query;
+            this.cleanupQuery = cleanupQuery;
+            this.warningMessage = warningMessage;
+        }
+
+        public QueryWithCleanup addParameter(String value, DataType type) {
+            parameterValues.add(value.toString());
+            parameterTypes.add(type);
+            return this;
+        }
+
+        public String getQuery() {
+            return query;
+        }
+
+        public String getCleanupQuery() {
+            return cleanupQuery;
+        }
+
+        public String getWarningMessage() {
+            return warningMessage;
+        }
+
+        public void execute(Connection conn) throws SQLException {
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                for (int i = 0; i < parameterTypes.size(); i++) {
+                    String value = parameterValues.get(i);
+                    DataType type = parameterTypes.get(i);
+                    TeradataJDBCUtil.setParameter(stmt, i + 1, type, value, "NULL");
+                }
+                stmt.execute();
+            }
+        }
     }
 
     /**
@@ -205,7 +247,7 @@ public class TeradataJDBCUtil {
      * @throws TableNotExistException If the table does not exist.
      */
     static <T> Table getTable(TeradataConfiguration conf, String database, String table,
-                              String originalTableName, WarningHandler<T> warningHandler) throws TableNotExistException {
+                              String originalTableName, WarningHandler warningHandler) throws TableNotExistException {
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             DatabaseMetaData metadata = conn.getMetaData();
 
@@ -564,7 +606,7 @@ public class TeradataJDBCUtil {
         return pkColumnNames(t1).equals(pkColumnNames(t2));
     }
 
-    static <T> String generateAlterTableQuery(AlterTableRequest request, WarningHandler<T> warningHandler) throws Exception {
+    static <T> List generateAlterTableQuery(AlterTableRequest request, WarningHandler warningHandler) throws Exception {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
@@ -612,7 +654,7 @@ public class TeradataJDBCUtil {
         }
     }
 
-    static String generateRecreateTableQuery(String database, String tableName, Table table,
+    static <T> List generateRecreateTableQuery(String database, String tableName, Table table,
                                              List<Column> commonColumns) {
         String tmpTableName = tableName + "_alter_tmp";
         String columns = commonColumns.stream().map(column -> escapeIdentifier(column.getName()))
@@ -625,44 +667,93 @@ public class TeradataJDBCUtil {
         String dropTable = String.format("DROP TABLE %s", escapeTable(database, tableName));
         String renameTable = String.format("RENAME TABLE %s TO %s",
                 escapeTable(database, tmpTableName), escapeTable(database, tableName));
-        String join = String.join("; ", createTable, insertData, dropTable, renameTable);
-        Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL statement: " + join);
-        return join;
+
+        return Arrays.asList(
+                new QueryWithCleanup(createTable, null, null),
+                new QueryWithCleanup(insertData, null, null),
+                new QueryWithCleanup(dropTable, null, null),
+                // The original table has been dropped; all data now resides in the temporary table.
+                new QueryWithCleanup(renameTable, null,
+                        String.format("Failed to recreate table %s with the new schema. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
+                                escapeTable(database, tableName),
+                                escapeTable(database, tmpTableName),
+                                escapeTable(database, tmpTableName),
+                                escapeTable(database, tableName)))
+        );
     }
 
-    static String generateAlterTableQuery(String database, String table, List<Column> columnsToAdd,
-                                          List<Column> columnsToChange) {
+    static List<QueryWithCleanup> generateAlterTableQuery(
+            String database,
+            String table,
+            List<Column> columnsToAdd,
+            List<Column> columnsToChange) {
+
         if (columnsToAdd.isEmpty() && columnsToChange.isEmpty()) {
             return null;
         }
 
-        StringBuilder query = new StringBuilder();
+        List<QueryWithCleanup> queries = new ArrayList<>();
 
         for (Column column : columnsToChange) {
             String tmpColName = column.getName() + "_alter_tmp";
-            query.append(String.format("ALTER TABLE %s ADD %s %s; ",
-                    escapeTable(database, table), escapeIdentifier(tmpColName),
-                    mapDataTypes(column.getType(), column.getParams())));
-            query.append(
-                    String.format("UPDATE %s SET %s = %s; ", escapeTable(database, table),
-                            escapeIdentifier(tmpColName), escapeIdentifier(column.getName())));
-            query.append(String.format("ALTER TABLE %s DROP %s; ", escapeTable(database, table),
-                    escapeIdentifier(column.getName())));
-            query.append(String.format("ALTER TABLE %s RENAME %s TO %s; ",
-                    escapeTable(database, table), tmpColName, escapeIdentifier(column.getName())));
+
+            String addColumnQuery = String.format(
+                    "ALTER TABLE %s ADD %s %s",
+                    escapeTable(database, table),
+                    escapeIdentifier(tmpColName),
+                    mapDataTypes(column.getType(), column.getParams())
+            );
+
+            String copyDataQuery = String.format(
+                    "UPDATE %s SET %s = %s",
+                    escapeTable(database, table),
+                    escapeIdentifier(tmpColName),
+                    escapeIdentifier(column.getName())
+            );
+
+            String dropColumnQuery = String.format(
+                    "ALTER TABLE %s DROP %s",
+                    escapeTable(database, table),
+                    escapeIdentifier(column.getName())
+            );
+
+            String renameColumnQuery = String.format(
+                    "ALTER TABLE %s RENAME %s TO %s",
+                    escapeTable(database, table),
+                    tmpColName,
+                    escapeIdentifier(column.getName())
+            );
+
+            String cleanupTmpColumnQuery = String.format(
+                    "ALTER TABLE %s DROP %s",
+                    escapeTable(database, table),
+                    escapeIdentifier(tmpColName)
+            );
+
+            // Order preserved exactly as original code
+            queries.add(new QueryWithCleanup(addColumnQuery, null, null));
+            queries.add(new QueryWithCleanup(copyDataQuery, cleanupTmpColumnQuery, null));
+            queries.add(new QueryWithCleanup(dropColumnQuery, cleanupTmpColumnQuery, null));
+            queries.add(new QueryWithCleanup(renameColumnQuery, null, null));
         }
 
         if (!columnsToAdd.isEmpty()) {
             List<String> addOperations = new ArrayList<>();
 
-            columnsToAdd.forEach(column -> addOperations
-                    .add(String.format("ADD %s", getColumnDefinition(column))));
+            columnsToAdd.forEach(column ->
+                    addOperations.add(String.format("ADD %s", getColumnDefinition(column)))
+            );
 
-            query.append(String.format("ALTER TABLE %s %s; ", escapeTable(database, table),
-                    String.join(", ", addOperations)));
+            String addColumnsQuery = String.format(
+                    "ALTER TABLE %s %s",
+                    escapeTable(database, table),
+                    String.join(", ", addOperations)
+            );
+
+            queries.add(new QueryWithCleanup(addColumnsQuery, null, null));
         }
-        Logger.logMessage(Logger.LogLevel.INFO, "Prepared SQL statement: " + query.toString());
-        return query.toString();
+
+        return queries;
     }
 
     static String generateTruncateTableQuery(String database, String table,
@@ -820,4 +911,664 @@ public class TeradataJDBCUtil {
     public static String getTableName(String schema, String table) {
         return schema + "_" + table;
     }
+
+    private static String getTempName(String originalName) {
+        return originalName + "_tmp_" + Integer.toHexString(new Random().nextInt(0x1000000));
+    }
+
+    private static boolean checkTableNonEmpty(TeradataConfiguration conf, String database, String table) throws Exception {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(String.format("SELECT 1 FROM %s LIMIT 1", escapeTable(database, table)))) {
+            return rs.next();
+        }
+    }
+
+    private static boolean checkMaxStartTime(TeradataConfiguration conf, String database, String table, String maxTime) throws Exception {
+        try (
+                Connection conn = TeradataJDBCUtil.
+createConnection(conf);
+                PreparedStatement stmt = conn.prepareStatement(
+                        String.format("SELECT MAX(_fivetran_start) < ? FROM %s", escapeTable(database, table)));
+        ) {
+            setParameter(stmt, 1, DataType.NAIVE_DATETIME, maxTime, "NULL");
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+    }
+
+    static List<QueryWithCleanup> generateMigrateQueries(MigrateRequest request, WarningHandler warningHandler) throws Exception {
+        TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
+
+        MigrationDetails details = request.getDetails();
+        String database = getDatabaseName(conf, details.getSchema());
+        String table = getTableName(details.getSchema(), details.getTable());
+
+        Table t;
+        switch (details.getOperationCase()) {
+            case DROP:
+                DropOperation drop = details.getDrop();
+                switch (drop.getEntityCase()) {
+                    case DROP_TABLE:
+                        return generateMigrateDropQueries(table, database);
+                    case DROP_COLUMN_IN_HISTORY_MODE:
+                        DropColumnInHistoryMode dropColumnInHistoryMode = drop.getDropColumnInHistoryMode();
+
+                        if (!checkTableNonEmpty(conf, database, table)) {
+                            return new ArrayList<>();
+                        }
+                        if (!checkMaxStartTime(conf, database, table, dropColumnInHistoryMode.getOperationTimestamp())) {
+                            throw new IllegalArgumentException("Cannot drop column in history mode because maximum _fivetran_start is greater than the operation timestamp");
+                        }
+
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateDropColumnInHistoryMode(drop.getDropColumnInHistoryMode(), t, database, table);
+                    default:
+                        throw new IllegalArgumentException("Unsupported drop operation");
+                }
+            case COPY:
+                CopyOperation copy = details.getCopy();
+                switch (copy.getEntityCase()) {
+                    case COPY_TABLE:
+                        CopyTable renameTableMigration = copy.getCopyTable();
+                        String tableFrom =
+                                getTableName(details.getSchema(), renameTableMigration.getFromTable());
+                        String tableTo =
+                                getTableName(details.getSchema(), renameTableMigration.getToTable());
+
+                        return generateMigrateCopyTable(tableFrom, tableTo, database);
+                    case COPY_COLUMN:
+                        CopyColumn migration = copy.getCopyColumn();
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        Column c = t.getColumnsList().stream()
+                                .filter(column -> column.getName().equals(migration.getFromColumn()))
+                                .findFirst()
+                                .orElseThrow(() -> new IllegalArgumentException("Source column doesn't exist"));
+
+                        return generateMigrateCopyColumn(copy.getCopyColumn(), database, table, c);
+                    case COPY_TABLE_TO_HISTORY_MODE:
+                        CopyTableToHistoryMode copyTableToHistoryModeMigration = copy.getCopyTableToHistoryMode();
+                        String tableFromHM =
+                                getTableName(details.getSchema(), copyTableToHistoryModeMigration.getFromTable());
+                        String tableToHM =
+                                getTableName(details.getSchema(), copyTableToHistoryModeMigration.getToTable());
+
+                        t = getTable(conf, database, tableFromHM, copyTableToHistoryModeMigration.getFromTable(), warningHandler);
+
+                        return generateMigrateCopyTableToHistoryMode(t,
+                                database, tableFromHM, tableToHM, copyTableToHistoryModeMigration.getSoftDeletedColumn());
+                    default:
+                        throw new IllegalArgumentException("Unsupported copy operation");
+                }
+            case RENAME:
+                RenameOperation rename = details.getRename();
+                switch (rename.getEntityCase()) {
+                    case RENAME_TABLE:
+                        RenameTable renameTableMigration = rename.getRenameTable();
+                        String tableFrom =
+                                getTableName(details.getSchema(), renameTableMigration.getFromTable());
+                        String tableTo =
+                                getTableName(details.getSchema(), renameTableMigration.getToTable());
+
+                        return generateMigrateRenameTable(tableFrom, tableTo, database);
+                    case RENAME_COLUMN:
+                        return generateMigrateRenameColumn(rename.getRenameColumn(), database, table);
+                    default:
+                        throw new IllegalArgumentException("Unsupported rename operation");
+                }
+            case ADD:
+                AddOperation add = details.getAdd();
+                switch (add.getEntityCase()) {
+                    case ADD_COLUMN_IN_HISTORY_MODE:
+                        AddColumnInHistoryMode addColumnInHistoryMode = add.getAddColumnInHistoryMode();
+
+                        boolean isEmpty = !checkTableNonEmpty(conf, database, table);
+                        if (!isEmpty && !checkMaxStartTime(conf, database, table, addColumnInHistoryMode.getOperationTimestamp())) {
+                            throw new IllegalArgumentException("Cannot add column in history mode because maximum _fivetran_start is greater than the operation timestamp");
+                        }
+
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateAddColumnInHistoryMode(addColumnInHistoryMode, t, database, table, isEmpty);
+                    case ADD_COLUMN_WITH_DEFAULT_VALUE:
+                        return generateMigrateAddColumnWithDefaultValue(add.getAddColumnWithDefaultValue(), table, database);
+                    default:
+                        throw new IllegalArgumentException("Unsupported add operation");
+                }
+            case UPDATE_COLUMN_VALUE:
+                UpdateColumnValueOperation updateColumnValue = details.getUpdateColumnValue();
+                t = getTable(conf, database, table, details.getTable(), warningHandler);
+                Column c = t.getColumnsList().stream()
+                        .filter(column -> column.getName().equals(updateColumnValue.getColumn()))
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("Source column doesn't exist"));
+
+                return generateMigrateUpdateColumnValueOperation(updateColumnValue, database, table, c.getType());
+            case TABLE_SYNC_MODE_MIGRATION:
+                TableSyncModeMigrationOperation tableSyncModeMigration = details.getTableSyncModeMigration();
+                TableSyncModeMigrationType type = tableSyncModeMigration.getType();
+                String softDeleteColumn = tableSyncModeMigration.getSoftDeletedColumn();
+                Boolean keepDeletedRows = tableSyncModeMigration.getKeepDeletedRows();
+                switch (type) {
+                    case SOFT_DELETE_TO_LIVE:
+                        return generateMigrateSoftDeleteToLive(database, table, softDeleteColumn);
+                    case SOFT_DELETE_TO_HISTORY:
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateMigrateSoftDeleteToHistory(t, database, table, softDeleteColumn);
+                    case HISTORY_TO_SOFT_DELETE:
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateMigrateHistoryToSoftDelete(t, database, table, softDeleteColumn);
+                    case HISTORY_TO_LIVE:
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateMigrateHistoryToLive(t, database, table, keepDeletedRows);
+                    case LIVE_TO_HISTORY:
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateMigrateLiveToHistory(t, database, table);
+                    case LIVE_TO_SOFT_DELETE:
+                        return generateMigrateLiveToSoftDelete(database, table, softDeleteColumn);
+                    default:
+                        throw new IllegalArgumentException("Unsupported table sync mode migration operation");
+                }
+            default:
+                throw new IllegalArgumentException("Unsupported migration operation");
+        }
+    }
+
+    static List<QueryWithCleanup> generateMigrateDropQueries(String table, String database) {
+        String query = String.format("DROP TABLE %s", escapeTable(database, table));
+        return Collections.singletonList(new QueryWithCleanup(query, null, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateAddColumnWithDefaultValue(AddColumnWithDefaultValue migration, String table, String database) {
+        String column = migration.getColumn();
+        DataType type = migration.getColumnType();
+        String defaultValue = migration.getDefaultValue();
+        String query = String.format("ALTER TABLE %s ADD COLUMN %s %s DEFAULT ?",
+                escapeTable(database, table), escapeIdentifier(column),
+                mapDataTypes(type, null));
+
+        QueryWithCleanup alterQuery = new QueryWithCleanup(query, null, null);
+        alterQuery.addParameter(defaultValue, type);
+        return Collections.singletonList(alterQuery);
+    }
+
+    static List<QueryWithCleanup> generateMigrateRenameTable(String tableFrom, String tableTo, String database) {
+        String query = String.format("ALTER TABLE %s RENAME %s", escapeTable(database, tableFrom), escapeIdentifier(tableTo));
+        return Collections.singletonList(new QueryWithCleanup(query, null, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateRenameColumn(RenameColumn migration, String database, String table) {
+        String query = String.format("ALTER TABLE %s CHANGE %s %s",
+                escapeTable(database, table),
+                escapeIdentifier(migration.getFromColumn()),
+                escapeIdentifier(migration.getToColumn())
+        );
+        return Collections.singletonList(new QueryWithCleanup(query, null, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateCopyColumn(CopyColumn migration,
+                                                            String database,
+                                                            String table,
+                                                            Column c) {
+        String fromColumn = migration.getFromColumn();
+        String toColumn = migration.getToColumn();
+
+        String addColumnQuery = String.format("ALTER TABLE %s ADD COLUMN %s %s",
+                escapeTable(database, table),
+                escapeIdentifier(toColumn),
+                mapDataTypes(c.getType(), c.getParams())
+        );
+        String copyDataQuery = String.format("UPDATE %s SET %s = %s",
+                escapeTable(database, table),
+                escapeIdentifier(toColumn),
+                escapeIdentifier(fromColumn)
+        );
+        String dropColumnQuery = String.format("ALTER TABLE %s DROP COLUMN %s",
+                escapeTable(database, table),
+                escapeIdentifier(toColumn)
+        );
+
+        return Arrays.asList(new QueryWithCleanup(addColumnQuery, null, null),
+                new QueryWithCleanup(copyDataQuery, dropColumnQuery, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateCopyTable(String tableFrom, String tableTo, String database) {
+        String query = String.format("CREATE TABLE %s AS SELECT * FROM %s", escapeTable(database, tableTo), escapeTable(database, tableFrom));
+        return Collections.singletonList(new QueryWithCleanup(query, null, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateUpdateColumnValueOperation(UpdateColumnValueOperation migration, String database, String table, DataType type) {
+        String sql = String.format("UPDATE %s SET %s = ?",
+                escapeTable(database, table),
+                escapeIdentifier(migration.getColumn()));
+
+        QueryWithCleanup query = new QueryWithCleanup(sql, null, null);
+        query.addParameter(migration.getValue(), type);
+        return Collections.singletonList(query);
+    }
+
+    static List<QueryWithCleanup> generateMigrateLiveToSoftDelete(String database,
+                                                                  String table,
+                                                                  String softDeleteColumn) {
+        String addColumnQuery = String.format("ALTER TABLE %s ADD COLUMN %s BOOLEAN",
+                escapeTable(database, table),
+                escapeIdentifier(softDeleteColumn)
+        );
+        String copyDataQuery = String.format("UPDATE %s SET %s = FALSE WHERE %s IS NULL",
+                escapeTable(database, table),
+                escapeIdentifier(softDeleteColumn),
+                escapeIdentifier(softDeleteColumn)
+        );
+        String dropColumnQuery = String.format("ALTER TABLE %s DROP COLUMN %s",
+                escapeTable(database, table),
+                escapeIdentifier(softDeleteColumn)
+        );
+
+        return Arrays.asList(new QueryWithCleanup(addColumnQuery, null, null),
+                new QueryWithCleanup(copyDataQuery, dropColumnQuery, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateLiveToHistory(Table t,
+                                                               String database,
+                                                               String table) {
+        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        String tempTableName = getTempName(table);
+        Table tempTable = t.toBuilder()
+                .setName(tempTableName)
+                .addColumns(
+                        Column.newBuilder()
+                                .setName("_fivetran_start")
+                                .setType(DataType.NAIVE_DATETIME)
+                                .setPrimaryKey(true)
+                )
+                .addColumns(
+                        Column.newBuilder()
+                                .setName("_fivetran_end")
+                                .setType(DataType.NAIVE_DATETIME)
+                )
+                .addColumns(
+                        Column.newBuilder()
+                                .setName("_fivetran_active")
+                                .setType(DataType.BOOLEAN)
+                ).build();
+        String createTableQuery = generateCreateTableQuery(database, tempTableName, tempTable);
+        String populateDataQuery = String.format("INSERT INTO %s SELECT *, NOW() AS `_fivetran_start`, '9999-12-31 23:59:59.999999' AS `_fivetran_end`, TRUE AS `_fivetran_active` FROM %s",
+                escapeTable(database, tempTableName), escapeTable(database, table));
+        String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
+        String renameTableQuery = String.format("ALTER TABLE %s RENAME %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+
+        return Arrays.asList(
+                new QueryWithCleanup(createTableQuery, null, null),
+                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(renameTableQuery, null,
+                        String.format("Failed to migrate table %s to history mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
+                                escapeTable(database, table),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, table)))
+        );
+    }
+
+    static List<QueryWithCleanup> generateMigrateSoftDeleteToHistory(Table t,
+                                                                     String database,
+                                                                     String table,
+                                                                     String softDeleteColumn) {
+        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        List<Column> tempTableColumns = t.getColumnsList().stream()
+                .filter(c -> !c.getName().equals(softDeleteColumn))
+                .collect(Collectors.toList());
+        tempTableColumns.add(
+                Column.newBuilder()
+                        .setName("_fivetran_start")
+                        .setType(DataType.NAIVE_DATETIME)
+                        .setPrimaryKey(true)
+                        .build()
+        );
+        tempTableColumns.add(
+                Column.newBuilder()
+                        .setName("_fivetran_end")
+                        .setType(DataType.NAIVE_DATETIME)
+                        .build()
+        );
+        tempTableColumns.add(
+                Column.newBuilder()
+                        .setName("_fivetran_active")
+                        .setType(DataType.BOOLEAN)
+                        .build()
+        );
+
+        String tempTableName = getTempName(table);
+        Table tempTable = Table.newBuilder()
+                .setName(tempTableName)
+                .addAllColumns(tempTableColumns)
+                .build();
+        String createTableQuery = generateCreateTableQuery(database, tempTableName, tempTable);
+        String populateDataQuery = String.format("INSERT INTO %s " +
+                        "WITH _last_sync AS (SELECT MAX(_fivetran_synced) AS _last_sync FROM %s)" +
+                        "SELECT %s, " +
+                        "IF(%s, '1000-01-01 00:00:00.000000', (SELECT _last_sync FROM _last_sync)) AS `_fivetran_start`, " +
+                        "IF(%s, '1000-01-01 00:00:00.000000', '9999-12-31 23:59:59.999999') AS `_fivetran_end`, " +
+                        "IF(%s, FALSE, TRUE) AS `_fivetran_active` " +
+                        "FROM %s",
+                escapeTable(database, tempTableName),
+                escapeTable(database, table),
+                t.getColumnsList().stream()
+                        .filter(c -> !c.getName().equals(softDeleteColumn))
+                        .map(c -> escapeIdentifier(c.getName())).collect(Collectors.joining(", ")),
+                escapeIdentifier(softDeleteColumn),
+                escapeIdentifier(softDeleteColumn),
+                escapeIdentifier(softDeleteColumn),
+                escapeTable(database, table)
+        );
+
+        String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
+        String renameTableQuery = String.format("ALTER TABLE %s RENAME %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+
+        return Arrays.asList(
+                new QueryWithCleanup(createTableQuery, null, null),
+                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(renameTableQuery, null,
+                        String.format("Failed to migrate table %s to soft delete mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
+                                escapeTable(database, table),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, table)))
+        );
+    }
+
+    static List<QueryWithCleanup> generateMigrateSoftDeleteToLive(String database,
+                                                                  String table,
+                                                                  String softDeleteColumn) {
+        String deleteRows = String.format("DELETE FROM %s WHERE %s",
+                escapeTable(database, table),
+                escapeIdentifier(softDeleteColumn)
+        );
+        String dropColumnQuery = String.format("ALTER TABLE %s DROP COLUMN %s",
+                escapeTable(database, table),
+                escapeIdentifier(softDeleteColumn)
+        );
+
+        return Arrays.asList(new QueryWithCleanup(deleteRows, null, null),
+                new QueryWithCleanup(dropColumnQuery, null, null));
+    }
+
+    static List<QueryWithCleanup> generateMigrateHistoryToSoftDelete(Table t,
+                                                                     String database,
+                                                                     String table,
+                                                                     String softDeletedColumn) {
+        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        String tempTableName = getTempName(table);
+        List<Column> tempTableColumns = t.getColumnsList().stream()
+                .filter(c ->
+                        !c.getName().equals("_fivetran_start") &&
+                                !c.getName().equals("_fivetran_end") &&
+                                !c.getName().equals("_fivetran_active")
+                )
+                .collect(Collectors.toList());
+        tempTableColumns.add(Column.newBuilder()
+                .setName(softDeletedColumn)
+                .setType(DataType.BOOLEAN)
+                .build()
+        );
+
+        Table tempTable = Table.newBuilder()
+                .setName(tempTableName)
+                .addAllColumns(tempTableColumns).build();
+
+        String createTableQuery = generateCreateTableQuery(database, tempTableName, tempTable);
+        String populateDataQuery;
+        if (tempTableColumns.stream().noneMatch(Column::getPrimaryKey)) {
+            populateDataQuery = String.format("INSERT INTO %s " +
+                            "SELECT %s, IF(_fivetran_active, FALSE, TRUE) AS %s" +
+                            "FROM %s",
+                    escapeTable(database, tempTableName),
+                    tempTableColumns.stream().filter(c -> !c.getName().equals(softDeletedColumn))
+                            .map(c -> escapeIdentifier(c.getName())).collect(Collectors.joining(", ")),
+                    escapeIdentifier(softDeletedColumn),
+                    escapeTable(database, table)
+            );
+        } else {
+            populateDataQuery = String.format("INSERT INTO %s " +
+                            "SELECT %s, IF(_fivetran_active, FALSE, TRUE) AS %s " +
+                            "FROM (" +
+                            " SELECT *, ROW_NUMBER() OVER (PARTITION BY %s ORDER BY _fivetran_start DESC) as rn FROM %s" +
+                            ") ranked " +
+                            "WHERE rn = 1",
+                    escapeTable(database, tempTableName),
+                    tempTableColumns.stream().filter(c -> !c.getName().equals(softDeletedColumn))
+                            .map(c -> escapeIdentifier(c.getName())).collect(Collectors.joining(", ")),
+                    escapeIdentifier(softDeletedColumn),
+                    tempTableColumns.stream().filter(Column::getPrimaryKey)
+                            .map(c -> escapeIdentifier(c.getName())).collect(Collectors.joining(", ")),
+                    escapeTable(database, table)
+            );
+        }
+        String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
+        String renameTableQuery = String.format("ALTER TABLE %s RENAME %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+
+        return Arrays.asList(
+                new QueryWithCleanup(createTableQuery, null, null),
+                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(renameTableQuery, null,
+                        String.format("Failed to migrate table %s to soft delete mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
+                                escapeTable(database, table),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, table)))
+        );
+    }
+
+    static List<QueryWithCleanup> generateMigrateHistoryToLive(Table t,
+                                                               String database,
+                                                               String table,
+                                                               Boolean keep_deleted_rows) {
+        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        String tempTableName = getTempName(table);
+        Table tempTable = Table.newBuilder()
+                .setName(tempTableName)
+                .addAllColumns(
+                        t.getColumnsList().stream()
+                                .filter(c ->
+                                        !c.getName().equals("_fivetran_start") &&
+                                                !c.getName().equals("_fivetran_end") &&
+                                                !c.getName().equals("_fivetran_active")
+                                )
+                                .collect(Collectors.toList())
+                ).build();
+
+        String createTableQuery = generateCreateTableQuery(database, tempTableName, tempTable);
+        String populateDataQuery = String.format("INSERT INTO %s " +
+                        "SELECT %s " +
+                        "FROM %s" +
+                        "%s",
+                escapeTable(database, tempTableName),
+                tempTable.getColumnsList().stream().map(c -> escapeIdentifier(c.getName())).collect(Collectors.joining(", ")),
+                escapeTable(database, table),
+                keep_deleted_rows ? "" : " WHERE _fivetran_active"
+        );
+        String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
+        String renameTableQuery = String.format("ALTER TABLE %s RENAME %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+
+        return Arrays.asList(
+                new QueryWithCleanup(createTableQuery, null, null),
+                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(renameTableQuery, null,
+                        String.format("Failed to migrate table %s to live mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
+                                escapeTable(database, table),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, tempTableName),
+                                escapeTable(database, table)))
+        );
+    }
+
+    static List<QueryWithCleanup> generateMigrateCopyTableToHistoryMode(Table t,
+                                                                        String database,
+                                                                        String fromTable,
+                                                                        String toTable,
+                                                                        String softDeleteColumn) {
+        List<Column> newTableColumns = new ArrayList<>(t.getColumnsList());
+        if (softDeleteColumn != null && !softDeleteColumn.isEmpty()) {
+            newTableColumns = newTableColumns.stream()
+                    .filter(c -> !c.getName().equals(softDeleteColumn))
+                    .collect(Collectors.toList());
+        }
+        newTableColumns.add(
+                Column.newBuilder()
+                        .setName("_fivetran_start")
+                        .setType(DataType.NAIVE_DATETIME)
+                        .setPrimaryKey(true)
+                        .build()
+        );
+        newTableColumns.add(
+                Column.newBuilder()
+                        .setName("_fivetran_end")
+                        .setType(DataType.NAIVE_DATETIME)
+                        .build()
+        );
+        newTableColumns.add(
+                Column.newBuilder()
+                        .setName("_fivetran_active")
+                        .setType(DataType.BOOLEAN)
+                        .build()
+        );
+
+        Table newTable = Table.newBuilder()
+                .setName(toTable)
+                .addAllColumns(newTableColumns)
+                .build();
+
+        String createTableQuery = generateCreateTableQuery(database, toTable, newTable);
+        String populateDataQuery;
+        if (softDeleteColumn == null || softDeleteColumn.isEmpty()) {
+            populateDataQuery = String.format("INSERT INTO %s " +
+                            "SELECT *, " +
+                            "NOW() AS `_fivetran_start`, " +
+                            "'9999-12-31 23:59:59.999999' AS `_fivetran_end`, " +
+                            "TRUE AS `_fivetran_active` " +
+                            "FROM %s",
+                    escapeTable(database, toTable),
+                    escapeTable(database, fromTable)
+            );
+
+        } else {
+            populateDataQuery = String.format("INSERT INTO %s " +
+                            "WITH _last_sync AS (SELECT MAX(_fivetran_synced) AS _last_sync FROM %s)" +
+                            "SELECT %s, " +
+                            "IF(%s, '1000-01-01 00:00:00.000000', (SELECT _last_sync FROM _last_sync)) AS `_fivetran_start`, " +
+                            "IF(%s, '1000-01-01 00:00:00.000000', '9999-12-31 23:59:59.999999') AS `_fivetran_end`, " +
+                            "IF(%s, FALSE, TRUE) AS `_fivetran_active` " +
+                            "FROM %s",
+                    escapeTable(database, toTable),
+                    escapeTable(database, fromTable),
+                    t.getColumnsList().stream()
+                            .filter(c -> !c.getName().equals(softDeleteColumn))
+                            .map(c -> escapeIdentifier(c.getName())).collect(Collectors.joining(", ")),
+                    escapeIdentifier(softDeleteColumn),
+                    escapeIdentifier(softDeleteColumn),
+                    escapeIdentifier(softDeleteColumn),
+                    escapeTable(database, fromTable)
+            );
+        }
+
+        return Arrays.asList(
+                new QueryWithCleanup(createTableQuery, null, null),
+                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, toTable)), null)
+        );
+    }
+
+    static List<QueryWithCleanup> generateDropColumnInHistoryMode(DropColumnInHistoryMode migration, Table t, String database, String table) {
+        String column = migration.getColumn();
+        String operationTimestamp = migration.getOperationTimestamp();
+
+        QueryWithCleanup insertQuery = new QueryWithCleanup(String.format("INSERT INTO %s (%s, %s, _fivetran_start) " +
+                        "SELECT %s, NULL as %s, ? AS _fivetran_start " +
+                        "FROM %s " +
+                        "WHERE _fivetran_active AND %s IS NOT NULL AND _fivetran_start < ?",
+                escapeTable(database, table),
+                t.getColumnsList().stream()
+                        .filter(c -> !c.getName().equals(column) && !c.getName().equals("_fivetran_start"))
+                        .map(c -> escapeIdentifier(c.getName()))
+                        .collect(Collectors.joining(", ")),
+                escapeIdentifier(column),
+                t.getColumnsList().stream()
+                        .filter(c -> !c.getName().equals(column) && !c.getName().equals("_fivetran_start"))
+                        .map(c -> escapeIdentifier(c.getName()))
+                        .collect(Collectors.joining(", ")),
+                escapeIdentifier(column),
+                escapeTable(database, table),
+                escapeIdentifier(column)
+        ), null, null)
+                .addParameter(operationTimestamp, DataType.NAIVE_DATETIME)
+                .addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
+        QueryWithCleanup updateQuery = new QueryWithCleanup(String.format("UPDATE %s " +
+                        "SET _fivetran_end = DATE_SUB(?,  INTERVAL 1 MICROSECOND), _fivetran_active = FALSE " +
+                        "WHERE _fivetran_active AND %s IS NOT NULL AND _fivetran_start < ?",
+                escapeTable(database, table),
+                escapeIdentifier(column)
+        ), null, null);
+        updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+        updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
+        return Arrays.asList(insertQuery, updateQuery);
+    }
+
+    static List<QueryWithCleanup> generateAddColumnInHistoryMode(AddColumnInHistoryMode migration, Table t, String database, String table, boolean isEmptyTable) {
+        String column = migration.getColumn();
+        DataType columnType = migration.getColumnType();
+        String defaultValue = migration.getDefaultValue();
+        String operationTimestamp = migration.getOperationTimestamp();
+
+        QueryWithCleanup alterTableQuery = new QueryWithCleanup(
+                String.format("ALTER TABLE %s ADD COLUMN %s %s",
+                        escapeTable(database, table),
+                        escapeIdentifier(column),
+                        mapDataTypes(columnType, null)
+                ),
+                null, null);
+
+        if (isEmptyTable) {
+            return Collections.singletonList(alterTableQuery);
+        }
+
+        String dropColumnCleanup = String.format("ALTER TABLE %s DROP COLUMN %s", escapeTable(database, table), escapeIdentifier(column));
+
+        QueryWithCleanup insertQuery = new QueryWithCleanup(String.format("INSERT INTO %s (%s, %s, _fivetran_start) " +
+                        "SELECT %s, ? :> %s as %s, ? AS _fivetran_start " +
+                        "FROM %s " +
+                        "WHERE _fivetran_active AND _fivetran_start < ?",
+                escapeTable(database, table),
+                t.getColumnsList().stream()
+                        .filter(c -> !c.getName().equals(column) && !c.getName().equals("_fivetran_start"))
+                        .map(c -> escapeIdentifier(c.getName()))
+                        .collect(Collectors.joining(", ")),
+                escapeIdentifier(column),
+                t.getColumnsList().stream()
+                        .filter(c -> !c.getName().equals(column) && !c.getName().equals("_fivetran_start"))
+                        .map(c -> escapeIdentifier(c.getName()))
+                        .collect(Collectors.joining(", ")),
+                mapDataTypes(columnType, null),
+                escapeIdentifier(column),
+                escapeTable(database, table)
+        ), dropColumnCleanup, null)
+                .addParameter(defaultValue, columnType)
+                .addParameter(operationTimestamp, DataType.NAIVE_DATETIME)
+                .addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
+        QueryWithCleanup updateQuery = new QueryWithCleanup(String.format("UPDATE %s " +
+                        "SET _fivetran_end = DATE_SUB(?,  INTERVAL 1 MICROSECOND), _fivetran_active = FALSE " +
+                        "WHERE _fivetran_active AND _fivetran_start < ?",
+                escapeTable(database, table)
+        ), dropColumnCleanup, null);
+        updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+        updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
+        return Arrays.asList(alterTableQuery, insertQuery, updateQuery);
+    }
+
 }
