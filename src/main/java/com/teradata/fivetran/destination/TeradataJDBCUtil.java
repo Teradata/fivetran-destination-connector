@@ -956,21 +956,6 @@ public class TeradataJDBCUtil {
         }
     }
 
-    private static boolean checkMaxStartTime(TeradataConfiguration conf, String database, String table, String maxTime) throws Exception {
-        try (
-                Connection conn = TeradataJDBCUtil.
-createConnection(conf);
-                PreparedStatement stmt = conn.prepareStatement(
-                        String.format("SELECT CASE WHEN MAX(_fivetran_start) <= ? THEN 1 ELSE 0 END FROM %s", escapeTable(database, table)));
-        ) {
-            setParameter(stmt, 1, DataType.NAIVE_DATETIME, maxTime, "NULL");
-            try (ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                return rs.getBoolean(1);
-            }
-        }
-    }
-
     static List<QueryWithCleanup> generateMigrateQueries(MigrateRequest request, WarningHandler warningHandler) throws Exception {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
@@ -990,9 +975,6 @@ createConnection(conf);
 
                         if (!checkTableNonEmpty(conf, database, table)) {
                             return new ArrayList<>();
-                        }
-                        if (!checkMaxStartTime(conf, database, table, dropColumnInHistoryMode.getOperationTimestamp())) {
-                            throw new IllegalArgumentException("Cannot drop column in history mode because maximum _fivetran_start is greater than the operation timestamp");
                         }
 
                         t = getTable(conf, database, table, details.getTable(), warningHandler);
@@ -1057,9 +1039,6 @@ createConnection(conf);
                         AddColumnInHistoryMode addColumnInHistoryMode = add.getAddColumnInHistoryMode();
 
                         boolean isEmpty = !checkTableNonEmpty(conf, database, table);
-                        if (!isEmpty && !checkMaxStartTime(conf, database, table, addColumnInHistoryMode.getOperationTimestamp())) {
-                            throw new IllegalArgumentException("Cannot add column in history mode because maximum _fivetran_start is greater than the operation timestamp");
-                        }
 
                         t = getTable(conf, database, table, details.getTable(), warningHandler);
                         return generateAddColumnInHistoryMode(addColumnInHistoryMode, t, database, table, isEmpty);
@@ -1108,11 +1087,13 @@ createConnection(conf);
     }
 
     static List<QueryWithCleanup> generateMigrateDropQueries(String table, String database) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateDropQueries: table=%s, database=%s", table, database));
         String query = String.format("DROP TABLE %s", escapeTable(database, table));
         return Collections.singletonList(new QueryWithCleanup(query, null, null));
     }
 
     static List<QueryWithCleanup> generateMigrateAddColumnWithDefaultValue(AddColumnWithDefaultValue migration, String table, String database) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateAddColumnWithDefaultValue: column=%s, table=%s, database=%s", migration.getColumn(), table, database));
         String column = migration.getColumn();
         DataType type = migration.getColumnType();
         String defaultValue = migration.getDefaultValue();
@@ -1130,11 +1111,13 @@ createConnection(conf);
     }
 
     static List<QueryWithCleanup> generateMigrateRenameTable(String tableFrom, String tableTo, String database) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateRenameTable: tableFrom=%s, tableTo=%s, database=%s", tableFrom, tableTo, database));
         String query = String.format("RENAME TABLE %s to %s", escapeTable(database, tableFrom), escapeTable(database, tableTo));
         return Collections.singletonList(new QueryWithCleanup(query, null, null));
     }
 
     static List<QueryWithCleanup> generateMigrateRenameColumn(RenameColumn migration, String database, String table) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateRenameColumn: fromColumn=%s, toColumn=%s, table=%s, database=%s", migration.getFromColumn(), migration.getToColumn(), table, database));
         String query = String.format(
                 "ALTER TABLE %s RENAME %s TO %s",
                 escapeTable(database, table),
@@ -1148,6 +1131,7 @@ createConnection(conf);
                                                             String database,
                                                             String table,
                                                             Column c) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateCopyColumn: fromColumn=%s, toColumn=%s, table=%s, database=%s", migration.getFromColumn(), migration.getToColumn(), table, database));
         String fromColumn = migration.getFromColumn();
         String toColumn = migration.getToColumn();
 
@@ -1171,11 +1155,13 @@ createConnection(conf);
     }
 
     static List<QueryWithCleanup> generateMigrateCopyTable(String tableFrom, String tableTo, String database) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateCopyTable: tableFrom=%s, tableTo=%s, database=%s", tableFrom, tableTo, database));
         String query = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH DATA", escapeTable(database, tableTo), escapeTable(database, tableFrom));
         return Collections.singletonList(new QueryWithCleanup(query, null, null));
     }
 
     static List<QueryWithCleanup> generateMigrateUpdateColumnValueOperation(UpdateColumnValueOperation migration, String database, String table, DataType type) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateUpdateColumnValueOperation: column=%s, value=%s, table=%s, database=%s", migration.getColumn(), migration.getValue(), table, database));
         String sql = String.format("UPDATE %s SET %s = ?",
                 escapeTable(database, table),
                 escapeIdentifier(migration.getColumn()));
@@ -1188,6 +1174,7 @@ createConnection(conf);
     static List<QueryWithCleanup> generateMigrateLiveToSoftDelete(String database,
                                                                   String table,
                                                                   String softDeleteColumn) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateLiveToSoftDelete: table=%s, softDeleteColumn=%s, database=%s", table, softDeleteColumn, database));
         String addColumnQuery = String.format("ALTER TABLE %s ADD %s BYTEINT",
                 escapeTable(database, table),
                 escapeIdentifier(softDeleteColumn)
@@ -1209,6 +1196,7 @@ createConnection(conf);
     static List<QueryWithCleanup> generateMigrateLiveToHistory(Table t,
                                                                String database,
                                                                String table) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateLiveToHistory: table=%s, database=%s", table, database));
         // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
         String tempTableName = getTempName(table);
         Table tempTable = t.toBuilder()
@@ -1252,6 +1240,7 @@ createConnection(conf);
                                                                      String database,
                                                                      String table,
                                                                      String softDeleteColumn) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateSoftDeleteToHistory: table=%s, softDeleteColumn=%s, database=%s", table, softDeleteColumn, database));
         // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
         List<Column> tempTableColumns = t.getColumnsList().stream()
                 .filter(c -> !c.getName().equals(softDeleteColumn))
@@ -1323,6 +1312,7 @@ createConnection(conf);
     static List<QueryWithCleanup> generateMigrateSoftDeleteToLive(String database,
                                                                   String table,
                                                                   String softDeleteColumn) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateSoftDeleteToLive: table=%s, softDeleteColumn=%s, database=%s", table, softDeleteColumn, database));
         String deleteRows = String.format("DELETE FROM %s WHERE %s = 1",
                 escapeTable(database, table),
                 escapeIdentifier(softDeleteColumn)
@@ -1340,6 +1330,7 @@ createConnection(conf);
                                                                      String database,
                                                                      String table,
                                                                      String softDeletedColumn) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateHistoryToSoftDelete: table=%s, softDeletedColumn=%s, database=%s", table, softDeletedColumn, database));
         // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
         String tempTableName = getTempName(table);
         List<Column> tempTableColumns = t.getColumnsList().stream()
@@ -1413,6 +1404,7 @@ createConnection(conf);
                                                                String database,
                                                                String table,
                                                                Boolean keep_deleted_rows) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateHistoryToLive: table=%s, keep_deleted_rows=%s, database=%s", table, keep_deleted_rows, database));
         // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
         String tempTableName = getTempName(table);
         Table tempTable = Table.newBuilder()
@@ -1458,6 +1450,7 @@ createConnection(conf);
                                                                         String fromTable,
                                                                         String toTable,
                                                                         String softDeleteColumn) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateCopyTableToHistoryMode: fromTable=%s, toTable=%s, softDeleteColumn=%s, database=%s", fromTable, toTable, softDeleteColumn, database));
         List<Column> newTableColumns = new ArrayList<>(t.getColumnsList());
         if (softDeleteColumn != null && !softDeleteColumn.isEmpty()) {
             newTableColumns = newTableColumns.stream()
@@ -1542,6 +1535,7 @@ createConnection(conf);
     }
 
     static List<QueryWithCleanup> generateDropColumnInHistoryMode(DropColumnInHistoryMode migration, Table t, String database, String table) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateDropColumnInHistoryMode: column=%s, table=%s, database=%s", migration.getColumn(), table, database));
         String column = migration.getColumn();
         String operationTimestamp = migration.getOperationTimestamp();
 
@@ -1584,6 +1578,7 @@ createConnection(conf);
     }
 
     static List<QueryWithCleanup> generateAddColumnInHistoryMode(AddColumnInHistoryMode migration, Table t, String database, String table, boolean isEmptyTable) {
+        Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateAddColumnInHistoryMode: column=%s, table=%s, database=%s, isEmptyTable=%s", migration.getColumn(), table, database, isEmptyTable));
         String column = migration.getColumn();
         DataType columnType = migration.getColumnType();
         String defaultValue = migration.getDefaultValue();
@@ -1646,3 +1641,4 @@ createConnection(conf);
     }
 
 }
+
