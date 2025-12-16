@@ -1,17 +1,16 @@
 package com.teradata.fivetran.destination;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import fivetran_sdk.v2.*;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class AlterTableTest extends IntegrationTestBase {
 
@@ -304,4 +303,144 @@ public class AlterTableTest extends IntegrationTestBase {
                     Arrays.asList(Arrays.asList("1", null), Arrays.asList("2", null)));
         }
     }
+
+    @Test
+    public void dropColumn() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_dropColumn";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                    "CREATE TABLE " +
+                            TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                            "(a INT, b INT)"
+            );
+
+            Table table = Table.newBuilder()
+                    .setName("dropColumn")
+                    .addAllColumns(Collections.singletonList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build()
+                    ))
+                    .build();
+
+            AlterTableRequest request =
+                    AlterTableRequest.newBuilder()
+                            .putAllConfiguration(confMap)
+                            .setSchemaName(IntegrationTestBase.schema)
+                            .setTable(table)
+                            .setDropColumns(true)
+                            .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(
+                    conf,
+                    conf.database(),
+                    tableName,
+                    tableName,
+                    testWarningHandle
+            );
+
+            List<Column> columns = result.getColumnsList();
+
+            assertEquals("a", columns.get(0).getName());
+            assertEquals(DataType.INT, columns.get(0).getType());
+            assertFalse(columns.get(0).getPrimaryKey());
+            assertEquals(1, columns.size());
+        }
+    }
+
+    @Test
+    public void dropPK() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_dropPK";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                    "CREATE TABLE " +
+                            TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                            "(a INT, b INT NOT NULL PRIMARY KEY)"
+            );
+
+            Table table = Table.newBuilder()
+                    .setName("dropPK")
+                    .addAllColumns(Collections.singletonList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build()
+                    ))
+                    .build();
+
+            AlterTableRequest request =
+                    AlterTableRequest.newBuilder()
+                            .putAllConfiguration(confMap)
+                            .setSchemaName(IntegrationTestBase.schema)
+                            .setTable(table)
+                            .setDropColumns(true)
+                            .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(
+                    conf,
+                    conf.database(),
+                    tableName,
+                    tableName,
+                    testWarningHandle
+            );
+
+            List<Column> columns = result.getColumnsList();
+
+            assertEquals("a", columns.get(0).getName());
+            assertEquals(DataType.INT, columns.get(0).getType());
+            assertFalse(columns.get(0).getPrimaryKey());
+            assertEquals(1, columns.size());
+        }
+    }
+
+    @Test
+    public void dontDrop() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_dontDrop";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                    "CREATE TABLE " +
+                            TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                            "(a INT, b INT)"
+            );
+
+            Table table = Table.newBuilder()
+                    .setName("dontDrop")
+                    .addAllColumns(Collections.singletonList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build()
+                    ))
+                    .build();
+
+            AlterTableRequest request =
+                    AlterTableRequest.newBuilder()
+                            .putAllConfiguration(confMap)
+                            .setSchemaName(IntegrationTestBase.schema)
+                            .setTable(table)
+                            .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+
+            assertNull(queries);
+        }
+    }
+
+
 }
