@@ -9,6 +9,8 @@ import io.grpc.stub.StreamObserver;
 
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
@@ -174,18 +176,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
 
 
-        FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
-                .setLabel("SSL Server's Certificate").setRequired(true)
-                .setDescription(
-                        "Server's certificate.\n"
-                        + "Please specify the base64url encoded contents of a PEM file that contains Certificate Authority (CA) certificates.\n"
-                        + "The base64url encoded value must conform to IETF RFC 4648 Section 5 - Base 64 Encoding with URL and Filename Safe Alphabet.\n"
-                        + "Example Linux command to print the base64url encoded contents of a PEM file: base64 -w0 < cert.pem | tr +/ -_ | tr -d = \n"
-                        + "For more information, please refer: https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/jdbcug_chapter_2.html#URL_SSLBASE64\n")
-                .setTextField(TextField.PlainText)
-                .build();
-
-
         FormField sslMode = FormField.newBuilder().setName("ssl.mode").setLabel("SSL mode")
                 .setRequired(false)
                 .setDescription(
@@ -204,6 +194,21 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("REQUIRE")
                         .addDropdownField("VERIFY-CA")
                         .addDropdownField("VERIFY-FULL"))
+                .build();
+
+        FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
+                .setLabel("SSL Server's Certificate").setRequired(true)
+                .setDescription(
+                        "Upload the server's certificate file.\n"
+                                + "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.\n"
+                                + "The file must contain Certificate Authority (CA) certificates.\n\n"
+                                + "Please upload the raw certificate file directly — no base64url encoding is required.\n")
+                .setUploadField(UploadField.newBuilder()
+                        .setMaxFileSizeBytes(1000000) // 1 MB
+                        .addAllowedFileType("pem")
+                        .addAllowedFileType("txt")
+                        .addAllowedFileType("crt")
+                        .build())
                 .build();
 
         FormField sslVerifyCa = FormField.newBuilder()
@@ -503,6 +508,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(column -> column.getPrimaryKey())) {
                 throw new Exception("No primary key found");
             }
+
+            setTimeZoneToUTCIfNeeded(conn);
+
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
             Logger.logMessage(Logger.LogLevel.INFO, "Start: Timestamp: " + System.currentTimeMillis());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
@@ -596,6 +604,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
             }
+
+            setTimeZoneToUTCIfNeeded(conn);
+
             Logger.logMessage(Logger.LogLevel.INFO,"********************************In EarliestStartHistoryWriter**********************************");
             EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
@@ -675,6 +686,22 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             if (conf.useFastLoad() && fw != null && !request.getReplaceFilesList().isEmpty()) {
                 fw.dropTempTable();
                 fw.dropErrorTables();
+            }
+        }
+    }
+
+    private void setTimeZoneToUTCIfNeeded(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("HELP SESSION;")) {
+
+            if (rs.next()) {
+                String tz = rs.getString("Session Time Zone");
+                Logger.logMessage(Logger.LogLevel.INFO, "Current TIME ZONE: " + tz);
+
+                if (tz != null && !"00:00".equals(tz.trim())) {
+                    Logger.logMessage(Logger.LogLevel.INFO, "Setting TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+                    stmt.execute("SET TIME ZONE INTERVAL '0:00' HOUR TO MINUTE");
+                }
             }
         }
     }
