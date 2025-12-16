@@ -75,10 +75,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         FormField logmech =  FormField.newBuilder().setName("logmech").setLabel("Logon Mechanism")
                 .setRequired(true)
                 .setDescription(
-                        "Logon Mechanism.\n"
-                                + "Options include:\n"
-                                + " * 'TD2' uses Teradata Method 2;\n"
-                                + " * 'LDAP' uses Lightweight Directory Access Protocol;\n"
+                        "Logon Mechanism.<br />"
+                                + "Options include:<br />"
+                                + " * 'TD2' uses Teradata Method 2;<br />"
+                                + " * 'LDAP' uses Lightweight Directory Access Protocol;<br />"
                                 + " * 'BROWSER' uses Browser Authentication")
                 .setDropdownField(DropdownField.newBuilder()
                         .addDropdownField("TD2")
@@ -120,10 +120,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         FormField tmode =  FormField.newBuilder().setName("tmode").setLabel("Transaction Mode")
                 .setRequired(true)
                 .setDescription(
-                        "Transaction Mode.\n"
-                                + "Options include:\n"
-                                + " * 'ANSI' uses American National Standards Institute (ANSI) transaction semantics. This mode is recommended.;\n"
-                                + " * 'TERA' uses legacy Teradata transaction semantics. This mode is only recommended for legacy applications that require Teradata transaction semantics;\n"
+                        "Transaction Mode.<br />"
+                                + "Options include:<br />"
+                                + " * 'ANSI' uses American National Standards Institute (ANSI) transaction semantics. This mode is recommended.;<br />"
+                                + " * 'TERA' uses legacy Teradata transaction semantics. This mode is only recommended for legacy applications that require Teradata transaction semantics;<br />"
                                 + " * 'DEFAULT' (the default) uses the default transaction mode configured for the database, which may be either ANSI or TERA mode.")
                 .setDropdownField(DropdownField.newBuilder()
                         .addDropdownField("ANSI")
@@ -133,9 +133,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
         FormField defaultVarcharSize =  FormField.newBuilder().setName("default.varchar.size").setLabel("Default VARCHAR Size")
                 .setRequired(false)
-                .setDescription("Specifies the default size for VARCHAR columns.\n"
-                                + "For UNICODE character set, the maximum size is 32000 characters.\n"
-                                + "For LATIN character set, the maximum size is 64000 characters.\n"
+                .setDescription("Specifies the default size for VARCHAR columns.<br />"
+                                + "For UNICODE character set, the maximum size is 32000 characters.<br />"
+                                + "For LATIN character set, the maximum size is 64000 characters.<br />"
                                 + "The default value is 256 characters.")
                 .setTextField(TextField.PlainText)
                 .build();
@@ -143,10 +143,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         FormField varcharCharacterSet =  FormField.newBuilder().setName("varchar.character.set").setLabel("Varchar column CHARACTER SET")
                 .setRequired(false)
                 .setDescription(
-                        "Specifies the character set for VARCHAR columns.\n"
-                                + "Options include:\n"
-                                + " * 'LATIN' uses the LATIN character set;\n"
-                                + " * 'UNICODE' uses the UNICODE character set.\n"
+                        "Specifies the character set for VARCHAR columns.<br />"
+                                + "Options include:<br />"
+                                + " * 'LATIN' uses the LATIN character set;<br />"
+                                + " * 'UNICODE' uses the UNICODE character set.<br />"
                                 + "The default is 'LATIN'.")
                 .setDropdownField(DropdownField.newBuilder()
                         .addDropdownField("LATIN")
@@ -158,16 +158,16 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setLabel("Use FastLoad [BETA]")
                 .setRequired(false)
                 .setDescription(
-                        "Specifies whether to use Teradata FastLoad for loading data into empty tables.\n"
-                                + "FastLoad provides high-speed loading but requires the target table to be empty.\n"
-                                + "Limitations:\n"
-                                + " * FastLoad does not support tables containing LOB (CLOB or BLOB) columns.\n"
-                                + " * It cannot be used for tables that already contain data.\n"
-                                + " * In FastLoad mode, all VARCHAR columns are created with a fixed length of 256.\n"
-                                + "   Dynamic resizing of VARCHAR columns is not supported because the table remains locked during loading.\n"
-                                + "   Actual VARCHAR column sizes are expected to be provided by the Fivetran API; however, this capability\n"
-                                + "   is not yet implemented by Fivetran.\n"
-                                + "If disabled, standard batch insert operations will be used instead.\n"
+                        "Specifies whether to use Teradata FastLoad for loading data into empty tables.<br />"
+                                + "FastLoad provides high-speed loading but requires the target table to be empty.<br />"
+                                + "Limitations:<br />"
+                                + " * FastLoad does not support tables containing LOB (CLOB or BLOB) columns.<br />"
+                                + " * It cannot be used for tables that already contain data.<br />"
+                                + " * In FastLoad mode, all VARCHAR columns are created with a fixed length of 256.<br />"
+                                + "   Dynamic resizing of VARCHAR columns is not supported because the table remains locked during loading.<br />"
+                                + "   Actual VARCHAR column sizes are expected to be provided by the Fivetran API; however, this capability<br />"
+                                + "   is not yet implemented by Fivetran.<br />"
+                                + "If disabled, standard batch insert operations will be used instead.<br />"
                 )
                 .setDropdownField(DropdownField.newBuilder()
                         .addDropdownField("false")
@@ -179,13 +179,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         FormField sslMode = FormField.newBuilder().setName("ssl.mode").setLabel("SSL mode")
                 .setRequired(false)
                 .setDescription(
-                        "Whether to use an encrypted connection to Teradata.\n"
-                                + "Options include:\n"
-                                + " * 'DISABLE' disables HTTPS/TLS connections and uses only non-TLS connections;\n"
-                                + " * 'ALLOW' uses non-TLS connections unless the database requires HTTPS/TLS connections;\n"
-                                + " * 'PREFER' uses HTTPS/TLS connections unless the database does not offer HTTPS/TLS connections\n"
-                                + " * 'REQUIRE' uses HTTPS/TLS connections\n"
-                                + " * 'VERIFY-CA' uses HTTPS/TLS connections and verifies that the server certificate is valid and trusted\n"
+                        "Whether to use an encrypted connection to Teradata.<br />"
+                                + "Options include:<br />"
+                                + " * 'DISABLE' disables HTTPS/TLS connections and uses only non-TLS connections;<br />"
+                                + " * 'ALLOW' uses non-TLS connections unless the database requires HTTPS/TLS connections;<br />"
+                                + " * 'PREFER' uses HTTPS/TLS connections unless the database does not offer HTTPS/TLS connections<br />"
+                                + " * 'REQUIRE' uses HTTPS/TLS connections<br />"
+                                + " * 'VERIFY-CA' uses HTTPS/TLS connections and verifies that the server certificate is valid and trusted<br />"
                                 + " * 'VERIFY-FULL' uses HTTPS/TLS connections, verifies that the server certificate is valid and trusted, and verifies that the server certificate matches the database hostname.")
                 .setDropdownField(DropdownField.newBuilder()
                         .addDropdownField("DISABLE")
@@ -199,10 +199,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
                 .setLabel("SSL Server's Certificate").setRequired(true)
                 .setDescription(
-                        "Upload the server's certificate file.\n"
-                                + "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.\n"
-                                + "The file must contain Certificate Authority (CA) certificates.\n\n"
-                                + "Please upload the raw certificate file directly — no base64url encoding is required.\n")
+                        "Upload the server's certificate file.<br />"
+                                + "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.<br />"
+                                + "The file must contain Certificate Authority (CA) certificates.<br /><br />"
+                                + "Please upload the raw certificate file directly — no base64url encoding is required.<br />")
                 .setUploadField(UploadField.newBuilder()
                         .setMaxFileSizeBytes(1000000) // 1 MB
                         .addAllowedFileType("pem")
@@ -242,8 +242,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setLabel("Driver Parameters")
                 .setRequired(false)
                 .setDescription(
-                        "Additional JDBC parameters to use with connection string to Teradata Vantage.\n"
-                                + "Format: 'param1=value1,param2=value2, ...'.\n"
+                        "Additional JDBC parameters to use with connection string to Teradata Vantage.<br />"
+                                + "Format: 'param1=value1,param2=value2, ...'.<br />"
                                 + "The supported parameters are available in the https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html")
                 .setTextField(TextField.PlainText)
                 .setPlaceholder("your_driver_parameters")
