@@ -153,7 +153,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
         FormField useFastLoad = FormField.newBuilder()
                 .setName("use.fastload")
-                .setLabel("Use FastLoad")
+                .setLabel("Use FastLoad [BETA]")
                 .setRequired(false)
                 .setDescription(
                         "Specifies whether to use Teradata FastLoad for loading data into empty tables.\n"
@@ -161,8 +161,12 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                 + "Limitations:\n"
                                 + " * FastLoad does not support tables containing LOB (CLOB or BLOB) columns.\n"
                                 + " * It cannot be used for tables that already contain data.\n"
-                                + "If disabled, standard insert operations will be used instead.\n"
-                                + "The default is 'false'.")
+                                + " * In FastLoad mode, all VARCHAR columns are created with a fixed length of 256.\n"
+                                + "   Dynamic resizing of VARCHAR columns is not supported because the table remains locked during loading.\n"
+                                + "   Actual VARCHAR column sizes are expected to be provided by the Fivetran API; however, this capability\n"
+                                + "   is not yet implemented by Fivetran.\n"
+                                + "If disabled, standard batch insert operations will be used instead.\n"
+                )
                 .setDropdownField(DropdownField.newBuilder()
                         .addDropdownField("false")
                         .addDropdownField("true")
