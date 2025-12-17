@@ -36,13 +36,13 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
     implementation "com.fasterxml.jackson.core:jackson-core:2.15.2"
     implementation "commons-cli:commons-cli:1.5.0"
-
+    implementation 'commons-logging:commons-logging:1.2'
     implementation 'com.github.luben:zstd-jni:1.5.5-11'
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.2.3'
     implementation 'com.teradata.jdbc:terajdbc:20.00.00.46'
     implementation 'org.slf4j:slf4j-api:2.0.12'
-    implementation 'ch.qos.logback:logback-core:1.4.14'
-    implementation 'ch.qos.logback:logback-classic:1.4.14'
+    implementation 'ch.qos.logback:logback-core:1.5.13'
+    implementation 'ch.qos.logback:logback-classic:1.5.13'
     implementation group: 'com.opencsv', name: 'opencsv', version: '3.7'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
@@ -89,7 +89,17 @@ jar {
 
 test {
     useJUnitPlatform()
+
+    // Generate reports
+    reports {
+        junitXml.required.set(true)   // XML reports (for CI tools)
+        html.required.set(true)       // Human-readable HTML reports
+    }
+
+    // Optional: make console output more verbose
     testLogging {
+        events "passed", "skipped", "failed"
         exceptionFormat = 'full'
+        showStandardStreams = true
     }
 }

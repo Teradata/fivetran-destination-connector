@@ -153,6 +153,28 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         .addDropdownField("UNICODE"))
                 .build();
 
+        FormField useFastLoad = FormField.newBuilder()
+                .setName("use.fastload")
+                .setLabel("Use FastLoad [BETA]")
+                .setRequired(false)
+                .setDescription(
+                        "Specifies whether to use Teradata FastLoad for loading data into empty tables.\n"
+                                + "FastLoad provides high-speed loading but requires the target table to be empty.\n"
+                                + "Limitations:\n"
+                                + " * FastLoad does not support tables containing LOB (CLOB or BLOB) columns.\n"
+                                + " * It cannot be used for tables that already contain data.\n"
+                                + " * In FastLoad mode, all VARCHAR columns are created with a fixed length of 256.\n"
+                                + "   Dynamic resizing of VARCHAR columns is not supported because the table remains locked during loading.\n"
+                                + "   Actual VARCHAR column sizes are expected to be provided by the Fivetran API; however, this capability\n"
+                                + "   is not yet implemented by Fivetran.\n"
+                                + "If disabled, standard batch insert operations will be used instead.\n"
+                )
+                .setDropdownField(DropdownField.newBuilder()
+                        .addDropdownField("false")
+                        .addDropdownField("true")
+                )
+                .build();
+
 
         FormField sslMode = FormField.newBuilder().setName("ssl.mode").setLabel("SSL mode")
                 .setRequired(false)
@@ -250,7 +272,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, defaultVarcharSize, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, defaultVarcharSize, useFastLoad, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
                 .addAllTests(Arrays.asList(
                         ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
                 .build();
@@ -480,6 +502,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
         LoadDataWriter w = null;
+        FastLoadDataWriter fw = null;
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(column -> column.getPrimaryKey())) {
@@ -489,17 +512,31 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             setTimeZoneToUTCIfNeeded(conn);
 
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
-                            request.getFileParams(), request.getKeysMap(), conf.batchSize(),
-                            new WriteBatchWarningHandler(responseObserver));
+            Logger.logMessage(Logger.LogLevel.INFO, "Start: Timestamp: " + System.currentTimeMillis());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written: " + request.getReplaceFilesList().size());
-            for (String file : request.getReplaceFilesList()) {
-                w.write(file);
+
+            if (conf.useFastLoad()) {
+                fw = new FastLoadDataWriter(conf, conn, database, table, request.getTable().getColumnsList(),
+                        request.getFileParams(), request.getKeysMap(), conf.batchSize());
+                fw.writeData(request.getReplaceFilesList());
+                if (!request.getReplaceFilesList().isEmpty()) {
+                    fw.deleteInsert();
+                    fw.dropTempTable();
+                    fw.dropErrorTables();
+                }
+            } else {
+                w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
+                        request.getFileParams(), request.getKeysMap(), conf.batchSize(),
+                        new WriteBatchWarningHandler(responseObserver));
+                for (String file : request.getReplaceFilesList()) {
+                    w.write(file);
+                }
+                if (!request.getReplaceFilesList().isEmpty()) {
+                    w.deleteInsert();
+                    w.dropTempTable();
+                }
             }
-            if(!request.getReplaceFilesList().isEmpty()) {
-                w.deleteInsert();
-                w.dropTempTable();
-            }
+
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In UpdateWriter**********************************");
             UpdateWriter u =
                     new UpdateWriter(conn, database, table, request.getTable().getColumnsList(),
@@ -519,8 +556,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             responseObserver.onNext(WriteBatchResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
-        }
-        catch (BatchUpdateException bue) {
+            Logger.logMessage(Logger.LogLevel.INFO, "End: Timestamp: " + System.currentTimeMillis());
+        } catch (BatchUpdateException bue) {
             String actualError = "";
             if (bue.getNextException() != null) {
                 Exception nextException = bue.getNextException();
@@ -534,8 +571,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             .setMessage("writeBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + actualError).build())
                     .build());
             responseObserver.onCompleted();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("WriteBatch failed for %s with exception %s",
                     TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
@@ -543,10 +579,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             .setMessage("writeBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
                     .build());
             responseObserver.onCompleted();
-        }
-        finally {
+        } finally {
             if (w != null && !request.getReplaceFilesList().isEmpty()) {
                 w.dropTempTable();
+            }
+            if (conf.useFastLoad() && fw != null && !request.getReplaceFilesList().isEmpty()) {
+                fw.dropTempTable();
+                fw.dropErrorTables();
             }
         }
     }
@@ -558,7 +597,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
-        LoadDataWriter<WriteBatchResponse> w = null;
+        LoadDataWriter w = null;
+        FastLoadDataWriter fw = null;
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(Column::getPrimaryKey)) {
@@ -582,16 +622,26 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 u.write(file);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
-            w = new LoadDataWriter<>(conn, database, table, request.getTable().getColumnsList(),
-                    request.getFileParams(), request.getKeysMap(), conf.batchSize(),
-                    new WriteBatchWarningHandler(responseObserver));
-            Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with history: " + request.getReplaceFilesList().size());
-            for (String file : request.getReplaceFilesList()) {
-                w.write(file);
-            }
-            if(!request.getReplaceFilesList().isEmpty()) {
-                w.deleteInsert();
-                w.dropTempTable();
+            if (conf.useFastLoad()) {
+                fw = new FastLoadDataWriter(conf, conn, database, table, request.getTable().getColumnsList(),
+                        request.getFileParams(), request.getKeysMap(), conf.batchSize());
+                fw.writeData(request.getReplaceFilesList());
+                if (!request.getReplaceFilesList().isEmpty()) {
+                    fw.deleteInsert();
+                    fw.dropTempTable();
+                    fw.dropErrorTables();
+                }
+            } else {
+                w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
+                        request.getFileParams(), request.getKeysMap(), conf.batchSize(),
+                        new WriteBatchWarningHandler(responseObserver));
+                for (String file : request.getReplaceFilesList()) {
+                    w.write(file);
+                }
+                if (!request.getReplaceFilesList().isEmpty()) {
+                    w.deleteInsert();
+                    w.dropTempTable();
+                }
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In DeleteHistoryWriter**********************************");
             DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
@@ -632,6 +682,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         finally {
             if (w != null && !request.getReplaceFilesList().isEmpty()) {
                 w.dropTempTable();
+            }
+            if (conf.useFastLoad() && fw != null && !request.getReplaceFilesList().isEmpty()) {
+                fw.dropTempTable();
+                fw.dropErrorTables();
             }
         }
     }

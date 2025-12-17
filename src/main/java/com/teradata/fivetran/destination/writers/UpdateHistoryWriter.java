@@ -3,6 +3,7 @@ package com.teradata.fivetran.destination.writers;
 import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
+import com.teradata.fivetran.destination.writers.util.ColumnMetadata;
 import fivetran_sdk.v2.Column;
 import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
