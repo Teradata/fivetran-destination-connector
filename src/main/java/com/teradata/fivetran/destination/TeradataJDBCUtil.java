@@ -29,28 +29,25 @@ public class TeradataJDBCUtil {
     static Connection createConnection(TeradataConfiguration conf) throws Exception {
         Properties connectionProps = new Properties();
 
-        connectionProps.put("logmech", conf.logmech());
+        connectionProps.put("LOGMECH", conf.logmech());
         if (!conf.logmech().equals("BROWSER")) {
-            connectionProps.put("user", conf.user());
+            connectionProps.put("USER", conf.user());
             if (conf.password() != null) {
-                connectionProps.put("password", conf.password());
+                connectionProps.put("PASSWORD", conf.password());
             }
         }
 
-        connectionProps.put("tmode", conf.tmode());
+        connectionProps.put("TMODE", conf.tmode());
         connectionProps.put("FLATTEN","ON");
-        connectionProps.put("sslMode", conf.sslMode());
+        connectionProps.put("SSLMODE", conf.sslMode());
         Set<String> CaModes = new HashSet<>(Arrays.asList("DISABLE", "ALLOW", "PREFER", "REQUIRE"));
         if (!CaModes.contains(conf.sslMode())) {
-            /*
-            String[] sslCertPaths = writeSslCertToFile(conf.sslServerCert());
-            connectionProps.put("sslcapath", sslCertPaths[0]);
-            connectionProps.put("sslca", sslCertPaths[1]);
-            Logger.logMessage(Logger.LogLevel.INFO, "SSLCAPATH: " + sslCertPaths[0]);
-            Logger.logMessage(Logger.LogLevel.INFO, "SSLCA: " + sslCertPaths[1]);
-             */
-
-            connectionProps.put("SSLBASE64", conf.sslServerCert());
+            connectionProps.put("SSLCRC", conf.sslCrc());
+            if (conf.sslServerCert() != null) {
+                connectionProps.put("SSLBASE64", conf.sslServerCert());
+            } else {
+                throw new Exception("ssl.server.cert must be provided when ssl.mode is set to " + conf.sslMode());
+            }
         }
 
         String driverParameters = conf.driverParameters();
