@@ -16,7 +16,6 @@ public class FastLoadThread extends Thread {
     List<Column> columns;
 
     public FastLoadThread(FastLoad fastLoad, List<String> files, List<Column> columns, FileParams params, Map<String, ByteString> secretKeys) {
-        System.out.println("FastLoadThread created");
         this.fastLoad = fastLoad;
         this.files = files;
         this.params = params;
@@ -25,7 +24,6 @@ public class FastLoadThread extends Thread {
     }
 
     public void run() {
-        System.out.println("In FastLoadThread run()");
         try {
             for (String file : files) {
                 fastLoad.loadData(file, columns, params, secretKeys);
