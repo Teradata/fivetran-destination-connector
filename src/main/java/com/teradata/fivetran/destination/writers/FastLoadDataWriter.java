@@ -279,10 +279,18 @@ public class FastLoadDataWriter {
                 fastLoadThread[i].start();
             }
             int count = 0;
+            // 30 minutes timeout
+            // Keep waiting normally while progress is happening
+            // When count == numSessions - 1, start a timeout clock
+            // If the last session doesn’t complete within that timeout → throw exception
+            long lastSessionTimeoutMs = 30L * 60 * 1000; // 30 minutes
+            long lastSessionStartTime = -1;
             while (true) {
                 try {
                     Thread.sleep(10000);
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Thread interrupted while waiting for FastLoad completion", e);
                 }
                 for (int i = 0; i < numSessions; i++) {
                     if (fastLoad[i].getLoadCompleted()) {
@@ -293,6 +301,20 @@ public class FastLoadDataWriter {
                     break;
                 }
                 count = 0;
+
+                // Only one session left → apply timeout
+                if (count == numSessions - 1) {
+                    if (lastSessionStartTime == -1) {
+                        lastSessionStartTime = System.currentTimeMillis();
+                    } else if (System.currentTimeMillis() - lastSessionStartTime > lastSessionTimeoutMs) {
+                        throw new RuntimeException(
+                                "FastLoad timeout: last session did not complete within 30 minutes"
+                        );
+                    }
+                } else {
+                    // Reset timeout if progress changes
+                    lastSessionStartTime = -1;
+                }
             }
 
             stmt.executeUpdate("CHECKPOINT LOADING END");
