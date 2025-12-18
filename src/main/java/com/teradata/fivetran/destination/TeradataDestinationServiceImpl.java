@@ -72,18 +72,36 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setPlaceholder("your_password")
                 .build();
 
-        FormField logmech =  FormField.newBuilder().setName("logmech").setLabel("Logon Mechanism")
+        // ✅ Logon Mechanism — switched to DescriptiveDropDownFields
+        FormField logmech = FormField.newBuilder()
+                .setName("logmech")
+                .setLabel("Logon Mechanism")
                 .setRequired(true)
-                .setDescription(
-                        "Logon Mechanism.\n"
-                                + "Options include:\n"
-                                + " * 'TD2' uses Teradata Method 2;\n"
-                                + " * 'LDAP' uses Lightweight Directory Access Protocol;\n"
-                                + " * 'BROWSER' uses Browser Authentication")
-                .setDropdownField(DropdownField.newBuilder()
-                        .addDropdownField("TD2")
-                        .addDropdownField("LDAP")
-                        .addDropdownField("BROWSER"))
+                .setDescriptiveDropdownFields(
+                        DescriptiveDropDownFields.newBuilder()
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("TD2")
+                                                .setValue("TD2")
+                                                .setDescription("Authenticate using Teradata Method 2")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("LDAP")
+                                                .setValue("LDAP")
+                                                .setDescription("Authenticate using LDAP (directory-based)")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("BROWSER")
+                                                .setValue("BROWSER")
+                                                .setDescription("Authenticate using browser-based flow")
+                                                .build()
+                                )
+                                .build()
+                )
                 .build();
 
         FormField TD2Logmech = FormField.newBuilder()
@@ -95,7 +113,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .build()
                                 )
                                 .addAllFields(Arrays.asList(user, td2Password))
-                                .build()).build();
+                                .build()
+                ).build();
 
         FormField LDAPLogmech = FormField.newBuilder()
                 .setConditionalFields(
@@ -106,7 +125,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .build()
                                 )
                                 .addAllFields(Arrays.asList(user, ldapPassword))
-                                .build()).build();
+                                .build()
+                ).build();
 
         FormField database = FormField.newBuilder()
                 .setRequired(true)
@@ -117,77 +137,174 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setPlaceholder("your_database_name")
                 .build();
 
-        FormField tmode =  FormField.newBuilder().setName("tmode").setLabel("Transaction Mode")
+        // ✅ Transaction Mode — switched to DescriptiveDropDownFields
+        FormField tmode = FormField.newBuilder()
+                .setName("tmode")
+                .setLabel("Transaction Mode")
                 .setRequired(true)
-                .setDescription(
-                        "Transaction Mode.\n"
-                                + "Options include:\n"
-                                + " * 'ANSI' uses American National Standards Institute (ANSI) transaction semantics. This mode is recommended.;\n"
-                                + " * 'TERA' uses legacy Teradata transaction semantics. This mode is only recommended for legacy applications that require Teradata transaction semantics;\n"
-                                + " * 'DEFAULT' (the default) uses the default transaction mode configured for the database, which may be either ANSI or TERA mode.")
-                .setDropdownField(DropdownField.newBuilder()
-                        .addDropdownField("ANSI")
-                        .addDropdownField("TERA")
-                        .addDropdownField("DEFAULT"))
+                .setDescriptiveDropdownFields(
+                        DescriptiveDropDownFields.newBuilder()
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("ANSI")
+                                                .setValue("ANSI")
+                                                .setDescription("Use ANSI transaction semantics (recommended)")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("TERA")
+                                                .setValue("TERA")
+                                                .setDescription("Use legacy Teradata transaction semantics")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("DEFAULT")
+                                                .setValue("DEFAULT")
+                                                .setDescription("Use database-configured default (ANSI or TERA)")
+                                                .build()
+                                )
+                                .build()
+                )
                 .build();
 
-        FormField defaultVarcharSize =  FormField.newBuilder().setName("default.varchar.size").setLabel("Default VARCHAR Size")
+        FormField defaultVarcharSize = FormField.newBuilder()
+                .setName("default.varchar.size")
+                .setLabel("Default VARCHAR Size")
                 .setRequired(false)
-                .setDescription("Specifies the default size for VARCHAR columns.\n"
-                                + "For UNICODE character set, the maximum size is 32000 characters.\n"
-                                + "For LATIN character set, the maximum size is 64000 characters.\n"
-                                + "The default value is 256 characters.")
+                .setDescription("Specifies the default size for VARCHAR columns.<br />" +
+                        "For UNICODE character set, the maximum size is 32000 characters.<br />" +
+                        "For LATIN character set, the maximum size is 64000 characters.<br />" +
+                        "The default value is 256 characters.")
                 .setTextField(TextField.PlainText)
                 .build();
 
-        FormField varcharCharacterSet =  FormField.newBuilder().setName("varchar.character.set").setLabel("Varchar column CHARACTER SET")
+        // ✅ Varchar Character Set — switched to DescriptiveDropDownFields
+        FormField varcharCharacterSet = FormField.newBuilder()
+                .setName("varchar.character.set")
+                .setLabel("Varchar column CHARACTER SET")
                 .setRequired(false)
-                .setDescription(
-                        "Specifies the character set for VARCHAR columns.\n"
-                                + "Options include:\n"
-                                + " * 'LATIN' uses the LATIN character set;\n"
-                                + " * 'UNICODE' uses the UNICODE character set.\n"
-                                + "The default is 'LATIN'.")
-                .setDropdownField(DropdownField.newBuilder()
-                        .addDropdownField("LATIN")
-                        .addDropdownField("UNICODE"))
+                .setDescriptiveDropdownFields(
+                        DescriptiveDropDownFields.newBuilder()
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("LATIN")
+                                                .setValue("LATIN")
+                                                .setDescription("LATIN character set (max 64000)")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("UNICODE")
+                                                .setValue("UNICODE")
+                                                .setDescription("UNICODE character set (max 32000)")
+                                                .build()
+                                )
+                                .build()
+                )
+                .build();
+
+        // ✅ SSL Mode — switched to DescriptiveDropDownFields
+        FormField sslMode = FormField.newBuilder()
+                .setName("ssl.mode")
+                .setLabel("SSL mode")
+                .setRequired(false)
+                .setDescriptiveDropdownFields(
+                        DescriptiveDropDownFields.newBuilder()
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("DISABLE")
+                                                .setValue("DISABLE")
+                                                .setDescription("No TLS; use plain connections")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("ALLOW")
+                                                .setValue("ALLOW")
+                                                .setDescription("Use TLS only if required by server")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField( // if your generated class name is strictly addDescriptiveDropdownField, use that
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("PREFER")
+                                                .setValue("PREFER")
+                                                .setDescription("Prefer TLS, fall back to non-TLS if unavailable")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("REQUIRE")
+                                                .setValue("REQUIRE")
+                                                .setDescription("Always require TLS")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("VERIFY-CA")
+                                                .setValue("VERIFY-CA")
+                                                .setDescription("Require TLS and verify CA trust")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("VERIFY-FULL")
+                                                .setValue("VERIFY-FULL")
+                                                .setDescription("Require TLS, verify CA trust and hostname")
+                                                .build()
+                                )
+                                .build()
+                )
+                .build();
+
+        FormField sslcrc = FormField.newBuilder()
+                .setName("ssl.crc")
+                .setLabel("SSLCRC")
+                .setRequired(false)
+                .setDescriptiveDropdownFields(
+                        DescriptiveDropDownFields.newBuilder()
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("ALLOW")
+                                                .setValue("ALLOW")
+                                                .setDescription("Performs CRC for SSLMODE or OIDC_SSLMODE VERIFY-CA and VERIFY-FULL, and provides soft fail CRC for VERIFY-CA and VERIFY-FULL to ignore CRC communication failures. (Default)")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("PREFER")
+                                                .setValue("PREFER")
+                                                .setDescription("Performs CRC for all HTTPS connections, and provides soft fail CRC for VERIFY-CA and VERIFY-FULL to ignore CRC communication failures.")
+                                                .build()
+                                )
+                                .addDescriptiveDropdownField(
+                                        DescriptiveDropDownField.newBuilder()
+                                                .setLabel("REQUIRE")
+                                                .setValue("REQUIRE")
+                                                .setDescription("Performs CRC for all HTTPS connections, and requires CRC for VERIFY-CA and VERIFY-FULL.")
+                                                .build()
+                                ).build())
+                .setDescription("Controls TLS certificate revocation checking (CRC) for HTTPS/TLS connections.")
                 .build();
 
 
-        FormField sslMode = FormField.newBuilder().setName("ssl.mode").setLabel("SSL mode")
-                .setRequired(false)
-                .setDescription(
-                        "Whether to use an encrypted connection to Teradata.\n"
-                                + "Options include:\n"
-                                + " * 'DISABLE' disables HTTPS/TLS connections and uses only non-TLS connections;\n"
-                                + " * 'ALLOW' uses non-TLS connections unless the database requires HTTPS/TLS connections;\n"
-                                + " * 'PREFER' uses HTTPS/TLS connections unless the database does not offer HTTPS/TLS connections\n"
-                                + " * 'REQUIRE' uses HTTPS/TLS connections\n"
-                                + " * 'VERIFY-CA' uses HTTPS/TLS connections and verifies that the server certificate is valid and trusted\n"
-                                + " * 'VERIFY-FULL' uses HTTPS/TLS connections, verifies that the server certificate is valid and trusted, and verifies that the server certificate matches the database hostname.")
-                .setDropdownField(DropdownField.newBuilder()
-                        .addDropdownField("DISABLE")
-                        .addDropdownField("ALLOW")
-                        .addDropdownField("PREFER")
-                        .addDropdownField("REQUIRE")
-                        .addDropdownField("VERIFY-CA")
-                        .addDropdownField("VERIFY-FULL"))
-                .build();
-
-        FormField serverCert = FormField.newBuilder().setName("ssl.server.cert")
+        FormField serverCert = FormField.newBuilder()
+                .setName("ssl.server.cert")
                 .setLabel("SSL Server's Certificate").setRequired(true)
                 .setDescription(
-                        "Upload the server's certificate file.\n"
-                                + "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.\n"
-                                + "The file must contain Certificate Authority (CA) certificates.\n\n"
-                                + "Please upload the raw certificate file directly — no base64url encoding is required.\n")
+                        "Upload the server's certificate file.<br />" +
+                                "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.<br />" +
+                                "The file must contain Certificate Authority (CA) certificates.<br />" +
+                                "Please upload the raw certificate file directly — no base64url encoding is required.<br />"
+                )
                 .setUploadField(UploadField.newBuilder()
-                        .setMaxFileSizeBytes(1000000) // 1 MB
-                        .addAllowedFileType("pem")
-                        .addAllowedFileType("txt")
-                        .addAllowedFileType("crt")
+                        .setMaxFileSizeBytes(1048576) // 1 MB
+                        .addAllAllowedFileType(Arrays.asList(".txt", ".pem", ".crt"))
                         .build())
                 .build();
+
+
 
         FormField sslVerifyCa = FormField.newBuilder()
                 .setConditionalFields(
@@ -199,6 +316,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                 )
                                 .addAllFields(
                                         Collections.singletonList(serverCert))
+                                .addAllFields(
+                                        Collections.singletonList(sslcrc))
                                 .build())
                 .build();
 
@@ -212,6 +331,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                 )
                                 .addAllFields(
                                         Collections.singletonList(serverCert))
+                                .addAllFields(
+                                        Collections.singletonList(sslcrc))
                                 .build())
                 .build();
 
@@ -220,9 +341,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setLabel("Driver Parameters")
                 .setRequired(false)
                 .setDescription(
-                        "Additional JDBC parameters to use with connection string to Teradata Vantage.\n"
-                                + "Format: 'param1=value1,param2=value2, ...'.\n"
-                                + "The supported parameters are available in the https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html")
+                        "Additional JDBC parameters to use with connection string to Teradata Vantage.<br />" +
+                                "Format: 'param1=value1,param2=value2, ...'.<br />" +
+                                "The supported parameters are available in the https://teradata-docs.s3.amazonaws.com/doc/connectivity/jdbc/reference/current/frameset.html"
+                )
                 .setTextField(TextField.PlainText)
                 .setPlaceholder("your_driver_parameters")
                 .build();
@@ -240,9 +362,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setName("query.band")
                 .setLabel("Query Band")
                 .setRequired(false)
-                .setDescription("Specify the Query Band string to be set in key-value pairs. Query Band is used for telemetry purposes"+
-                        "format for query band is \"key=value;key2=value2;\""
-                        +" Default would be \"org=teradata-internal-telem;appname=fivetran;\"")
+                .setDescription("Specify the Query Band string to be set in key-value pairs. <br />" +
+                        "Query Band is used for telemetry purposes<br />" +
+                        "Format for query band is \"key=value;key2=value2;\"<br />" +
+                        "Default would be \"org=teradata-internal-telem;appname=fivetran;\"")
                 .setTextField(TextField.PlainText)
                 .setPlaceholder("your_query_band")
                 .build();
@@ -250,9 +373,14 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         return ConfigurationFormResponse.newBuilder()
                 .setSchemaSelectionSupported(true)
                 .setTableSelectionSupported(true)
-                .addAllFields(Arrays.asList(host, logmech, TD2Logmech, LDAPLogmech, database, tmode, varcharCharacterSet, defaultVarcharSize, sslMode, sslVerifyCa, sslVerifyFull, driverParameters, BatchSize, queryBand))
+                .addAllFields(Arrays.asList(
+                        host, logmech, TD2Logmech, LDAPLogmech, database, tmode,
+                        varcharCharacterSet, defaultVarcharSize, sslMode, sslVerifyCa,
+                        sslVerifyFull, driverParameters, BatchSize, queryBand
+                ))
                 .addAllTests(Arrays.asList(
-                        ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()))
+                        ConfigurationTest.newBuilder().setName("connect").setLabel("Tests connection").build()
+                ))
                 .build();
     }
 
@@ -367,7 +495,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     .setTask(Task.newBuilder().setMessage("createTable :: Table: "
                             + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName())
                             + ", SQL: " + query.replace("\n", " ")
-                            + ", Error: " + getStackTraceOneLine(e)).build())
+                            + ", Error: " + e.getMessage()).build())
                     .build());
         }
         responseObserver.onCompleted();
@@ -409,7 +537,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             .setMessage("alterTable :: Table: " 
                                     + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName()) 
                                     + ", SQL: " + query.replace("\n", " ")
-                                    + ", Error: " + getStackTraceOneLine(e)).build())
+                                    + ", Error: " + e.getMessage()).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -460,7 +588,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                             .setMessage("truncate :: Table: " +
                                     TeradataJDBCUtil.escapeTable(conf.database(), request.getTableName())
                                     + ", SQL: " + query.replace("\n", " ")
-                                    + ", Error: " + getStackTraceOneLine(e)).build())
+                                    + ", Error: " + e.getMessage()).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -540,7 +668,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     TeradataJDBCUtil.escapeTable(database, table), e.getMessage()));
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("writeBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
+                            .setMessage("writeBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
                     .build());
             responseObserver.onCompleted();
         }
@@ -559,7 +687,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
         String table = TeradataJDBCUtil.getTableName(request.getSchemaName(), request.getTable().getName());
         LoadDataWriter<WriteBatchResponse> w = null;
-        try (Connection conn = TeradataJDBCUtil.createConnection(conf);) {
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             if (request.getTable().getColumnsList().stream()
                     .noneMatch(Column::getPrimaryKey)) {
                 throw new Exception("No primary key found");
@@ -625,7 +753,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             responseObserver.onNext(WriteBatchResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("writeHistoryBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + getStackTraceOneLine(e)).build())
+                            .setMessage("writeHistoryBatch :: Table: " + TeradataJDBCUtil.escapeTable(database, table) + ", Error: " + e.getMessage()).build())
                     .build());
             responseObserver.onCompleted();
         }
