@@ -300,7 +300,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 )
                 .setUploadField(UploadField.newBuilder()
                         .setMaxFileSizeBytes(1048576) // 1 MB
-                        .addAllAllowedFileType(Arrays.asList(".json", ".yaml", ".yml", ".pem", ".crt"))
+                        .addAllAllowedFileType(Arrays.asList(".txt", ".pem", ".crt"))
                         .build())
                 .build();
 
