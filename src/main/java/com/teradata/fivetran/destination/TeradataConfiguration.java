@@ -14,6 +14,7 @@ public class TeradataConfiguration {
     private static int defaultVarcharSize = 256; // Default value for TMODE
     private static String varcharCharacterSet = "LATIN"; // Default value for VARCHAR character set
     private final String sslMode;
+    private final String sslCrc;
     private final String sslServerCert;
     private final String driverParameters;
     private final Integer batchSize;
@@ -36,6 +37,7 @@ public class TeradataConfiguration {
         defaultVarcharSize = Integer.parseInt(getOrDefault(conf.get("default.varchar.size"), "256"));
         varcharCharacterSet = getOrDefault(conf.get("varchar.character.set"), "LATIN");
         this.sslMode = getOrDefault(conf.get("ssl.mode"), "DISABLE");
+        this.sslCrc = getOrDefault(conf.get("ssl.crc"), "ALLOW");
         this.sslServerCert = getOrDefault(conf.get("ssl.server.cert"), null);
         this.driverParameters = getOrDefault(conf.get("driver.parameters"), null);
         this.batchSize = Integer.valueOf(getOrDefault(conf.get("batch.size"), "10000"));
@@ -132,4 +134,8 @@ public class TeradataConfiguration {
     }
 
     public String queryBand(){ return queryBand; }
+
+    public Object sslCrc() {
+        return sslCrc;
+    }
 }
