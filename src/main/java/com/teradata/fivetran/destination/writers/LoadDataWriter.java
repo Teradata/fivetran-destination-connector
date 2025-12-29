@@ -4,6 +4,8 @@ import com.google.protobuf.ByteString;
 import com.teradata.fivetran.destination.Logger;
 import com.teradata.fivetran.destination.TeradataJDBCUtil;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
+import com.teradata.fivetran.destination.writers.util.ColumnMetadata;
+import com.teradata.fivetran.destination.writers.util.JSONStruct;
 import fivetran_sdk.v2.*;
 
 import java.io.IOException;
@@ -151,9 +153,9 @@ public class LoadDataWriter<T> extends Writer {
                 switch (type) {
                     case BOOLEAN:
                         if (value.equalsIgnoreCase("true")) {
-                            preparedStatement.setInt(i + 1, 1);
+                            preparedStatement.setByte(i + 1, (byte) 1);
                         } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setInt(i + 1, 0);
+                            preparedStatement.setByte(i + 1, (byte) 0);
                         }
                         break;
                     case SHORT:

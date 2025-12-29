@@ -1,4 +1,4 @@
-package com.teradata.fivetran.destination.writers;
+package com.teradata.fivetran.destination.writers.util;
 
 import java.sql.SQLException;
 import java.sql.Struct;

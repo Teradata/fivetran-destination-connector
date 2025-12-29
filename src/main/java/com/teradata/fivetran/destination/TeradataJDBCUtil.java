@@ -1,12 +1,10 @@
 package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
-import com.teradata.fivetran.destination.writers.ColumnMetadata;
-import com.teradata.fivetran.destination.writers.JSONStruct;
+import com.teradata.fivetran.destination.writers.util.ColumnMetadata;
+import com.teradata.fivetran.destination.writers.util.JSONStruct;
 import fivetran_sdk.v2.*;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.*;

@@ -1,4 +1,4 @@
-package com.teradata.fivetran.destination.writers;
+package com.teradata.fivetran.destination.writers.util;
 
 public class ColumnMetadata {
     private final int length;
