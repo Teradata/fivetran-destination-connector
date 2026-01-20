@@ -112,49 +112,62 @@ public class TeradataJDBCUtil {
      * @return The validated query band text, ensuring required parameters are presented in required
      * format.
      */
-    private static String handleQueryBand(String queryBand) {
+    static String handleQueryBand(String queryBand) {
+        // Use LinkedHashMap to preserve order
+        Map<String, String> queryBandMap = new LinkedHashMap<>();
+
         // Split the queryBand into key-value pairs
         String[] pairs = queryBand.split(";");
-        Map<String, String> queryBandMap = new HashMap<>();
 
-        // Populate the map with key-value pairs
+        // First collect all pairs into a temp map - use LinkedHashMap to preserve order
+        Map<String, String> parsed = new LinkedHashMap<>();
         for (String pair : pairs) {
             if (!pair.trim().isEmpty()) {
-                String[] keyValue = pair.split("=");
+                String[] keyValue = pair.split("=", 2);
                 if (keyValue.length == 2) {
-                    queryBandMap.put(keyValue[0].trim(), keyValue[1].trim());
+                    parsed.put(keyValue[0].trim(), keyValue[1].trim());
                 }
             }
         }
 
-        // Check if "org" key exists, if not add it
-        if (!queryBandMap.containsKey("org")) {
-            queryBandMap.put("org", "teradata-internal-telem;");
-        }
+        // ✅ Always put org FIRST
+        queryBandMap.put(
+                "org",
+                parsed.getOrDefault("org", "teradata-internal-telem")
+        );
 
-        // Check if "appname" key exists
-        if (queryBandMap.containsKey("appname")) {
-            // Check if "airflow" exists in the value of "appname" key
-            String appnameValue = queryBandMap.get("appname").toLowerCase();
-            if (!appnameValue.contains("fivetran")) {
-                queryBandMap.put("appname", queryBandMap.get("appname") + "_fivetran;");
+        // ✅ Handle appname SECOND
+        if (parsed.containsKey("appname")) {
+            String appnameValue = parsed.get("appname");
+            if (!appnameValue.toLowerCase().contains("fivetran")) {
+                appnameValue = appnameValue + "_fivetran";
             }
+            queryBandMap.put("appname", appnameValue);
         } else {
-            // Add "appname=fivetran;" if "appname" key does not exist
-            queryBandMap.put("appname", "fivetran;");
+            queryBandMap.put("appname", "fivetran");
         }
 
-        // Reconstruct the queryBand string from the map
+        // ✅ Add remaining keys (if any), preserving original behavior
+        for (Map.Entry<String, String> entry : parsed.entrySet()) {
+            String key = entry.getKey();
+            if (!queryBandMap.containsKey(key)) {
+                queryBandMap.put(key, entry.getValue());
+            }
+        }
+
+        // Reconstruct the queryBand string
         StringBuilder updatedQueryBand = new StringBuilder();
         for (Map.Entry<String, String> entry : queryBandMap.entrySet()) {
-            updatedQueryBand.append(entry.getKey()).append("=").append(entry.getValue());
-            if (!entry.getValue().endsWith(";")) {
-                updatedQueryBand.append(";");
-            }
+            updatedQueryBand
+                    .append(entry.getKey())
+                    .append("=")
+                    .append(entry.getValue());
+            updatedQueryBand.append(";");
         }
 
         return updatedQueryBand.toString();
     }
+
 
 
     /**
