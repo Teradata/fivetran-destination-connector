@@ -131,4 +131,13 @@ class HandleQueryBandTest {
                 result
         );
     }
+
+    @Test
+    void orgAtEnd_shouldBeMovedToFirst() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=test;foo=1;bar=2;org=myorg;");
+        assertEquals(
+                "org=myorg;appname=test_fivetran;foo=1;bar=2;",
+                result
+        );
+    }
 }
