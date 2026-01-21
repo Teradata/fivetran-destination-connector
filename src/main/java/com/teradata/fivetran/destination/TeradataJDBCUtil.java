@@ -113,60 +113,58 @@ public class TeradataJDBCUtil {
      * format.
      */
     static String handleQueryBand(String queryBand) {
-        // Use LinkedHashMap to preserve order
-        Map<String, String> queryBandMap = new LinkedHashMap<>();
-
-        // Split the queryBand into key-value pairs
-        String[] pairs = queryBand.split(";");
-
-        // First collect all pairs into a temp map - use LinkedHashMap to preserve order
-        Map<String, String> parsed = new LinkedHashMap<>();
-        for (String pair : pairs) {
-            if (!pair.trim().isEmpty()) {
-                String[] keyValue = pair.split("=", 2);
-                if (keyValue.length == 2) {
-                    parsed.put(keyValue[0].trim(), keyValue[1].trim());
-                }
-            }
+        if (queryBand == null || queryBand.isBlank()) {
+            queryBand = "";
         }
 
-        // ✅ Always put org FIRST
-        queryBandMap.put(
-                "org",
-                parsed.getOrDefault("org", "teradata-internal-telem")
-        );
+        // Store values by lowercase key (last one wins)
+        Map<String, String> values = new LinkedHashMap<>();
+        // Store original key casing
+        Map<String, String> originalKeys = new LinkedHashMap<>();
 
-        // ✅ Handle appname SECOND
-        if (parsed.containsKey("appname")) {
-            String appnameValue = parsed.get("appname");
-            if (!appnameValue.toLowerCase().contains("fivetran")) {
-                appnameValue = appnameValue + "_fivetran";
-            }
-            queryBandMap.put("appname", appnameValue);
-        } else {
-            queryBandMap.put("appname", "fivetran");
+        for (String pair : queryBand.split(";")) {
+            if (pair.isBlank()) continue;
+
+            String[] kv = pair.split("=", 2);
+            if (kv.length != 2) continue;
+
+            String key = kv[0].trim();
+            String value = kv[1].trim();
+            String lowerKey = key.toLowerCase();
+
+            values.put(lowerKey, value);
+            originalKeys.put(lowerKey, key); // keeps latest casing
         }
 
-        // ✅ Add remaining keys (if any), preserving original behavior
-        for (Map.Entry<String, String> entry : parsed.entrySet()) {
+        StringBuilder result = new StringBuilder();
+
+        // --- org (always first) ---
+        String orgValue = values.getOrDefault("org", "teradata-internal-telem");
+        result.append("org=").append(orgValue).append(";");
+
+        // --- appname (always second) ---
+        String appname = values.get("appname");
+        if (appname == null) {
+            appname = "fivetran";
+        } else if (!appname.toLowerCase().contains("fivetran")) {
+            appname += "_fivetran";
+        }
+        result.append("appname=").append(appname).append(";");
+
+        // --- remaining keys ---
+        for (Map.Entry<String, String> entry : values.entrySet()) {
             String key = entry.getKey();
-            if (!queryBandMap.containsKey(key)) {
-                queryBandMap.put(key, entry.getValue());
-            }
-        }
+            if (key.equals("org") || key.equals("appname")) continue;
 
-        // Reconstruct the queryBand string
-        StringBuilder updatedQueryBand = new StringBuilder();
-        for (Map.Entry<String, String> entry : queryBandMap.entrySet()) {
-            updatedQueryBand
-                    .append(entry.getKey())
+            result.append(originalKeys.get(key))
                     .append("=")
-                    .append(entry.getValue());
-            updatedQueryBand.append(";");
+                    .append(entry.getValue())
+                    .append(";");
         }
 
-        return updatedQueryBand.toString();
+        return result.toString();
     }
+
 
 
 

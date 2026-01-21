@@ -79,15 +79,6 @@ class HandleQueryBandTest {
     }
 
     @Test
-    void mixedCaseKeys_shouldBeHandledAsDistinct() {
-        String result = TeradataJDBCUtil.handleQueryBand("Org=abc;AppName=test;");
-        assertEquals(
-                "org=teradata-internal-telem;appname=fivetran;Org=abc;AppName=test;",
-                result
-        );
-    }
-
-    @Test
     void trailingSemicolons_shouldNotBreakParsing() {
         String result = TeradataJDBCUtil.handleQueryBand("appname=test;;;");
         assertEquals(
@@ -137,6 +128,192 @@ class HandleQueryBandTest {
         String result = TeradataJDBCUtil.handleQueryBand("appname=test;foo=1;bar=2;org=myorg;");
         assertEquals(
                 "org=myorg;appname=test_fivetran;foo=1;bar=2;",
+                result
+        );
+    }
+
+    // Test for null input
+    @Test
+    void nullInput_shouldAddOrgAndAppname() {
+        String result = TeradataJDBCUtil.handleQueryBand(null);
+        assertEquals(
+                "org=teradata-internal-telem;appname=fivetran;",
+                result
+        );
+    }
+
+    // Test for case insensitive "fivetran" check in appname value
+    @Test
+    void appnameWithUpperCaseFIVETRAN_shouldNotAppend() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=FIVETRAN_APP;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=FIVETRAN_APP;",
+                result
+        );
+    }
+
+    @Test
+    void appnameWithMixedCaseFivetran_shouldNotAppend() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=Fivetran_APP;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=Fivetran_APP;",
+                result
+        );
+    }
+
+    @Test
+    void appnameWithFIVETRANInMiddle_shouldNotAppend() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=myFIVETRANapp;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=myFIVETRANapp;",
+                result
+        );
+    }
+
+    // Test for case insensitive key handling - APPNAME
+    @Test
+    void uppercaseAPPNAME_shouldBeRecognized() {
+        String result = TeradataJDBCUtil.handleQueryBand("APPNAME=test;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=test_fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void mixedCaseAppName_shouldBeRecognized() {
+        String result = TeradataJDBCUtil.handleQueryBand("AppName=test;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=test_fivetran;",
+                result
+        );
+    }
+
+    // Test for case insensitive key handling - ORG
+    @Test
+    void uppercaseORG_shouldBeRecognized() {
+        String result = TeradataJDBCUtil.handleQueryBand("ORG=myorg;");
+        assertEquals(
+                "org=myorg;appname=fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void mixedCaseOrg_shouldBeRecognized() {
+        String result = TeradataJDBCUtil.handleQueryBand("Org=myorg;");
+        assertEquals(
+                "org=myorg;appname=fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void uppercaseORGAndAPPNAME_shouldBeRecognized() {
+        String result = TeradataJDBCUtil.handleQueryBand("ORG=myorg;APPNAME=test;");
+        assertEquals(
+                "org=myorg;appname=test_fivetran;",
+                result
+        );
+    }
+
+    // Test for duplicate keys (case insensitive) - last one wins
+    @Test
+    void duplicateAppname_lastOneWins() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=first;appname=second;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=second_fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void duplicateOrg_lastOneWins() {
+        String result = TeradataJDBCUtil.handleQueryBand("org=first;org=second;");
+        assertEquals(
+                "org=second;appname=fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void duplicateCaseInsensitive_lastOneWins() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=first;APPNAME=second;AppName=third;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=third_fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void duplicateOrgCaseInsensitive_lastOneWins() {
+        String result = TeradataJDBCUtil.handleQueryBand("org=first;ORG=second;Org=third;");
+        assertEquals(
+                "org=third;appname=fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void duplicateCustomKey_lastOneWins() {
+        String result = TeradataJDBCUtil.handleQueryBand("foo=1;foo=2;foo=3;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=fivetran;foo=3;",
+                result
+        );
+    }
+
+    // Test for special characters and edge cases
+    @Test
+    void valueContainsEquals_shouldHandleCorrectly() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=test;foo=bar=baz;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=test_fivetran;foo=bar=baz;",
+                result
+        );
+    }
+
+    @Test
+    void valueContainsMultipleEquals_shouldHandleCorrectly() {
+        String result = TeradataJDBCUtil.handleQueryBand("param=a=b=c=d;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=fivetran;param=a=b=c=d;",
+                result
+        );
+    }
+
+    @Test
+    void valueWithSpecialCharacters_shouldPreserve() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=test-app_123;foo=bar@baz.com;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=test-app_123_fivetran;foo=bar@baz.com;",
+                result
+        );
+    }
+
+    @Test
+    void emptyValue_shouldBePreserved() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname=;foo=bar;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=_fivetran;foo=bar;",
+                result
+        );
+    }
+
+    @Test
+    void whitespaceInValues_shouldBeTrimmed() {
+        String result = TeradataJDBCUtil.handleQueryBand("appname= test ;org= myorg ;");
+        assertEquals(
+                "org=myorg;appname=test_fivetran;",
+                result
+        );
+    }
+
+    @Test
+    void whitespaceInKeys_shouldBeTrimmed() {
+        String result = TeradataJDBCUtil.handleQueryBand(" appname =test; org =myorg;");
+        assertEquals(
+                "org=myorg;appname=test_fivetran;",
                 result
         );
     }
