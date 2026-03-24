@@ -112,50 +112,61 @@ public class TeradataJDBCUtil {
      * @return The validated query band text, ensuring required parameters are presented in required
      * format.
      */
-    private static String handleQueryBand(String queryBand) {
-        // Split the queryBand into key-value pairs
-        String[] pairs = queryBand.split(";");
-        Map<String, String> queryBandMap = new HashMap<>();
-
-        // Populate the map with key-value pairs
-        for (String pair : pairs) {
-            if (!pair.trim().isEmpty()) {
-                String[] keyValue = pair.split("=");
-                if (keyValue.length == 2) {
-                    queryBandMap.put(keyValue[0].trim(), keyValue[1].trim());
-                }
-            }
+    static String handleQueryBand(String queryBand) {
+        if (queryBand == null || queryBand.trim().isEmpty()) {
+            queryBand = "";
         }
 
-        // Check if "org" key exists, if not add it
-        if (!queryBandMap.containsKey("org")) {
-            queryBandMap.put("org", "teradata-internal-telem;");
+        // Store values by lowercase key (last one wins)
+        Map<String, String> values = new LinkedHashMap<>();
+        // Store original key casing
+        Map<String, String> originalKeys = new LinkedHashMap<>();
+
+        for (String pair : queryBand.split(";")) {
+            if (pair.trim().isEmpty()) continue;
+
+            String[] kv = pair.split("=", 2);
+            if (kv.length != 2) continue;
+
+            String key = kv[0].trim();
+            if (key.isEmpty()) continue;
+
+            String value = kv[1].trim();
+            String lowerKey = key.toLowerCase();
+
+            // Escape single quotes to prevent SQL injection
+            values.put(lowerKey, value.replace("'", "''"));
+            originalKeys.put(lowerKey, key.replace("'", "''")); // keeps latest casing
         }
 
-        // Check if "appname" key exists
-        if (queryBandMap.containsKey("appname")) {
-            // Check if "airflow" exists in the value of "appname" key
-            String appnameValue = queryBandMap.get("appname").toLowerCase();
-            if (!appnameValue.contains("fivetran")) {
-                queryBandMap.put("appname", queryBandMap.get("appname") + "_fivetran;");
-            }
-        } else {
-            // Add "appname=fivetran;" if "appname" key does not exist
-            queryBandMap.put("appname", "fivetran;");
+        StringBuilder result = new StringBuilder();
+
+        // --- org (always first) ---
+        String orgValue = values.getOrDefault("org", "teradata-internal-telem");
+        result.append("org=").append(orgValue).append(";");
+
+        // --- appname (always second) ---
+        String appname = values.get("appname");
+        if (appname == null) {
+            appname = "fivetran";
+        } else if (!appname.toLowerCase().contains("fivetran")) {
+            appname += "_fivetran";
+        }
+        result.append("appname=").append(appname).append(";");
+
+        // --- remaining keys ---
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            String key = entry.getKey();
+            if (key.equals("org") || key.equals("appname")) continue;
+
+            result.append(originalKeys.get(key))
+                    .append("=")
+                    .append(entry.getValue())
+                    .append(";");
         }
 
-        // Reconstruct the queryBand string from the map
-        StringBuilder updatedQueryBand = new StringBuilder();
-        for (Map.Entry<String, String> entry : queryBandMap.entrySet()) {
-            updatedQueryBand.append(entry.getKey()).append("=").append(entry.getValue());
-            if (!entry.getValue().endsWith(";")) {
-                updatedQueryBand.append(";");
-            }
-        }
-
-        return updatedQueryBand.toString();
+        return result.toString();
     }
-
 
     /**
      * Checks if a table exists in the specified database.
