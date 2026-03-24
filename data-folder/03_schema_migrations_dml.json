@@ -1,0 +1,98 @@
+{
+  "create_table": {
+    "td_dml_test": {
+      "columns": {
+        "id": "INT",
+        "amount": "DOUBLE",
+        "desc": "STRING"
+      },
+      "primary_key": ["id"]
+    },
+    "td_dml_drop": {
+      "columns": {
+        "id": "INT",
+        "amount": "DOUBLE",
+        "desc": "STRING"
+      },
+      "primary_key": ["id"]
+    }
+  },
+  "ops": [
+    {
+      "upsert": {
+        "td_dml_test": [
+          {"id": 1, "amount": 100.45, "desc": null},
+          {"id": 2, "amount": 150.33, "desc": "two"},
+          {"id": 3, "amount": 175.50, "desc": "three"},
+          {"id": 4, "amount": 200.00, "desc": "four"},
+          {"id": 10, "amount": 250.75, "desc": "ten"},
+          {"id": 20, "amount": 50.25, "desc": "twenty"}
+        ],
+        "td_dml_drop": [
+          {"id": 1, "amount": 100.45, "desc": null},
+          {"id": 2, "amount": 150.33, "desc": "two"}
+        ]
+      }
+    }
+  ],
+  "schema_migration": [
+    {
+      "copy_column": [
+        {
+          "table": "td_dml_test",
+          "from_column": "desc",
+          "to_column": "desc_detailed"
+        }
+      ],
+      "update_column_value": [
+        {
+          "table": "td_dml_test",
+          "column": "amount",
+          "value": "202.57"
+        }
+      ],
+      "add_column_with_default_value": [
+        {
+          "table": "td_dml_test",
+          "column": "operation_time",
+          "data_type": "UTC_DATETIME",
+          "default_value": "2005-05-28T20:57:00Z"
+        }
+      ],
+      "set_column_to_null": [
+        {
+          "table": "td_dml_test",
+          "column": "desc"
+        }
+      ],
+      "copy_table": [
+        {
+          "from_table": "td_dml_test",
+          "to_table": "td_dml_test_new"
+        }
+      ],
+      "rename_column": [
+        {
+          "table": "td_dml_test",
+          "from_column": "amount",
+          "to_column": "amount_renamed"
+        }
+      ],
+      "rename_table": [
+        {
+          "from_table": "td_dml_test_new",
+          "to_table": "td_dml_test_renamed"
+        }
+      ],
+      "drop_table": [
+        {
+          "table": "td_dml_drop"
+        }
+      ]
+    }
+  ],
+  "describe_table": [
+    "td_dml_test",
+    "td_dml_test_renamed"
+  ]
+}

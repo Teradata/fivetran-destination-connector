@@ -1,0 +1,89 @@
+{
+  "create_table": {
+    "td_sync_test": {
+      "columns": {
+        "id": "INT",
+        "amount": "DOUBLE",
+        "desc": "STRING"
+      },
+      "primary_key": ["id"],
+      "history_mode": false
+    },
+    "td_sync_history": {
+      "columns": {
+        "id": "INT",
+        "amount": "DOUBLE",
+        "desc": "STRING"
+      },
+      "primary_key": ["id"],
+      "history_mode": true
+    }
+  },
+  "ops": [
+    {
+      "upsert": {
+        "td_sync_test": [
+          {"id": 1, "amount": 100.45, "desc": null},
+          {"id": 2, "amount": 150.33, "desc": "two"},
+          {"id": 3, "amount": 175.50, "desc": "three"},
+          {"id": 4, "amount": 200.00, "desc": "four"},
+          {"id": 10, "amount": 250.75, "desc": "ten"},
+          {"id": 20, "amount": 50.25, "desc": "twenty"}
+        ],
+        "td_sync_history": [
+          {"id": 1, "amount": 100.45, "desc": null, "op_time": "2005-05-23T20:57:00Z"},
+          {"id": 2, "amount": 150.33, "desc": "two", "op_time": "2005-05-23T20:57:00Z"},
+          {"id": 3, "amount": 175.50, "desc": "three", "op_time": "2005-05-23T20:57:00Z"},
+          {"id": 4, "amount": 200.00, "desc": "four", "op_time": "2005-05-23T20:57:00Z"},
+          {"id": 10, "amount": 250.75, "desc": "ten", "op_time": "2005-05-26T20:57:00Z"},
+          {"id": 10, "amount": 100.00, "desc": "ten updated", "op_time": "2005-05-26T20:58:00Z"},
+          {"id": 20, "amount": 50.25, "desc": "twenty", "op_time": "2005-05-26T21:57:00Z"}
+        ]
+      }
+    }
+  ],
+  "schema_migration": [
+    {
+      "add_column_in_history_mode": [
+        {
+          "table": "td_sync_history",
+          "column": "article",
+          "data_type": "STRING",
+          "default_value": "Ordered article",
+          "operation_timestamp": "2005-05-28T20:57:00Z"
+        }
+      ],
+      "drop_column_in_history_mode": [
+        {
+          "table": "td_sync_history",
+          "column": "desc",
+          "operation_timestamp": "2005-05-28T20:57:00Z"
+        }
+      ],
+      "copy_table_to_history_mode": [
+        {
+          "from_table": "td_sync_test",
+          "to_table": "td_sync_test_history",
+          "deleted_column": "_fivetran_deleted"
+        }
+      ],
+      "migrate_soft_delete_to_history": [
+        {
+          "table": "td_sync_test",
+          "deleted_column": "_fivetran_deleted"
+        }
+      ],
+      "migrate_history_to_soft_delete": [
+        {
+          "table": "td_sync_test_history",
+          "deleted_column": "_fivetran_deleted"
+        }
+      ]
+    }
+  ],
+  "describe_table": [
+    "td_sync_test",
+    "td_sync_history",
+    "td_sync_test_history"
+  ]
+}

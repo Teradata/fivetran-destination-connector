@@ -1,0 +1,13 @@
+{
+  "create_table": {},
+  "ops": [
+    {
+      "truncate_before": [
+        "td_nonexistent_table"
+      ]
+    }
+  ],
+  "describe_table": [
+    "td_nonexistent_table"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "create_table": {
+    "td_upd_missing": {
+      "columns": {
+        "id": "INT",
+        "amount_double": "DOUBLE",
+        "flag": "BOOLEAN"
+      },
+      "primary_key": ["id"],
+      "history_mode": true
+    },
+    "td_upd_missing_nopk": {
+      "columns": {
+        "name": "STRING",
+        "num_decimal": {
+          "type": "DECIMAL",
+          "precision": 6,
+          "scale": 3
+        },
+        "start_date": "NAIVE_DATE",
+        "end_datetime": "UTC_DATETIME",
+        "is_active": "BOOLEAN"
+      },
+      "primary_key": []
+    }
+  },
+  "ops": [
+    {
+      "update": {
+        "td_upd_missing": [
+          {
+            "id": 999,
+            "amount_double": 999.99,
+            "flag": false,
+            "op_time": "2023-10-30T15:00:00Z"
+          }
+        ],
+        "td_upd_missing_nopk": [
+          {
+            "_fivetran_id": "missing-update-id",
+            "name": "Missing Campaign",
+            "num_decimal": 999.999,
+            "start_date": "2024-01-01",
+            "end_datetime": "2024-12-31T23:59:59.000Z",
+            "is_active": false
+          }
+        ]
+      }
+    }
+  ],
+  "describe_table": [
+    "td_upd_missing",
+    "td_upd_missing_nopk"
+  ]
+}
