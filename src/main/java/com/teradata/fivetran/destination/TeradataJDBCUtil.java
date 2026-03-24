@@ -113,7 +113,7 @@ public class TeradataJDBCUtil {
      * format.
      */
     static String handleQueryBand(String queryBand) {
-        if (queryBand == null || queryBand.isBlank()) {
+        if (queryBand == null || queryBand.trim().isEmpty()) {
             queryBand = "";
         }
 
@@ -123,17 +123,20 @@ public class TeradataJDBCUtil {
         Map<String, String> originalKeys = new LinkedHashMap<>();
 
         for (String pair : queryBand.split(";")) {
-            if (pair.isBlank()) continue;
+            if (pair.trim().isEmpty()) continue;
 
             String[] kv = pair.split("=", 2);
             if (kv.length != 2) continue;
 
             String key = kv[0].trim();
+            if (key.isEmpty()) continue;
+
             String value = kv[1].trim();
             String lowerKey = key.toLowerCase();
 
-            values.put(lowerKey, value);
-            originalKeys.put(lowerKey, key); // keeps latest casing
+            // Escape single quotes to prevent SQL injection
+            values.put(lowerKey, value.replace("'", "''"));
+            originalKeys.put(lowerKey, key.replace("'", "''")); // keeps latest casing
         }
 
         StringBuilder result = new StringBuilder();
@@ -164,9 +167,6 @@ public class TeradataJDBCUtil {
 
         return result.toString();
     }
-
-
-
 
     /**
      * Checks if a table exists in the specified database.

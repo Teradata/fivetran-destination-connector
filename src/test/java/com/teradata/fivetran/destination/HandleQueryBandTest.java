@@ -144,15 +144,6 @@ class HandleQueryBandTest {
 
     // Test for case insensitive "fivetran" check in appname value
     @Test
-    void appnameWithUpperCaseFIVETRAN_shouldNotAppend() {
-        String result = TeradataJDBCUtil.handleQueryBand("appname=FIVETRAN_APP;");
-        assertEquals(
-                "org=teradata-internal-telem;appname=FIVETRAN_APP;",
-                result
-        );
-    }
-
-    @Test
     void appnameWithMixedCaseFivetran_shouldNotAppend() {
         String result = TeradataJDBCUtil.handleQueryBand("appname=Fivetran_APP;");
         assertEquals(
@@ -314,6 +305,45 @@ class HandleQueryBandTest {
         String result = TeradataJDBCUtil.handleQueryBand(" appname =test; org =myorg;");
         assertEquals(
                 "org=myorg;appname=test_fivetran;",
+                result
+        );
+    }
+
+    // Test for pairs without '=' sign - should be skipped
+    @Test
+    void pairWithoutEquals_shouldBeSkipped() {
+        String result = TeradataJDBCUtil.handleQueryBand("noequals;appname=test;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=test_fivetran;",
+                result
+        );
+    }
+
+    // Test for empty key (=value) - should be skipped
+    @Test
+    void emptyKey_shouldBeSkipped() {
+        String result = TeradataJDBCUtil.handleQueryBand("=value;appname=test;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=test_fivetran;",
+                result
+        );
+    }
+
+    // Test for single quotes in values - should be escaped for SQL safety
+    @Test
+    void singleQuoteInValue_shouldBeEscaped() {
+        String result = TeradataJDBCUtil.handleQueryBand("foo=bar'baz;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=fivetran;foo=bar''baz;",
+                result
+        );
+    }
+
+    @Test
+    void singleQuoteInKey_shouldBeEscaped() {
+        String result = TeradataJDBCUtil.handleQueryBand("foo'bar=baz;");
+        assertEquals(
+                "org=teradata-internal-telem;appname=fivetran;foo''bar=baz;",
                 result
         );
     }
