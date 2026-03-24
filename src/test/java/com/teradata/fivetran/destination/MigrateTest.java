@@ -1314,6 +1314,57 @@ public class MigrateTest extends IntegrationTestBase {
 
                 TeradataJDBCUtil.generateMigrateQueries(invalidRequest, testWarningHandle);
             });
+
+            //
+            // FOURTH RUN — simultaneous migration: _fivetran_start == operationTimestamp
+            //
+
+            // Truncate and re-insert
+            stmt.execute("DELETE FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
+            stmt.execute(
+                    "INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " VALUES (2, 2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)"
+            );
+
+            request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("dropColumnInHistoryMode")
+                            .setSchema(IntegrationTestBase.schema)
+                            .setDrop(
+                                    DropOperation.newBuilder()
+                                            .setDropColumnInHistoryMode(
+                                                    DropColumnInHistoryMode.newBuilder()
+                                                            .setColumn("b")
+                                                            .setOperationTimestamp("2020-01-01 01:01:01")
+                                            )
+                            )
+                    ).build();
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                System.out.println(q.getQuery());
+                q.execute(conn);
+            }
+
+            t = TeradataJDBCUtil.getTable(
+                    conf, conf.database(), tableName, tableName, testWarningHandle
+            );
+            columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("b", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(3).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(4).getName());
+            Assertions.assertEquals(5, columns.size());
+
+            checkResult(
+                    "SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " ORDER BY _fivetran_start, a",
+                    Collections.singletonList(
+                            Arrays.asList("2", null, "2020-01-01 01:01:01.0", "9999-12-31 11:59:59.999999", "1")
+                    )
+            );
         }
     }
 
@@ -1466,6 +1517,72 @@ public class MigrateTest extends IntegrationTestBase {
 
                 TeradataJDBCUtil.generateMigrateQueries(invalidRequest, testWarningHandle);
             });
+
+            //
+            // FOURTH RUN — simultaneous migration: _fivetran_start == operationTimestamp
+            //
+
+            try {
+                stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
+            } catch (Exception ignored) {}
+
+            stmt.execute(
+                    "CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " (a INT NOT NULL, "
+                            + "_fivetran_start TIMESTAMP(6) NOT NULL, "
+                            + "_fivetran_end TIMESTAMP(6), "
+                            + "_fivetran_active BYTEINT, "
+                            + "PRIMARY KEY(_fivetran_start, a))"
+            );
+
+            stmt.execute(
+                    "INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " VALUES (2, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)"
+            );
+
+            request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("addColumnInHistoryMode")
+                            .setSchema(IntegrationTestBase.schema)
+                            .setAdd(
+                                    AddOperation.newBuilder()
+                                            .setAddColumnInHistoryMode(
+                                                    AddColumnInHistoryMode.newBuilder()
+                                                            .setColumn("b")
+                                                            .setColumnType(DataType.INT)
+                                                            .setDefaultValue("3")
+                                                            .setOperationTimestamp("2020-01-01 01:01:01")
+                                            )
+                            )
+                    ).build();
+
+            queries = TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                System.out.println(q.getQuery());
+                q.execute(conn);
+            }
+
+            t = TeradataJDBCUtil.getTable(
+                    conf, conf.database(), tableName, tableName, testWarningHandle
+            );
+            columns = t.getColumnsList();
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(3).getName());
+            Assertions.assertEquals("b", columns.get(4).getName());
+            Assertions.assertEquals(DataType.INT, columns.get(4).getType());
+            Assertions.assertEquals(5, columns.size());
+
+            checkResult(
+                    "SELECT a, b, _fivetran_start, _fivetran_end, _fivetran_active FROM "
+                            + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " ORDER BY _fivetran_start, a",
+                    Collections.singletonList(
+                            Arrays.asList("2", "3", "2020-01-01 01:01:01.0", "9999-12-31 11:59:59.999999", "1")
+                    )
+            );
         }
     }
 

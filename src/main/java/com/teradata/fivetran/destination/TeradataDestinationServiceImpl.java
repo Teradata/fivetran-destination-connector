@@ -586,7 +586,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
     @Override
     public void migrate(MigrateRequest request, StreamObserver<MigrateResponse> responseObserver) {
-        Logger.logMessage(Logger.LogLevel.INFO, "#########################migrate#############################################################");
+        Logger.logMessage(Logger.LogLevel.INFO, "Migrate request received");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
             conn.setAutoCommit(false);
@@ -599,7 +599,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         try {
                             Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", queryWithCleanup.getQuery()));
                             queryWithCleanup.execute(conn);
-                            conn.commit();
                         } catch (SQLException e) {
                             // Perform cleanup if query execution fails
                             String cleanupQuery = queryWithCleanup.getCleanupQuery();
@@ -644,9 +643,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             responseObserver.onNext(MigrateResponse.newBuilder()
                     .setTask(Task.newBuilder()
                             .setMessage(e.getMessage()).build())
-                    .build());
-            responseObserver.onNext(MigrateResponse.newBuilder()
-                    .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
         }

@@ -1137,7 +1137,7 @@ public class TeradataJDBCUtil {
                 escapeTable(database, table), escapeIdentifier(column),
                 mapDataTypes(type, null));
         String updateValues = String.format("UPDATE %s SET %s = ?",
-                escapeTable(database, table), escapeIdentifier(column), escapeIdentifier(column));
+                escapeTable(database, table), escapeIdentifier(column));
 
         QueryWithCleanup addOnly = new QueryWithCleanup(addColumnOnly, null, null);
         QueryWithCleanup update = new QueryWithCleanup(updateValues, null, null);
@@ -1217,7 +1217,6 @@ public class TeradataJDBCUtil {
         );
         String copyDataQuery = String.format("UPDATE %s SET %s = 0",
                 escapeTable(database, table),
-                escapeIdentifier(softDeleteColumn),
                 escapeIdentifier(softDeleteColumn)
         );
         String dropColumnQuery = String.format("ALTER TABLE %s DROP %s",
@@ -1232,7 +1231,7 @@ public class TeradataJDBCUtil {
     static List<QueryWithCleanup> generateMigrateLiveToHistory(Table t,
                                                                String database,
                                                                String table) {
-        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        // Teradata doesn't support adding PK columns, so the table needs to be recreated from scratch.
         String tempTableName = getTempName(table);
         Table tempTable = t.toBuilder()
                 .setName(tempTableName)
@@ -1253,15 +1252,18 @@ public class TeradataJDBCUtil {
                                 .setType(DataType.BOOLEAN)
                 ).build();
         String createTableQuery = generateCreateTableQuery(database, tempTableName, tempTable);
-        String populateDataQuery = String.format("INSERT INTO %s SELECT *, NOW() AS `_fivetran_start`, '9999-12-31 23:59:59.999999' AS `_fivetran_end`, TRUE AS `_fivetran_active` FROM %s",
-                escapeTable(database, tempTableName), escapeTable(database, table));
-        String dropTableQuery = String.format("DROP TABLE IF EXISTS %s", escapeTable(database, table));
-        String renameTableQuery = String.format("ALTER TABLE %s RENAME %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+        String originalColumns = t.getColumnsList().stream()
+                .map(c -> escapeIdentifier(c.getName()))
+                .collect(Collectors.joining(", "));
+        String populateDataQuery = String.format("INSERT INTO %s SELECT %s, CURRENT_TIMESTAMP(6) AS \"_fivetran_start\", TIMESTAMP '9999-12-31 23:59:59.999999' AS \"_fivetran_end\", 1 AS \"_fivetran_active\" FROM %s",
+                escapeTable(database, tempTableName), originalColumns, escapeTable(database, table));
+        String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
+        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeIdentifier(table));
 
         return Arrays.asList(
                 new QueryWithCleanup(createTableQuery, null, null),
-                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE IF EXISTS %s", escapeTable(database, tempTableName)), null),
-                new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE IF EXISTS %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
+                new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
                 new QueryWithCleanup(renameTableQuery, null,
                         String.format("Failed to migrate table %s to history mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
                                 escapeTable(database, table),
@@ -1277,7 +1279,7 @@ public class TeradataJDBCUtil {
                                                                      String table,
                                                                      String softDeleteColumn) {
         Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateSoftDeleteToHistory: table=%s, softDeleteColumn=%s, database=%s", table, softDeleteColumn, database));
-        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        // Teradata doesn't support adding PK columns, so the table needs to be recreated from scratch.
         List<Column> tempTableColumns = t.getColumnsList().stream()
                 .filter(c -> !c.getName().equals(softDeleteColumn))
                 .collect(Collectors.toList());
@@ -1367,7 +1369,7 @@ public class TeradataJDBCUtil {
                                                                      String table,
                                                                      String softDeletedColumn) {
         Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateHistoryToSoftDelete: table=%s, softDeletedColumn=%s, database=%s", table, softDeletedColumn, database));
-        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        // Teradata doesn't support adding PK columns, so the table needs to be recreated from scratch.
         String tempTableName = getTempName(table);
         List<Column> tempTableColumns = t.getColumnsList().stream()
                 .filter(c ->
@@ -1441,7 +1443,7 @@ public class TeradataJDBCUtil {
                                                                String table,
                                                                Boolean keep_deleted_rows) {
         Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateHistoryToLive: table=%s, keep_deleted_rows=%s, database=%s", table, keep_deleted_rows, database));
-        // SingleStore doesn't support adding PK columns, so the table needs to be recreated from scratch.
+        // Teradata doesn't support adding PK columns, so the table needs to be recreated from scratch.
         String tempTableName = getTempName(table);
         Table tempTable = Table.newBuilder()
                 .setName(tempTableName)
@@ -1521,14 +1523,18 @@ public class TeradataJDBCUtil {
         String createTableQuery = generateCreateTableQuery(database, toTable, newTable);
         String populateDataQuery;
         if (softDeleteColumn == null || softDeleteColumn.isEmpty()) {
+            String srcColumns = t.getColumnsList().stream()
+                    .map(c -> "src." + escapeIdentifier(c.getName()))
+                    .collect(Collectors.joining(", "));
             populateDataQuery = String.format(
                     "INSERT INTO %s " +
-                            "SELECT src.*, " +
+                            "SELECT %s, " +
                             "CURRENT_TIMESTAMP(6) AS \"%s\", " +
                             "TIMESTAMP '9999-12-31 23:59:59.999999' AS \"%s\", " +
                             "1 AS \"%s\" " +
                             "FROM %s AS src",
                     escapeTable(database, toTable),
+                    srcColumns,
                     "_fivetran_start",
                     "_fivetran_end",
                     "_fivetran_active",
@@ -1601,6 +1607,16 @@ public class TeradataJDBCUtil {
                 .addParameter(operationTimestamp, DataType.NAIVE_DATETIME)
                 .addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
 
+        // Handle rows where _fivetran_start equals operationTimestamp (simultaneous migration edge case)
+        QueryWithCleanup updateEqualTimestampQuery = new QueryWithCleanup(String.format("UPDATE %s " +
+                        "SET %s = NULL " +
+                        "WHERE _fivetran_active = 1 AND %s IS NOT NULL AND _fivetran_start = ?",
+                escapeTable(database, table),
+                escapeIdentifier(column),
+                escapeIdentifier(column)
+        ), null, null)
+                .addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
         QueryWithCleanup updateQuery = new QueryWithCleanup(String.format("UPDATE %s " +
                         "SET _fivetran_end = (CAST(? AS TIMESTAMP(6)) - INTERVAL '0.000001' SECOND), _fivetran_active = 0 " +
                         "WHERE _fivetran_active =1 AND %s IS NOT NULL AND _fivetran_start < ?",
@@ -1610,7 +1626,7 @@ public class TeradataJDBCUtil {
         updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
         updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
 
-        return Arrays.asList(deleteQuery, insertQuery, updateQuery);
+        return Arrays.asList(deleteQuery, insertQuery, updateEqualTimestampQuery, updateQuery);
     }
 
     static List<QueryWithCleanup> generateAddColumnInHistoryMode(AddColumnInHistoryMode migration, Table t, String database, String table, boolean isEmptyTable) {
@@ -1657,6 +1673,22 @@ public class TeradataJDBCUtil {
                 .addParameter(operationTimestamp, DataType.NAIVE_DATETIME)
                 .addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
 
+        // Handle rows where _fivetran_start equals operationTimestamp (simultaneous migration edge case)
+        QueryWithCleanup updateEqualTimestampQuery = new QueryWithCleanup(
+                String.format(
+                        "UPDATE %s SET %s = CAST(? AS %s) " +
+                                "WHERE _fivetran_active = 1 " +
+                                "AND _fivetran_start = ?",
+                        escapeTable(database, table),
+                        escapeIdentifier(column),
+                        mapDataTypes(columnType, null)
+                ),
+                dropColumnCleanup,
+                null
+        );
+        updateEqualTimestampQuery.addParameter(defaultValue, columnType);
+        updateEqualTimestampQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
         QueryWithCleanup updateQuery = new QueryWithCleanup(
                 String.format(
                         "UPDATE %s " +
@@ -1673,7 +1705,7 @@ public class TeradataJDBCUtil {
         updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
         updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
 
-        return Arrays.asList(alterTableQuery, insertQuery, updateQuery);
+        return Arrays.asList(alterTableQuery, insertQuery, updateEqualTimestampQuery, updateQuery);
     }
 
 }
