@@ -1,5 +1,7 @@
 package com.teradata.fivetran.destination;
 
+import com.teradata.fivetran.destination.warning_util.AlterTableWarningHandler;
+import com.teradata.fivetran.destination.warning_util.DescribeTableWarningHandler;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import com.teradata.fivetran.destination.warning_util.WriteBatchWarningHandler;
 import com.teradata.fivetran.destination.writers.*;
@@ -468,7 +470,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         Logger.logMessage(Logger.LogLevel.INFO, String.format("Database: %s, Table: %s", database, table));
 
         try {
-            Table t = TeradataJDBCUtil.getTable(conf, database, table, request.getTableName(), new WarningHandler());
+            Table t = TeradataJDBCUtil.getTable(conf, database, table, request.getTableName(), new DescribeTableWarningHandler(responseObserver));
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Table %s exists", TeradataJDBCUtil.escapeTable(database, table)));
             Logger.logMessage(Logger.LogLevel.INFO, String.format("Table %s description: %s", TeradataJDBCUtil.escapeTable(database, table), t));
             DescribeTableResponse response = DescribeTableResponse.newBuilder().setTable(t).build();
@@ -537,7 +539,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
-            WarningHandler wh = new WarningHandler();
+            WarningHandler wh = new AlterTableWarningHandler(responseObserver);
             List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, wh);
             if (queries != null && !queries.isEmpty()) {
                 for (TeradataJDBCUtil.QueryWithCleanup queryWithCleanup : queries) {
@@ -572,13 +574,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             Logger.logMessage(Logger.LogLevel.SEVERE, String.format("AlterTable failed with exception %s", e.getMessage()));
             responseObserver.onNext(AlterTableResponse.newBuilder()
                     .setTask(Task.newBuilder()
-                            .setMessage("alterTable :: Table: " 
+                            .setMessage("alterTable :: Table: "
                                     + TeradataJDBCUtil.escapeTable(conf.database(), request.getTable().getName())
                                     + ", SQL: " + query
                                     + ", Error: " + e.getMessage()).build())
-                    .build());
-            responseObserver.onNext(AlterTableResponse.newBuilder()
-                    .setSuccess(false)
                     .build());
             responseObserver.onCompleted();
         }

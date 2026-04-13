@@ -1192,7 +1192,7 @@ public class TeradataJDBCUtil {
 
     static List<QueryWithCleanup> generateMigrateCopyTable(String tableFrom, String tableTo, String database) {
         Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateCopyTable: tableFrom=%s, tableTo=%s, database=%s", tableFrom, tableTo, database));
-        String query = String.format("CREATE TABLE %s AS (SELECT * FROM %s) WITH DATA", escapeTable(database, tableTo), escapeTable(database, tableFrom));
+        String query = String.format("CREATE MULTISET TABLE %s AS (SELECT * FROM %s) WITH DATA", escapeTable(database, tableTo), escapeTable(database, tableFrom));
         return Collections.singletonList(new QueryWithCleanup(query, null, null));
     }
 
@@ -1258,7 +1258,7 @@ public class TeradataJDBCUtil {
         String populateDataQuery = String.format("INSERT INTO %s SELECT %s, CURRENT_TIMESTAMP(6) AS \"_fivetran_start\", TIMESTAMP '9999-12-31 23:59:59.999999' AS \"_fivetran_end\", 1 AS \"_fivetran_active\" FROM %s",
                 escapeTable(database, tempTableName), originalColumns, escapeTable(database, table));
         String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
-        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeTable(database, table));
 
         return Arrays.asList(
                 new QueryWithCleanup(createTableQuery, null, null),
@@ -1332,7 +1332,7 @@ public class TeradataJDBCUtil {
         );
 
         String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
-        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeTable(database, table));
 
         return Arrays.asList(
                 new QueryWithCleanup(createTableQuery, null, null),
@@ -1423,7 +1423,7 @@ public class TeradataJDBCUtil {
             );
         }
         String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
-        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeTable(database, table));
 
         return Arrays.asList(
                 new QueryWithCleanup(createTableQuery, null, null),
@@ -1468,7 +1468,7 @@ public class TeradataJDBCUtil {
                 keep_deleted_rows ? "" : " WHERE _fivetran_active = 1"
         );
         String dropTableQuery = String.format("DROP TABLE %s", escapeTable(database, table));
-        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeIdentifier(table));
+        String renameTableQuery = String.format("RENAME TABLE %s TO %s", escapeTable(database, tempTableName), escapeTable(database, table));
 
         return Arrays.asList(
                 new QueryWithCleanup(createTableQuery, null, null),
