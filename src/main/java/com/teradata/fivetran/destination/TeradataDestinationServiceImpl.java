@@ -627,7 +627,6 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 }
             }
 
-
             responseObserver.onNext(MigrateResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {

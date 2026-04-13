@@ -90,7 +90,7 @@ public class TeradataJDBCUtil {
         }
 
         public QueryWithCleanup addParameter(String value, DataType type) {
-            parameterValues.add(value.toString());
+            parameterValues.add(value);
             parameterTypes.add(type);
             return this;
         }
@@ -614,7 +614,7 @@ public class TeradataJDBCUtil {
         return pkColumnNames(t1).equals(pkColumnNames(t2));
     }
 
-    static <T> List generateAlterTableQuery(AlterTableRequest request, WarningHandler warningHandler) throws Exception {
+    static List<QueryWithCleanup> generateAlterTableQuery(AlterTableRequest request, WarningHandler warningHandler) throws Exception {
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
 
         String database = TeradataJDBCUtil.getDatabaseName(conf, request.getSchemaName());
@@ -677,7 +677,7 @@ public class TeradataJDBCUtil {
         }
     }
 
-    static <T> List generateRecreateTableQuery(String database, String tableName, Table table,
+    static List<QueryWithCleanup> generateRecreateTableQuery(String database, String tableName, Table table,
                                              List<Column> commonColumns) {
         String tmpTableName = tableName + "_alter_tmp";
         String columns = commonColumns.stream().map(column -> escapeIdentifier(column.getName()))
@@ -744,7 +744,7 @@ public class TeradataJDBCUtil {
             String renameColumnQuery = String.format(
                     "ALTER TABLE %s RENAME %s TO %s",
                     escapeTable(database, table),
-                    tmpColName,
+                    escapeIdentifier(tmpColName),
                     escapeIdentifier(column.getName())
             );
 
@@ -783,7 +783,7 @@ public class TeradataJDBCUtil {
             columnsToDrop.forEach(column -> dropOperations
                     .add(String.format("DROP %s", escapeIdentifier(column.getName()))));
 
-            String dropColumnsQuery = String.format("ALTER TABLE %s %s; ",
+            String dropColumnsQuery = String.format("ALTER TABLE %s %s",
                     escapeTable(database, table), String.join(", ", dropOperations));
             queries.add(new QueryWithCleanup(dropColumnsQuery, null, null));
         }
