@@ -588,45 +588,43 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         Logger.logMessage(Logger.LogLevel.INFO, "Migrate request received");
         TeradataConfiguration conf = new TeradataConfiguration(request.getConfigurationMap());
         try (Connection conn = TeradataJDBCUtil.createConnection(conf)) {
+            // ANSI mode requires COMMIT after DDL before any DML can execute,
+            // so we commit after each query rather than batching into one transaction.
             conn.setAutoCommit(false);
 
             WarningHandler wh = new WarningHandler();
             List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, wh);
-            try {
-                if (queries != null && !queries.isEmpty()) {
-                    for (TeradataJDBCUtil.QueryWithCleanup queryWithCleanup : queries) {
+            if (queries != null && !queries.isEmpty()) {
+                for (TeradataJDBCUtil.QueryWithCleanup queryWithCleanup : queries) {
+                    try {
+                        Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", queryWithCleanup.getQuery()));
+                        queryWithCleanup.execute(conn);
+                        conn.commit();
+                    } catch (SQLException e) {
                         try {
-                            Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", queryWithCleanup.getQuery()));
-                            queryWithCleanup.execute(conn);
-                        } catch (SQLException e) {
-                            // Perform cleanup if query execution fails
-                            String cleanupQuery = queryWithCleanup.getCleanupQuery();
-                            if (cleanupQuery != null) {
-                                try (Statement cleanupStmt = conn.createStatement()) {
-                                    Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing cleanup SQL:\n %s", cleanupQuery));
-                                    cleanupStmt.execute(cleanupQuery);
-                                }
-                            }
-
-                            String warning = queryWithCleanup.getWarningMessage();
-                            if (warning != null) {
-                                wh.handle(warning);
-                            }
-
-                            throw e;
+                            conn.rollback();
+                        } catch (SQLException rollbackEx) {
+                            e.addSuppressed(rollbackEx);
                         }
+
+                        // Perform cleanup if query execution fails
+                        String cleanupQuery = queryWithCleanup.getCleanupQuery();
+                        if (cleanupQuery != null) {
+                            try (Statement cleanupStmt = conn.createStatement()) {
+                                Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing cleanup SQL:\n %s", cleanupQuery));
+                                cleanupStmt.execute(cleanupQuery);
+                                conn.commit();
+                            }
+                        }
+
+                        String warning = queryWithCleanup.getWarningMessage();
+                        if (warning != null) {
+                            wh.handle(warning);
+                        }
+
+                        throw e;
                     }
                 }
-
-                conn.commit();
-            } catch (SQLException e) {
-                try {
-                    conn.rollback();
-                } catch (SQLException rollbackEx) {
-                    // keep original error, attach rollback failure as suppressed
-                    e.addSuppressed(rollbackEx);
-                }
-                throw e; // propagate to caller
             }
 
 
