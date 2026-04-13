@@ -68,9 +68,11 @@ public class MigrateTest extends IntegrationTestBase {
                 // ignore
             }
 
-            // Create source table
+            // Create source table with data
             System.out.println("Creating table: " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
             stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + "(a INT)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (1)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (2)");
             System.out.println("Created table: " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
 
             // Build rename request
@@ -98,7 +100,7 @@ public class MigrateTest extends IntegrationTestBase {
                 stmt.execute(q.getQuery());
             }
 
-            // Validate renamed table
+            // Validate renamed table exists
             Table renamed = TeradataJDBCUtil.getTable(
                     conf,
                     database,
@@ -106,8 +108,21 @@ public class MigrateTest extends IntegrationTestBase {
                     toTableName,
                     testWarningHandle
             );
-
             Assertions.assertEquals(toTableName, renamed.getName());
+
+            // Validate old table no longer exists
+            Assertions.assertThrows(TableNotExistException.class, () -> {
+                TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            });
+
+            // Validate data survived the rename
+            checkResult(
+                    "SELECT a FROM " + TeradataJDBCUtil.escapeTable(conf.database(), toTableName) + " ORDER BY a",
+                    Arrays.asList(
+                            Collections.singletonList("1"),
+                            Collections.singletonList("2")
+                    )
+            );
         }
     }
 
@@ -125,9 +140,11 @@ public class MigrateTest extends IntegrationTestBase {
                 // ignore
             }
 
-            // Create initial table
+            // Create initial table with data
             System.out.println("Creating table: " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
             stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " (a INT, b INT)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (1, 10)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (2, 20)");
             System.out.println("Created table: " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
 
             // Build migration request
@@ -166,6 +183,15 @@ public class MigrateTest extends IntegrationTestBase {
 
             Assertions.assertEquals("a", renamed.getColumns(0).getName());
             Assertions.assertEquals("c", renamed.getColumns(1).getName());
+
+            // Validate data survived the rename
+            checkResult(
+                    "SELECT a, c FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " ORDER BY a",
+                    Arrays.asList(
+                            Arrays.asList("1", "10"),
+                            Arrays.asList("2", "20")
+                    )
+            );
         }
     }
 
@@ -325,11 +351,13 @@ public class MigrateTest extends IntegrationTestBase {
                 stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
             } catch (Exception e) {}
 
-            // Create initial table
+            // Create initial table with data
             stmt.execute(
                     "CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
                             " (a INT)"
             );
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (10)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (20)");
 
             // -----------------------------
             // ADD COLUMN b INT DEFAULT 1
@@ -372,6 +400,15 @@ public class MigrateTest extends IntegrationTestBase {
             Assertions.assertEquals("b", b.getName());
             Assertions.assertEquals(DataType.INT, b.getType());
 
+            // Validate default value was applied to existing rows
+            checkResult(
+                    "SELECT a, b FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " ORDER BY a",
+                    Arrays.asList(
+                            Arrays.asList("10", "1"),
+                            Arrays.asList("20", "1")
+                    )
+            );
+
             // -----------------------------
             // ADD COLUMN c TIMESTAMP DEFAULT <date>
             // -----------------------------
@@ -410,6 +447,15 @@ public class MigrateTest extends IntegrationTestBase {
             Column c = optionalC.get();
             Assertions.assertEquals("c", c.getName());
             Assertions.assertEquals(DataType.NAIVE_DATETIME, c.getType());
+
+            // Validate default timestamp value was applied to existing rows
+            checkResult(
+                    "SELECT a, b, c FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " ORDER BY a",
+                    Arrays.asList(
+                            Arrays.asList("10", "1", "2025-11-24 10:14:54.123000"),
+                            Arrays.asList("20", "1", "2025-11-24 10:14:54.123000")
+                    )
+            );
         }
     }
 
