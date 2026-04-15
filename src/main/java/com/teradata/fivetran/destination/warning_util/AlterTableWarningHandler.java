@@ -4,32 +4,30 @@ import fivetran_sdk.v2.AlterTableResponse;
 import fivetran_sdk.v2.Warning;
 import io.grpc.stub.StreamObserver;
 
-/**
- * Handles warnings for AlterTable operations.
- */
-public class AlterTableWarningHandler extends WarningHandler<AlterTableResponse> {
+public class AlterTableWarningHandler extends WarningHandler {
+    StreamObserver<AlterTableResponse> responseObserver;
 
-    /**
-     * Constructor for AlterTableWarningHandler.
-     *
-     * @param responseObserver The response observer to send warnings to.
-     */
     public AlterTableWarningHandler(StreamObserver<AlterTableResponse> responseObserver) {
-        super(responseObserver);
+        this.responseObserver = responseObserver;
     }
 
-    /**
-     * Creates an AlterTableResponse containing a warning message.
-     *
-     * @param message The warning message.
-     * @return The AlterTableResponse with the warning.
-     */
     @Override
-    public AlterTableResponse createWarning(String message) {
-        return AlterTableResponse.newBuilder()
+    public void handle(String message) {
+        super.handle(message);
+        responseObserver.onNext(AlterTableResponse.newBuilder()
                 .setWarning(Warning.newBuilder()
                         .setMessage(message)
                         .build())
-                .build();
+                .build());
+    }
+
+    @Override
+    public void handle(String message, Throwable t) {
+        super.handle(message, t);
+        responseObserver.onNext(AlterTableResponse.newBuilder()
+                .setWarning(Warning.newBuilder()
+                        .setMessage(String.format("%s: %s", message, t.getMessage()))
+                        .build())
+                .build());
     }
 }
