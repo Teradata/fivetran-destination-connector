@@ -221,6 +221,46 @@ public class AlterTableTest extends IntegrationTestBase {
         }
     }
 
+    // Regression: Fivetran tester may send precision > 38 when DECIMAL scale grows
+    // (to preserve integer digits). Teradata max is 38, so the connector must cap it.
+    @Test
+    public void decimalPrecisionAbove38IsCappedAt38() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_decimalPrecisionCap";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " (a INT, b DECIMAL(38, 10))");
+
+            // Request precision=43 (what the tester sends on scale change 10 -> 15).
+            // Expect the connector to cap at 38 and emit valid DDL.
+            Table table = Table.newBuilder().setName("decimalPrecisionCap").addAllColumns(
+                            Arrays.asList(
+                                    Column.newBuilder().setName("a").setType(DataType.INT).build(),
+                                    Column.newBuilder().setName("b").setType(DataType.DECIMAL)
+                                            .setParams(DataTypeParams.newBuilder()
+                                                    .setDecimal(DecimalParams.newBuilder()
+                                                            .setScale(15)
+                                                            .setPrecision(43))
+                                                    .build())
+                                            .build()))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals("b", columns.get(1).getName());
+            assertEquals(DataType.DECIMAL, columns.get(1).getType());
+            assertEquals(38, columns.get(1).getParams().getDecimal().getPrecision());
+            assertEquals(15, columns.get(1).getParams().getDecimal().getScale());
+        }
+    }
+
     // Test for ignoring different datetime columns
     @Test
     public void shouldIgnoreDifferentDatetimeColumns() throws Exception {

@@ -448,7 +448,19 @@ public class TeradataJDBCUtil {
                 return "BIGINT";
             case DECIMAL:
                 if (params != null) {
-                    return String.format("DECIMAL (%d, %d)", params.getDecimal().getPrecision(), Math.min(30, params.getDecimal().getScale()));
+                    // Teradata DECIMAL max precision is 38. The Fivetran tester may send a
+                    // precision > 38 when scale grows (to preserve integer digits); cap here
+                    // to keep the ALTER/CREATE valid. Scale must also be <= precision.
+                    int requestedPrecision = params.getDecimal().getPrecision();
+                    int requestedScale = params.getDecimal().getScale();
+                    int precision = Math.min(38, requestedPrecision);
+                    int scale = Math.min(Math.min(30, precision), requestedScale);
+                    if (precision != requestedPrecision || scale != requestedScale) {
+                        Logger.logMessage(Logger.LogLevel.WARNING,
+                                String.format("Requested DECIMAL(%d, %d) exceeds Teradata limits (max precision 38, max scale 30); using DECIMAL(%d, %d)",
+                                        requestedPrecision, requestedScale, precision, scale));
+                    }
+                    return String.format("DECIMAL (%d, %d)", precision, scale);
                 }
                 return "DECIMAL";
             case FLOAT:
