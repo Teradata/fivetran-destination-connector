@@ -2,6 +2,7 @@ package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.warning_util.AlterTableWarningHandler;
 import com.teradata.fivetran.destination.warning_util.DescribeTableWarningHandler;
+import com.teradata.fivetran.destination.warning_util.MigrateWarningHandler;
 import com.teradata.fivetran.destination.warning_util.WarningHandler;
 import com.teradata.fivetran.destination.warning_util.WriteBatchWarningHandler;
 import com.teradata.fivetran.destination.writers.*;
@@ -539,6 +540,10 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
         String query = "";
         try (Connection conn = TeradataJDBCUtil.createConnection(conf);
              Statement stmt = conn.createStatement()) {
+            // ANSI mode requires explicit COMMIT after DDL, so commit per query
+            // and ensure cleanup queries on failure are also committed.
+            conn.setAutoCommit(false);
+
             WarningHandler wh = new AlterTableWarningHandler(responseObserver);
             List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, wh);
             if (queries != null && !queries.isEmpty()) {
@@ -547,13 +552,21 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                         query = queryWithCleanup.getQuery();
                         Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing SQL:\n %s", query));
                         stmt.execute(query);
+                        conn.commit();
                     } catch (SQLException e) {
+                        try {
+                            conn.rollback();
+                        } catch (SQLException rollbackEx) {
+                            e.addSuppressed(rollbackEx);
+                        }
+
                         // Perform cleanup if query execution fails
                         String cleanupQuery = queryWithCleanup.getCleanupQuery();
                         if (cleanupQuery != null) {
                             try (Statement cleanupStmt = conn.createStatement()) {
                                 Logger.logMessage(Logger.LogLevel.INFO, String.format("Executing cleanup SQL:\n %s", cleanupQuery));
                                 cleanupStmt.execute(cleanupQuery);
+                                conn.commit();
                             }
                         }
 
@@ -592,7 +605,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             // so we commit after each query rather than batching into one transaction.
             conn.setAutoCommit(false);
 
-            WarningHandler wh = new WarningHandler();
+            WarningHandler wh = new MigrateWarningHandler(responseObserver);
             List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateMigrateQueries(request, wh);
             if (queries != null && !queries.isEmpty()) {
                 for (TeradataJDBCUtil.QueryWithCleanup queryWithCleanup : queries) {
