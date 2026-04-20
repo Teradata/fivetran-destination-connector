@@ -1,0 +1,13 @@
+{
+    "td2password": "mt255026",
+    "tmode": "TERA",
+    "default.varchar.size": "1000",
+    "varchar.character.set": "LATIN",
+    "use.fastload": "false",
+    "query.band": "",
+    "batch.size": "100000",
+    "host": "10.25.56.44",
+    "logmech": "TD2",
+    "user": "mt255026",
+    "ssl.mode": "DISABLE"
+}
