@@ -221,6 +221,51 @@ public class AlterTableTest extends IntegrationTestBase {
         }
     }
 
+    // Regression: PK-column rename via alter_table (tester models it as drop+add).
+    // Old PK (pk1, pk2, old_pk) -> New PK (pk1, pk2, new_pk). The recreate-copy
+    // must alias old_pk -> new_pk or Teradata raises Error 3811 (NOT NULL).
+    @Test
+    public void pkColumnRename() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_pkColumnRename";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                    + " (\"pk1\" INT NOT NULL, \"pk2\" VARCHAR(10) NOT NULL, \"old_pk\" VARCHAR(10) NOT NULL, \"value\" VARCHAR(100),"
+                    + " PRIMARY KEY (\"pk1\", \"pk2\", \"old_pk\"))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                    + " (\"pk1\", \"pk2\", \"old_pk\", \"value\") VALUES (1, 'A', 'X', 'hello')");
+
+            Table table = Table.newBuilder().setName("pkColumnRename").addAllColumns(
+                            Arrays.asList(
+                                    Column.newBuilder().setName("pk1").setType(DataType.INT).setPrimaryKey(true).build(),
+                                    Column.newBuilder().setName("pk2").setType(DataType.STRING).setPrimaryKey(true)
+                                            .setParams(DataTypeParams.newBuilder().setStringByteLength(10).build()).build(),
+                                    Column.newBuilder().setName("new_pk").setType(DataType.STRING).setPrimaryKey(true)
+                                            .setParams(DataTypeParams.newBuilder().setStringByteLength(10).build()).build(),
+                                    Column.newBuilder().setName("value").setType(DataType.STRING)
+                                            .setParams(DataTypeParams.newBuilder().setStringByteLength(100).build()).build()))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            // The data from old_pk must have been copied into new_pk
+            checkResult("SELECT \"pk1\", \"pk2\", \"new_pk\", \"value\" FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName),
+                    Arrays.asList(Arrays.asList("1", "A", "X", "hello")));
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals(4, columns.size());
+            assertEquals("new_pk", columns.get(2).getName());
+            assertEquals(true, columns.get(2).getPrimaryKey());
+        }
+    }
+
     // Regression: Fivetran tester may send precision > 38 when DECIMAL scale grows
     // (to preserve integer digits). Teradata max is 38, so the connector must cap it.
     @Test

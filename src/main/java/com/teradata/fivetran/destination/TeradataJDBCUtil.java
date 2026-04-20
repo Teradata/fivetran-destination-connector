@@ -683,21 +683,76 @@ public class TeradataJDBCUtil {
         if (pkChanged) {
             Logger.logMessage(Logger.LogLevel.INFO, "Alter table changes the key of the table. This operation is not supported by Teradata. The table will be recreated from scratch.");
 
-            return generateRecreateTableQuery(database, table, newTable, commonColumns);
+            return generateRecreateTableQuery(database, table, newTable, commonColumns, oldTable);
         } else {
             return generateAlterTableQuery(database, table, columnsToAdd, columnsToChange, columnsToDrop);
         }
     }
 
+    /**
+     * Detect PK column renames by positional pairing. The tester models a PK
+     * rename as drop+add; to avoid NOT NULL violations during the recreate-copy
+     * we pair old-PK[i] with new-PK[i] when all of:
+     *   - old PK size == new PK size
+     *   - old-PK[i].name is absent from the new schema
+     *   - new-PK[i].name is absent from the old schema
+     * Any position failing those guards is left out of the map (name-based copy
+     * fallback takes over).
+     */
+    static Map<String, String> buildPkRenameMap(Table oldTable, Table newTable) {
+        List<Column> oldPk = oldTable.getColumnsList().stream()
+                .filter(Column::getPrimaryKey).collect(Collectors.toList());
+        List<Column> newPk = newTable.getColumnsList().stream()
+                .filter(Column::getPrimaryKey).collect(Collectors.toList());
+
+        Map<String, String> renames = new LinkedHashMap<>();
+        if (oldPk.size() != newPk.size()) {
+            return renames;
+        }
+
+        Set<String> oldNames = oldTable.getColumnsList().stream()
+                .map(Column::getName).collect(Collectors.toSet());
+        Set<String> newNames = newTable.getColumnsList().stream()
+                .map(Column::getName).collect(Collectors.toSet());
+
+        for (int i = 0; i < oldPk.size(); i++) {
+            String oldName = oldPk.get(i).getName();
+            String newName = newPk.get(i).getName();
+            if (!oldName.equals(newName)
+                    && !newNames.contains(oldName)
+                    && !oldNames.contains(newName)) {
+                renames.put(oldName, newName);
+            }
+        }
+        return renames;
+    }
+
     static List<QueryWithCleanup> generateRecreateTableQuery(String database, String tableName, Table table,
-                                             List<Column> commonColumns) {
+                                             List<Column> commonColumns, Table oldTable) {
         String tmpTableName = tableName + "_alter_tmp";
-        String columns = commonColumns.stream().map(column -> escapeIdentifier(column.getName()))
-                .collect(Collectors.joining(", "));
+
+        Map<String, String> pkRenames = buildPkRenameMap(oldTable, table);
+
+        List<String> insertTargets = new ArrayList<>();
+        List<String> selectExprs = new ArrayList<>();
+        for (Column col : commonColumns) {
+            insertTargets.add(escapeIdentifier(col.getName()));
+            selectExprs.add(escapeIdentifier(col.getName()));
+        }
+        for (Map.Entry<String, String> rename : pkRenames.entrySet()) {
+            // source = old PK name, target = new PK name
+            insertTargets.add(escapeIdentifier(rename.getValue()));
+            selectExprs.add(escapeIdentifier(rename.getKey()));
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("Detected PK column rename: %s -> %s; aliasing during recreate-copy",
+                            rename.getKey(), rename.getValue()));
+        }
 
         String createTable = generateCreateTableQuery(database, tmpTableName, table);
         String insertData = String.format("INSERT INTO %s (%s) SELECT %s FROM %s",
-                escapeTable(database, tmpTableName), columns, columns,
+                escapeTable(database, tmpTableName),
+                String.join(", ", insertTargets),
+                String.join(", ", selectExprs),
                 escapeTable(database, tableName));
         String dropTable = String.format("DROP TABLE %s", escapeTable(database, tableName));
         String renameTable = String.format("RENAME TABLE %s TO %s",
