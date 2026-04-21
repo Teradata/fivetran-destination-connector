@@ -1146,7 +1146,8 @@ public class TeradataJDBCUtil {
                         t = getTable(conf, database, table, details.getTable(), warningHandler);
                         return generateAddColumnInHistoryMode(addColumnInHistoryMode, t, database, table, isEmpty);
                     case ADD_COLUMN_WITH_DEFAULT_VALUE:
-                        return generateMigrateAddColumnWithDefaultValue(add.getAddColumnWithDefaultValue(), table, database);
+                        t = getTable(conf, database, table, details.getTable(), warningHandler);
+                        return generateMigrateAddColumnWithDefaultValue(add.getAddColumnWithDefaultValue(), t, table, database);
                     default:
                         throw new IllegalArgumentException("Unsupported add operation");
                 }
@@ -1195,21 +1196,34 @@ public class TeradataJDBCUtil {
         return Collections.singletonList(new QueryWithCleanup(query, null, null));
     }
 
-    static List<QueryWithCleanup> generateMigrateAddColumnWithDefaultValue(AddColumnWithDefaultValue migration, String table, String database) {
+    static List<QueryWithCleanup> generateMigrateAddColumnWithDefaultValue(AddColumnWithDefaultValue migration, Table existingTable, String table, String database) {
         Logger.logMessage(Logger.LogLevel.INFO, String.format("In generateMigrateAddColumnWithDefaultValue: column=%s, table=%s, database=%s", migration.getColumn(), table, database));
         String column = migration.getColumn();
         DataType type = migration.getColumnType();
         String defaultValue = migration.getDefaultValue();
-        String addColumnOnly  = String.format("ALTER TABLE %s ADD %s %s",
-                escapeTable(database, table), escapeIdentifier(column),
-                mapDataTypes(type, null));
+
+        // Per Fivetran Partner SDK spec: if the column already exists, skip the ADD
+        // (to avoid Teradata Error 3804) but still run the UPDATE so pre-existing rows
+        // receive the default value.
+        boolean columnAlreadyExists = existingTable.getColumnsList().stream()
+                .anyMatch(c -> c.getName().equals(column));
+
         String updateValues = String.format("UPDATE %s SET %s = ?",
                 escapeTable(database, table), escapeIdentifier(column));
-
-        QueryWithCleanup addOnly = new QueryWithCleanup(addColumnOnly, null, null);
         QueryWithCleanup update = new QueryWithCleanup(updateValues, null, null);
-
         update.addParameter(defaultValue, type);
+
+        if (columnAlreadyExists) {
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("Column %s already exists on %s; skipping ADD, running UPDATE only",
+                            column, escapeTable(database, table)));
+            return Collections.singletonList(update);
+        }
+
+        String addColumnOnly = String.format("ALTER TABLE %s ADD %s %s",
+                escapeTable(database, table), escapeIdentifier(column),
+                mapDataTypes(type, null));
+        QueryWithCleanup addOnly = new QueryWithCleanup(addColumnOnly, null, null);
         return Arrays.asList(addOnly, update);
     }
 

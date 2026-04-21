@@ -464,6 +464,70 @@ public class MigrateTest extends IntegrationTestBase {
         }
     }
 
+    // Per Fivetran Partner SDK spec, when ADD_COLUMN_WITH_DEFAULT_VALUE targets a
+    // column that already exists, the connector must skip the ADD (to avoid
+    // Teradata Error 3804) but still run the UPDATE so pre-existing rows receive
+    // the default value.
+    @Test
+    public void addColumnWithDefaultValueWhenColumnAlreadyExists() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "addColumnExists";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+
+            try {
+                stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
+            } catch (Exception e) {}
+
+            // Pre-create the table with column "b" already present
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                    + " (a INT, b INT)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (10, NULL)");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " VALUES (20, NULL)");
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(
+                            MigrationDetails.newBuilder()
+                                    .setTable("addColumnExists")
+                                    .setSchema(IntegrationTestBase.schema)
+                                    .setAdd(
+                                            AddOperation.newBuilder()
+                                                    .setAddColumnWithDefaultValue(
+                                                            AddColumnWithDefaultValue.newBuilder()
+                                                                    .setColumn("b")
+                                                                    .setDefaultValue("1")
+                                                                    .setColumnType(DataType.INT)
+                                                                    .build()
+                                                    )
+                                    )
+                    )
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+
+            // Should produce exactly one query (UPDATE only, no ADD)
+            Assertions.assertEquals(1, queries.size(),
+                    "Expected only UPDATE when column already exists; got ADD as well");
+            Assertions.assertTrue(queries.get(0).getQuery().startsWith("UPDATE "),
+                    "Expected the single query to be UPDATE, got: " + queries.get(0).getQuery());
+
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
+            }
+
+            // Pre-existing rows must now carry the default value
+            checkResult(
+                    "SELECT a, b FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " ORDER BY a",
+                    Arrays.asList(
+                            Arrays.asList("10", "1"),
+                            Arrays.asList("20", "1")
+                    )
+            );
+        }
+    }
+
     @Test
     public void updateColumnValueOperation() throws Exception {
         String tableName = IntegrationTestBase.schema + "_" + "updateColumnValueOperation";
