@@ -20,6 +20,9 @@ public class TeradataDestination {
      */
     public static void main(String[] args) throws InterruptedException, IOException {
 
+        // Enable CRL Distribution Point checking for SSL certificate validation
+        System.setProperty("com.sun.security.enableCRLDP", "true");
+
         // Create Options object
         Options options = new Options();
         options.addOption("p", "port", true, "Port to run the gRPC server");
