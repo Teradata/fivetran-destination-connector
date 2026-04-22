@@ -1717,6 +1717,13 @@ public class TeradataJDBCUtil {
         String defaultValue = migration.getDefaultValue();
         String operationTimestamp = migration.getOperationTimestamp();
 
+        // Per Fivetran Partner SDK spec: if the column already exists, skip the ADD
+        // (to avoid Teradata Error 3804) but still run the history-mode DML so
+        // pre-existing active rows are closed and new current-state rows are inserted
+        // with the default value.
+        boolean columnAlreadyExists = t.getColumnsList().stream()
+                .anyMatch(c -> c.getName().equals(column));
+
         QueryWithCleanup alterTableQuery = new QueryWithCleanup(
                 String.format("ALTER TABLE %s ADD %s %s",
                         escapeTable(database, table),
@@ -1726,10 +1733,21 @@ public class TeradataJDBCUtil {
                 null, null);
 
         if (isEmptyTable) {
+            if (columnAlreadyExists) {
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        String.format("Column %s already exists on empty %s; skipping ADD, nothing to update",
+                                column, escapeTable(database, table)));
+                return Collections.emptyList();
+            }
             return Collections.singletonList(alterTableQuery);
         }
 
-        String dropColumnCleanup = String.format("ALTER TABLE %s DROP %s", escapeTable(database, table), escapeIdentifier(column));
+        // When the column already exists, we must not attempt to drop it on failure —
+        // it wasn't added by us. DML rollback in the caller covers the history-mode
+        // writes; no DDL rollback is needed in that path.
+        String dropColumnCleanup = columnAlreadyExists
+                ? null
+                : String.format("ALTER TABLE %s DROP %s", escapeTable(database, table), escapeIdentifier(column));
 
         QueryWithCleanup insertQuery = new QueryWithCleanup(String.format("INSERT INTO %s (%s, %s, _fivetran_start) " +
                         "SELECT %s, CAST(? AS %s) AS %s, ? AS _fivetran_start " +
@@ -1785,6 +1803,13 @@ public class TeradataJDBCUtil {
         );
         updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
         updateQuery.addParameter(operationTimestamp, DataType.NAIVE_DATETIME);
+
+        if (columnAlreadyExists) {
+            Logger.logMessage(Logger.LogLevel.INFO,
+                    String.format("Column %s already exists on %s; skipping ADD, running history-mode DML only",
+                            column, escapeTable(database, table)));
+            return Arrays.asList(insertQuery, updateEqualTimestampQuery, updateQuery);
+        }
 
         return Arrays.asList(alterTableQuery, insertQuery, updateEqualTimestampQuery, updateQuery);
     }

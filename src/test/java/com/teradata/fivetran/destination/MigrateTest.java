@@ -1701,4 +1701,98 @@ public class MigrateTest extends IntegrationTestBase {
         }
     }
 
+    // Per Fivetran Partner SDK spec, when ADD_COLUMN_IN_HISTORY_MODE targets a
+    // column that already exists, the connector must skip the ADD (to avoid
+    // Teradata Error 3804) but still run the history-mode DML so pre-existing
+    // active rows are closed and new current-state rows carrying the default
+    // value are inserted.
+    @Test
+    public void addColumnInHistoryModeWhenColumnAlreadyExists() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "addColInHistExists";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            try {
+                stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
+            } catch (Exception ignored) {}
+
+            // Pre-create the history-mode table with column "b" already present.
+            stmt.execute(
+                    "CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " (a INT NOT NULL, "
+                            + "b INT, "
+                            + "_fivetran_start TIMESTAMP(6) NOT NULL, "
+                            + "_fivetran_end TIMESTAMP(6), "
+                            + "_fivetran_active BYTEINT, "
+                            + "PRIMARY KEY(_fivetran_start, a))"
+            );
+
+            stmt.execute(
+                    "INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " VALUES (1, NULL, '2020-01-01 01:01:01', '9999-12-31 11:59:59.999999', 1)"
+            );
+
+            MigrateRequest request = MigrateRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setDetails(MigrationDetails.newBuilder()
+                            .setTable("addColInHistExists")
+                            .setSchema(IntegrationTestBase.schema)
+                            .setAdd(
+                                    AddOperation.newBuilder()
+                                            .setAddColumnInHistoryMode(
+                                                    AddColumnInHistoryMode.newBuilder()
+                                                            .setColumn("b")
+                                                            .setColumnType(DataType.INT)
+                                                            .setDefaultValue("3")
+                                                            .setOperationTimestamp("2021-01-01 01:01:01")
+                                            )
+                            )
+                    ).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateMigrateQueries(request, testWarningHandle);
+
+            // Expect 3 queries (INSERT + 2 UPDATEs) — ADD is skipped, and none of the
+            // DML queries should carry a drop-column cleanup, since the column was
+            // not added by this migration.
+            Assertions.assertEquals(3, queries.size(),
+                    "Expected 3 queries (no ADD) when column already exists; got: " + queries.size());
+            Assertions.assertTrue(queries.get(0).getQuery().startsWith("INSERT INTO "),
+                    "Expected first query to be INSERT, got: " + queries.get(0).getQuery());
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                Assertions.assertNull(q.getCleanupQuery(),
+                        "Cleanup must be null when column was not added by us; got: " + q.getCleanupQuery());
+            }
+
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                q.execute(conn);
+            }
+
+            // Schema unchanged: still the original 5 columns in the original order.
+            Table t = TeradataJDBCUtil.getTable(
+                    conf, conf.database(), tableName, tableName, testWarningHandle
+            );
+            List<Column> columns = t.getColumnsList();
+            Assertions.assertEquals(5, columns.size());
+            Assertions.assertEquals("a", columns.get(0).getName());
+            Assertions.assertEquals("b", columns.get(1).getName());
+            Assertions.assertEquals("_fivetran_start", columns.get(2).getName());
+            Assertions.assertEquals("_fivetran_end", columns.get(3).getName());
+            Assertions.assertEquals("_fivetran_active", columns.get(4).getName());
+
+            // Data: old active row is closed at operationTimestamp - 1μs, new
+            // current-state row is inserted with b = 3.
+            checkResult(
+                    "SELECT a, b, _fivetran_start, _fivetran_end, _fivetran_active FROM "
+                            + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                            + " ORDER BY _fivetran_start, a",
+                    Arrays.asList(
+                            Arrays.asList("1", null, "2020-01-01 01:01:01.0", "2021-01-01 01:01:00.999999", "0"),
+                            Arrays.asList("1", "3", "2021-01-01 01:01:01.0", "9999-12-31 11:59:59.999999", "1")
+                    )
+            );
+        }
+    }
+
 }
