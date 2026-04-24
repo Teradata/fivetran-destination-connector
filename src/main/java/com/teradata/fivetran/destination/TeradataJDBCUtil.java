@@ -1420,7 +1420,7 @@ public class TeradataJDBCUtil {
                 new QueryWithCleanup(populateDataQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
                 new QueryWithCleanup(dropTableQuery, String.format("DROP TABLE %s", escapeTable(database, tempTableName)), null),
                 new QueryWithCleanup(renameTableQuery, null,
-                        String.format("Failed to migrate table %s to soft delete mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
+                        String.format("Failed to migrate table %s to history mode. All data has been preserved in the temporary table %s. To avoid data loss, please rename %s back to %s.",
                                 escapeTable(database, table),
                                 escapeTable(database, tempTableName),
                                 escapeTable(database, tempTableName),
