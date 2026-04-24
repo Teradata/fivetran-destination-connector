@@ -4,32 +4,30 @@ import fivetran_sdk.v2.DescribeTableResponse;
 import fivetran_sdk.v2.Warning;
 import io.grpc.stub.StreamObserver;
 
-/**
- * Handles warnings for DescribeTable operations.
- */
-public class DescribeTableWarningHandler extends WarningHandler<DescribeTableResponse> {
+public class DescribeTableWarningHandler extends WarningHandler {
+    StreamObserver<DescribeTableResponse> responseObserver;
 
-    /**
-     * Constructor for DescribeTableWarningHandler.
-     *
-     * @param responseObserver The response observer to send warnings to.
-     */
     public DescribeTableWarningHandler(StreamObserver<DescribeTableResponse> responseObserver) {
-        super(responseObserver);
+        this.responseObserver = responseObserver;
     }
 
-    /**
-     * Creates a DescribeTableResponse containing a warning message.
-     *
-     * @param message The warning message.
-     * @return The DescribeTableResponse with the warning.
-     */
     @Override
-    public DescribeTableResponse createWarning(String message) {
-        return DescribeTableResponse.newBuilder()
+    public void handle(String message) {
+        super.handle(message);
+        responseObserver.onNext(DescribeTableResponse.newBuilder()
                 .setWarning(Warning.newBuilder()
                         .setMessage(message)
                         .build())
-                .build();
+                .build());
+    }
+
+    @Override
+    public void handle(String message, Throwable t) {
+        super.handle(message, t);
+        responseObserver.onNext(DescribeTableResponse.newBuilder()
+                .setWarning(Warning.newBuilder()
+                        .setMessage(String.format("%s: %s", message, t.getMessage()))
+                        .build())
+                .build());
     }
 }

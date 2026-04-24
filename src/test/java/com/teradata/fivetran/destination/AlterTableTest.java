@@ -1,17 +1,16 @@
 package com.teradata.fivetran.destination;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import fivetran_sdk.v2.*;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class AlterTableTest extends IntegrationTestBase {
 
@@ -34,12 +33,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -76,12 +72,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -114,12 +107,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -154,12 +144,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -211,12 +198,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -234,6 +218,91 @@ public class AlterTableTest extends IntegrationTestBase {
             // Verify the data in the table
             checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName),
                     Arrays.asList(Arrays.asList("1", "5.12300")));
+        }
+    }
+
+    // Regression: PK-column rename via alter_table (tester models it as drop+add).
+    // Old PK (pk1, pk2, old_pk) -> New PK (pk1, pk2, new_pk). The recreate-copy
+    // must alias old_pk -> new_pk or Teradata raises Error 3811 (NOT NULL).
+    @Test
+    public void pkColumnRename() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_pkColumnRename";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                    + " (\"pk1\" INT NOT NULL, \"pk2\" VARCHAR(10) NOT NULL, \"old_pk\" VARCHAR(10) NOT NULL, \"value\" VARCHAR(100),"
+                    + " PRIMARY KEY (\"pk1\", \"pk2\", \"old_pk\"))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                    + " (\"pk1\", \"pk2\", \"old_pk\", \"value\") VALUES (1, 'A', 'X', 'hello')");
+
+            Table table = Table.newBuilder().setName("pkColumnRename").addAllColumns(
+                            Arrays.asList(
+                                    Column.newBuilder().setName("pk1").setType(DataType.INT).setPrimaryKey(true).build(),
+                                    Column.newBuilder().setName("pk2").setType(DataType.STRING).setPrimaryKey(true)
+                                            .setParams(DataTypeParams.newBuilder().setStringByteLength(10).build()).build(),
+                                    Column.newBuilder().setName("new_pk").setType(DataType.STRING).setPrimaryKey(true)
+                                            .setParams(DataTypeParams.newBuilder().setStringByteLength(10).build()).build(),
+                                    Column.newBuilder().setName("value").setType(DataType.STRING)
+                                            .setParams(DataTypeParams.newBuilder().setStringByteLength(100).build()).build()))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            // The data from old_pk must have been copied into new_pk
+            checkResult("SELECT \"pk1\", \"pk2\", \"new_pk\", \"value\" FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName),
+                    Arrays.asList(Arrays.asList("1", "A", "X", "hello")));
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals(4, columns.size());
+            assertEquals("new_pk", columns.get(2).getName());
+            assertEquals(true, columns.get(2).getPrimaryKey());
+        }
+    }
+
+    // Regression: Fivetran tester may send precision > 38 when DECIMAL scale grows
+    // (to preserve integer digits). Teradata max is 38, so the connector must cap it.
+    @Test
+    public void decimalPrecisionAbove38IsCappedAt38() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_decimalPrecisionCap";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + " (a INT, b DECIMAL(38, 10))");
+
+            // Request precision=43 (what the tester sends on scale change 10 -> 15).
+            // Expect the connector to cap at 38 and emit valid DDL.
+            Table table = Table.newBuilder().setName("decimalPrecisionCap").addAllColumns(
+                            Arrays.asList(
+                                    Column.newBuilder().setName("a").setType(DataType.INT).build(),
+                                    Column.newBuilder().setName("b").setType(DataType.DECIMAL)
+                                            .setParams(DataTypeParams.newBuilder()
+                                                    .setDecimal(DecimalParams.newBuilder()
+                                                            .setScale(15)
+                                                            .setPrecision(43))
+                                                    .build())
+                                            .build()))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals("b", columns.get(1).getName());
+            assertEquals(DataType.DECIMAL, columns.get(1).getType());
+            assertEquals(38, columns.get(1).getParams().getDecimal().getPrecision());
+            assertEquals(15, columns.get(1).getParams().getDecimal().getScale());
         }
     }
 
@@ -270,8 +339,8 @@ public class AlterTableTest extends IntegrationTestBase {
                             .setSchemaName(IntegrationTestBase.schema).setTable(utcDatetimeTable).build();
 
             // Generate the alter table query and verify it is null
-            query = TeradataJDBCUtil.generateAlterTableQuery(alterRequest, testWarningHandle);
-            assertNull(query);
+            List<TeradataJDBCUtil.QueryWithCleanup> alterQuery = TeradataJDBCUtil.generateAlterTableQuery(alterRequest, testWarningHandle);
+            assertNull(alterQuery);
         }
     }
 
@@ -297,12 +366,9 @@ public class AlterTableTest extends IntegrationTestBase {
                     .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
 
             // Execute the alter table query
-            String query = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
-            String[] queries = query.split(";");
-            for (String q : queries) {
-                if (!q.trim().isEmpty()) {
-                    stmt.execute(q.trim() + ";");
-                }
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
             }
 
             // Verify the table structure
@@ -322,4 +388,144 @@ public class AlterTableTest extends IntegrationTestBase {
                     Arrays.asList(Arrays.asList("1", null), Arrays.asList("2", null)));
         }
     }
+
+    @Test
+    public void dropColumn() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_dropColumn";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                    "CREATE TABLE " +
+                            TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                            "(a INT, b INT)"
+            );
+
+            Table table = Table.newBuilder()
+                    .setName("dropColumn")
+                    .addAllColumns(Collections.singletonList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build()
+                    ))
+                    .build();
+
+            AlterTableRequest request =
+                    AlterTableRequest.newBuilder()
+                            .putAllConfiguration(confMap)
+                            .setSchemaName(IntegrationTestBase.schema)
+                            .setTable(table)
+                            .setDropColumns(true)
+                            .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(
+                    conf,
+                    conf.database(),
+                    tableName,
+                    tableName,
+                    testWarningHandle
+            );
+
+            List<Column> columns = result.getColumnsList();
+
+            assertEquals("a", columns.get(0).getName());
+            assertEquals(DataType.INT, columns.get(0).getType());
+            assertFalse(columns.get(0).getPrimaryKey());
+            assertEquals(1, columns.size());
+        }
+    }
+
+    @Test
+    public void dropPK() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_dropPK";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                    "CREATE TABLE " +
+                            TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                            "(a INT, b INT NOT NULL PRIMARY KEY)"
+            );
+
+            Table table = Table.newBuilder()
+                    .setName("dropPK")
+                    .addAllColumns(Collections.singletonList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build()
+                    ))
+                    .build();
+
+            AlterTableRequest request =
+                    AlterTableRequest.newBuilder()
+                            .putAllConfiguration(confMap)
+                            .setSchemaName(IntegrationTestBase.schema)
+                            .setTable(table)
+                            .setDropColumns(true)
+                            .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(
+                    conf,
+                    conf.database(),
+                    tableName,
+                    tableName,
+                    testWarningHandle
+            );
+
+            List<Column> columns = result.getColumnsList();
+
+            assertEquals("a", columns.get(0).getName());
+            assertEquals(DataType.INT, columns.get(0).getType());
+            assertFalse(columns.get(0).getPrimaryKey());
+            assertEquals(1, columns.size());
+        }
+    }
+
+    @Test
+    public void dontDrop() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_dontDrop";
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                    "CREATE TABLE " +
+                            TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                            "(a INT, b INT)"
+            );
+
+            Table table = Table.newBuilder()
+                    .setName("dontDrop")
+                    .addAllColumns(Collections.singletonList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build()
+                    ))
+                    .build();
+
+            AlterTableRequest request =
+                    AlterTableRequest.newBuilder()
+                            .putAllConfiguration(confMap)
+                            .setSchemaName(IntegrationTestBase.schema)
+                            .setTable(table)
+                            .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+
+            assertNull(queries);
+        }
+    }
+
+
 }
