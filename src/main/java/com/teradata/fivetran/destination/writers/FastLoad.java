@@ -274,7 +274,7 @@ public class FastLoad {
         this.params = params;
         this.columns = columns;
         batchCount = 0;
-        FileInputStream is = new FileInputStream(file);
+        FileInputStream is = new FileInputStream(Writer.validateBatchFilePath(file).toFile());
         InputStream decoded = is ;
         if (params.getEncryption() == Encryption.AES) {
             decoded = decodeAES(is, secretKeys.get(file).toByteArray(), file);

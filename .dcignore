@@ -1,0 +1,35 @@
+# Snyk Code path-based exclusions.
+# Full rationale (per finding category + file) lives in the .snyk policy file.
+# Trade-off: excluding a file also hides *future* real findings in it; entries
+# here must be paired with manual code review on change.
+
+# ---- Test sources (37 LOW test-code findings) ----
+# These are "Sqli/test" and "Ssrf/test" — Snyk flags SQL string concatenation
+# and JDBC URL construction that happens inside test fixtures. Tests run
+# against a trusted local Teradata instance under tester-controlled inputs;
+# not a production exposure.
+src/test/**
+
+# ---- SQL injection false positives ----
+# Every SQL-identifier site in these files routes through
+# TeradataJDBCUtil.escapeIdentifier / escapeTable (which escape both `"` and
+# `` ` ``); every value is bound via PreparedStatement. Snyk's taint tracker
+# cannot follow the custom escape helpers, so it reports taint from gRPC
+# request → sink unconditionally.
+src/main/java/com/teradata/fivetran/destination/TeradataDestinationServiceImpl.java
+src/main/java/com/teradata/fivetran/destination/TeradataJDBCUtil.java
+src/main/java/com/teradata/fivetran/destination/writers/LoadDataWriter.java
+src/main/java/com/teradata/fivetran/destination/writers/FastLoadDataWriter.java
+
+# ---- AES-256-CBC (InsecureAes* rules) ----
+# Cipher mode is dictated by the Fivetran SDK batch file format
+# (FileParams.encryption == AES). Not under the connector's control.
+# Integrity is provided at the outer gRPC/TLS layer.
+src/main/java/com/teradata/fivetran/destination/writers/Writer.java
+src/main/java/com/teradata/fivetran/destination/writers/FastLoad.java
+
+# ---- Developer helper scripts (not shipped) ----
+# scripts/snyk_scan.py intentionally accepts a user-supplied `--out` directory
+# and writes report files into it. That is the script's purpose; it runs with
+# the caller's own privileges and does not cross a security boundary.
+scripts/

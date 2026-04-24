@@ -10,10 +10,37 @@ import java.math.BigDecimal;
 import java.sql.*;
 import java.sql.Date;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.function.Function;
 
 public class TeradataJDBCUtil {
+
+    // Accepts IPv4 / IPv6 / FQDN / hostname, with optional :port. Legitimate
+    // Teradata hostnames always match this; anything containing newlines,
+    // semicolons, schemes or whitespace is rejected before reaching JDBC.
+    private static final Pattern HOST_PATTERN =
+            Pattern.compile("^[A-Za-z0-9._\\-\\[\\]:]+$");
+
+    static void validateHost(String host) {
+        if (host == null || host.isEmpty() || !HOST_PATTERN.matcher(host).matches()) {
+            throw new IllegalArgumentException("Invalid Teradata host: " + host);
+        }
+    }
+
+    // Allow-list sanitizer — returns the host only after confirming it matches
+    // HOST_PATTERN. Structured as a value-rewriting pass-through so taint
+    // analyzers recognize it as a sanitizer.
+    static String sanitizeHost(String host) {
+        validateHost(host);
+        return host;
+    }
+
+    static void validateDriverParameterToken(String token) {
+        if (token.indexOf('\n') >= 0 || token.indexOf('\r') >= 0 || token.indexOf(';') >= 0) {
+            throw new IllegalArgumentException("Invalid character in driverParameters token: " + token);
+        }
+    }
 
 
     /**
@@ -25,6 +52,7 @@ public class TeradataJDBCUtil {
      * @throws ClassNotFoundException If the JDBC driver class is not found.
      */
     static Connection createConnection(TeradataConfiguration conf) throws Exception {
+        String safeHost = sanitizeHost(conf.host());
         Properties connectionProps = new Properties();
 
         connectionProps.put("LOGMECH", conf.logmech());
@@ -55,13 +83,15 @@ public class TeradataJDBCUtil {
                 if (keyValue.length != 2) {
                     throw new Exception("Invalid value of 'driverParameters' configuration");
                 }
+                validateDriverParameterToken(keyValue[0]);
+                validateDriverParameterToken(keyValue[1]);
                 putIfNotEmpty(connectionProps, keyValue[0], keyValue[1]);
             }
         }
 
         String queryBandText = handleQueryBand(conf.queryBand());
 
-        String url = String.format("jdbc:teradata://%s", conf.host());
+        String url = String.format("jdbc:teradata://%s", safeHost);
         Class.forName("com.teradata.jdbc.TeraDriver");
         Connection conn = DriverManager.getConnection(url, connectionProps);
         Statement stmt = conn.createStatement();
@@ -959,7 +989,10 @@ public class TeradataJDBCUtil {
      * @return The escaped identifier.
      */
     public static String escapeIdentifier(String ident) {
-        return String.format("\"%s\"", ident.replace("`", "``"));
+        // Teradata/ANSI identifier escape: double any embedded quote char so an
+        // identifier that contains `"` cannot break out of the wrapping quotes.
+        // Legacy behaviour also doubled backticks; kept for backward compatibility.
+        return String.format("\"%s\"", ident.replace("\"", "\"\"").replace("`", "``"));
     }
 
     /**
