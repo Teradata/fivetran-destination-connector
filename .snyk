@@ -1,0 +1,57 @@
+# Snyk policy file (https://docs.snyk.io/manage-risk/policies/the-.snyk-file)
+#
+# This file is the authoritative source of suppression rationale for this
+# project. Two scanners consume entries differently:
+#
+#   * snyk test (Open Source / SCA) — honours the `ignore:` block below.
+#   * snyk code test (SAST)          — does NOT currently consume this file.
+#                                      File-level exclusions for SAST live in
+#                                      `.dcignore` at repo root; the rationale
+#                                      for each file listed there is repeated
+#                                      in the `exclude:` block below so both
+#                                      files stay in sync and reviewers can
+#                                      audit in one place.
+#
+# Re-evaluate every suppression at the `expires` date.
+
+version: v1.25.0
+
+# ---------------------------------------------------------------------------
+# Snyk Code (SAST) — file-level accepted-risk / false-positive documentation.
+# The Snyk CLI consumes `.dcignore` for path exclusions; this block is the
+# human-readable record.
+# ---------------------------------------------------------------------------
+exclude:
+  code:
+    # False positive — SQL injection.
+    # Every SQL identifier routes through
+    # TeradataJDBCUtil.escapeIdentifier / escapeTable (which double both `"`
+    # and `` ` ``); every value is bound via PreparedStatement.
+    # Snyk's taint tracker cannot follow the custom escape helpers.
+    - 'src/main/java/com/teradata/fivetran/destination/TeradataDestinationServiceImpl.java'
+    - 'src/main/java/com/teradata/fivetran/destination/TeradataJDBCUtil.java'
+    - 'src/main/java/com/teradata/fivetran/destination/writers/LoadDataWriter.java'
+    - 'src/main/java/com/teradata/fivetran/destination/writers/FastLoadDataWriter.java'
+
+    # Accepted risk — AES-256-CBC is mandated by the Fivetran SDK batch file
+    # format (FileParams.encryption == AES). Cipher mode is not under the
+    # connector's control. Integrity is provided by the outer gRPC/TLS layer
+    # (caller-to-connector), which sits in front of every invocation of the
+    # AES code path.
+    - 'src/main/java/com/teradata/fivetran/destination/writers/Writer.java'
+    - 'src/main/java/com/teradata/fivetran/destination/writers/FastLoad.java'
+
+    # Test code — Sqli/test and Ssrf/test findings inside test fixtures, not
+    # production code paths. Tests run against a trusted local Teradata
+    # instance under tester-controlled inputs.
+    - 'src/test/**'
+
+    # Developer helper scripts — not shipped with the connector. The Snyk
+    # scan helper accepts a user-supplied --out directory by design; it runs
+    # with the caller's own privileges and does not cross a security boundary.
+    - 'scripts/**'
+
+# ---------------------------------------------------------------------------
+# Snyk Open Source (SCA) — dependency-level ignores.
+# ---------------------------------------------------------------------------
+ignore: {}

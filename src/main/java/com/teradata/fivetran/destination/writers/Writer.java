@@ -16,6 +16,9 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -120,9 +123,25 @@ public abstract class Writer {
      * @throws Exception If an error occurs while writing.
      */
     public void write(String file) throws Exception {
-        try (FileInputStream is = new FileInputStream(file)) {
+        Path resolved = validateBatchFilePath(file);
+        try (FileInputStream is = new FileInputStream(resolved.toFile())) {
             write(file, is);
         }
+    }
+
+    // Canonicalizes the batch file path and verifies it resolves to a readable
+    // regular file. Legitimate batch paths delivered by Fivetran always pass;
+    // rejects null-byte injection and unreadable / non-existent paths before
+    // the stream is opened.
+    public static Path validateBatchFilePath(String file) {
+        if (file == null || file.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("Invalid batch file path: " + file);
+        }
+        Path resolved = Paths.get(file).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(resolved) || !Files.isReadable(resolved)) {
+            throw new IllegalArgumentException("Batch file is not a readable regular file: " + file);
+        }
+        return resolved;
     }
 
     /**

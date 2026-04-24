@@ -2,3 +2,7 @@
 /.gradle
 /build
 /src/main/proto
+
+# Snyk scan artifacts (scripts/snyk_scan.py writes into --out; CLI default is repo root)
+/snyk-*-report.json
+/snyk-*-report.sarif.json
