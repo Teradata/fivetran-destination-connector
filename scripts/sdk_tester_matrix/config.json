@@ -1,0 +1,66 @@
+{
+  "teradata": {
+    "host_env": "TD_HOST",
+    "user_env": "TD_USER",
+    "password_env": "TD_PASSWORD",
+    "database_env": "TD_DATABASE"
+  },
+  "connector": {
+    "host": "host.docker.internal",
+    "port": 50052
+  },
+  "docker": {
+    "image": "us-docker.pkg.dev/build-286712/public-docker-us/sdktesters-v2/sdk-tester",
+    "tag": "2.26.0410.001",
+    "memory": "12g",
+    "java_tool_options": "-Xmx8g -Xms1g",
+    "mount_source": "C:\\Fivetran",
+    "mount_target": "/data",
+    "working_dir_env": "C:\\Fivetran",
+    "network": "host",
+    "extra_args": ["--disable-operation-delay"]
+  },
+  "paths": {
+    "canonical_inputs_dir": "C:\\Fivetran",
+    "generated_dir": "C:\\Fivetran\\generated",
+    "expectations_dir": "scripts/sdk_tester_matrix/expectations"
+  },
+  "matrix": {
+    "inputs": [
+      {
+        "name": "input",
+        "file": "input.json",
+        "expectations": "input.json",
+        "fastload_expectations": "input.fastload.json"
+      },
+      {
+        "name": "ddl",
+        "file": "schema_migrations_input_ddl.json",
+        "expectations": "schema_migrations_input_ddl.json"
+      },
+      {
+        "name": "dml",
+        "file": "schema_migrations_input_dml.json",
+        "expectations": "schema_migrations_input_dml.json"
+      },
+      {
+        "name": "sync_modes",
+        "file": "schema_migrations_input_sync_modes.json",
+        "expectations": "schema_migrations_input_sync_modes.json"
+      }
+    ],
+    "configs": [
+      {"id": "ANSI",     "tmode": "ANSI", "fastload": false},
+      {"id": "TERA",     "tmode": "TERA", "fastload": false},
+      {"id": "FastLoad", "tmode": "TERA", "fastload": true}
+    ]
+  },
+  "configuration_template": {
+    "default.varchar.size": "1000",
+    "varchar.character.set": "LATIN",
+    "batch.size": "100000",
+    "query.band": "",
+    "logmech": "TD2",
+    "ssl.mode": "DISABLE"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "_comment": "Expectations after schema_migrations_input_ddl.json — exercises AddColumn / AlterColumn / ChangeColumnType against tester_transaction and tester_composite_table.",
+  "tables_required": [
+    "tester_transaction",
+    "tester_composite_table"
+  ],
+  "lob_columns_to_strip": [],
+  "assertions": [
+    {
+      "name": "tester_transaction exists",
+      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction') t WHERE t.c <> 1"
+    },
+    {
+      "name": "tester_composite_table exists",
+      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_composite_table') t WHERE t.c <> 1"
+    },
+    {
+      "name": "tester_transaction has the AddColumn DDL-added column",
+      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'col_added') t WHERE t.c <> 1"
+    },
+    {
+      "name": "no orphan _alter_tmp tables remain after DDL migrations",
+      "sql": "SELECT 1 FROM dbc.tablesv WHERE databasename = DATABASE AND tablename IN ('tester_transaction_alter_tmp','tester_composite_table_alter_tmp')"
+    }
+  ]
+}
