@@ -617,7 +617,7 @@ public class FastLoadDataWriter {
      * @throws Exception If file reading, decryption, or decompression fails
      */
     public static List<String> getHeader(String file, FileParams params, Map<String, ByteString> secretKeys) throws Exception {
-        FileInputStream is = new FileInputStream(file);
+        FileInputStream is = new FileInputStream(Writer.validateBatchFilePath(file).toFile());
         InputStream decoded = is ;
         if (params.getEncryption() == Encryption.AES) {
             decoded = decodeAES(is, secretKeys.get(file).toByteArray(), file);
