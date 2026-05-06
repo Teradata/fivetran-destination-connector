@@ -130,6 +130,12 @@ The orchestrator wraps each `sql` as `SELECT COUNT(*) FROM (<sql>) bad_`,
 so the SQL just has to surface "bad" rows — anything that should not be
 true. Add new assertions by appending to the list.
 
+**Contract:** because the user SQL is wrapped in a derived table, every
+projection column needs an explicit name. Use `SELECT 1 AS x FROM …`,
+`SELECT id FROM …`, etc. — never bare `SELECT 1 FROM …` (Teradata
+error 3706: "All expressions in a derived table must have an explicit
+name").
+
 For combos with a separate FastLoad variant (currently only `input`), the
 orchestrator picks `fastload_expectations` from `config.json` when the
 combo's `fastload=true`. Set `lob_columns_to_strip` in the variant to have

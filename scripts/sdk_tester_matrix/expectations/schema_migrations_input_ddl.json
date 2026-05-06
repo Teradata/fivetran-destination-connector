@@ -5,23 +5,23 @@
   "assertions": [
     {
       "name": "tester_transaction exists",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction') t WHERE t.c <> 1"
     },
     {
       "name": "tester_transaction has operation_time column (AddColumn)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'operation_time') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'operation_time') t WHERE t.c <> 1"
     },
     {
       "name": "tester_transaction has amount column (ChangeColumnDataType target)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'amount') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'amount') t WHERE t.c <> 1"
     },
     {
       "name": "tester_transaction does NOT have desc column (DropColumn)",
-      "sql": "SELECT 1 FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'desc'"
+      "sql": "SELECT 1 AS x FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'desc'"
     },
     {
       "name": "no orphan _alter_tmp tables remain after DDL migrations",
-      "sql": "SELECT 1 FROM dbc.tablesv WHERE databasename = DATABASE AND tablename IN ('tester_transaction_alter_tmp', 'tester_composite_table_alter_tmp')"
+      "sql": "SELECT 1 AS x FROM dbc.tablesv WHERE databasename = DATABASE AND tablename IN ('tester_transaction_alter_tmp', 'tester_composite_table_alter_tmp')"
     }
   ]
 }

@@ -9,23 +9,23 @@
   "assertions": [
     {
       "name": "tester_transaction exists with at least one row",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c < 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c < 1"
     },
     {
       "name": "tester_campaign exists with at least one row",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_campaign) t WHERE t.c < 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_campaign) t WHERE t.c < 1"
     },
     {
       "name": "tester_composite_table exists with at least one row",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_composite_table) t WHERE t.c < 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_composite_table) t WHERE t.c < 1"
     },
     {
       "name": "all tester_transaction rows have _fivetran_synced populated",
-      "sql": "SELECT 1 FROM tester_transaction WHERE _fivetran_synced IS NULL"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE _fivetran_synced IS NULL"
     },
     {
       "name": "no LOB columns leaked into tester_transaction (FastLoad strip workaround)",
-      "sql": "SELECT 1 FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname IN ('binary_val','json_val','xml_val')"
+      "sql": "SELECT 1 AS x FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname IN ('binary_val','json_val','xml_val')"
     }
   ]
 }

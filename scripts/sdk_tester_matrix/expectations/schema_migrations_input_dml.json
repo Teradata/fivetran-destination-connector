@@ -8,39 +8,39 @@
   "assertions": [
     {
       "name": "tester_transaction has exactly 6 rows",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c <> 6"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c <> 6"
     },
     {
       "name": "every tester_transaction row has amount_renamed = 202.57 (UpdateColumnValue)",
-      "sql": "SELECT 1 FROM tester_transaction WHERE amount_renamed <> 202.57 OR amount_renamed IS NULL"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE amount_renamed <> 202.57 OR amount_renamed IS NULL"
     },
     {
       "name": "every tester_transaction row has desc = NULL (SetColumnToNull)",
-      "sql": "SELECT 1 FROM tester_transaction WHERE \"desc\" IS NOT NULL"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE \"desc\" IS NOT NULL"
     },
     {
       "name": "every tester_transaction row has operation_time = 2005-05-28 20:57:00 (AddColumnWithDefaultValue)",
-      "sql": "SELECT 1 FROM tester_transaction WHERE operation_time <> TIMESTAMP '2005-05-28 20:57:00'"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE operation_time <> TIMESTAMP '2005-05-28 20:57:00'"
     },
     {
       "name": "tester_transaction_renamed exists (RenameTable)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_renamed') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_renamed') t WHERE t.c <> 1"
     },
     {
       "name": "tester_transaction_drop is dropped (DropTable)",
-      "sql": "SELECT 1 FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_drop'"
+      "sql": "SELECT 1 AS x FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_drop'"
     },
     {
       "name": "tester_transaction_new is dropped (was renamed away)",
-      "sql": "SELECT 1 FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_new'"
+      "sql": "SELECT 1 AS x FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_new'"
     },
     {
       "name": "desc_detailed preserved original desc values via CopyColumn (id=10 -> 'three')",
-      "sql": "SELECT 1 FROM tester_transaction WHERE id = 10 AND desc_detailed <> 'three'"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE id = 10 AND desc_detailed <> 'three'"
     },
     {
       "name": "desc_detailed preserved original desc values via CopyColumn (id=20 -> 'money')",
-      "sql": "SELECT 1 FROM tester_transaction WHERE id = 20 AND desc_detailed <> 'money'"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE id = 20 AND desc_detailed <> 'money'"
     }
   ]
 }

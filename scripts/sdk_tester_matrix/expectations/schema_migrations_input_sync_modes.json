@@ -9,51 +9,51 @@
   "assertions": [
     {
       "name": "tester_transaction has 6 rows after MigrateSoftDeleteToHistory",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c <> 6"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c <> 6"
     },
     {
       "name": "tester_transaction was migrated to history mode (has _fivetran_active column)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = '_fivetran_active') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = '_fivetran_active') t WHERE t.c <> 1"
     },
     {
       "name": "tester_transaction has no _fivetran_deleted column anymore (history mode)",
-      "sql": "SELECT 1 FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = '_fivetran_deleted'"
+      "sql": "SELECT 1 AS x FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = '_fivetran_deleted'"
     },
     {
       "name": "all tester_transaction rows are active (_fivetran_active=1)",
-      "sql": "SELECT 1 FROM tester_transaction WHERE _fivetran_active <> 1"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE _fivetran_active <> 1"
     },
     {
       "name": "tester_transaction_history has 13 rows (6 base + AddColumn versioning + DropColumn versioning)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_transaction_history) t WHERE t.c <> 13"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction_history) t WHERE t.c <> 13"
     },
     {
       "name": "tester_transaction_history has the article column (AddColumnInHistoryMode)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction_history' AND columnname = 'article') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction_history' AND columnname = 'article') t WHERE t.c <> 1"
     },
     {
       "name": "active tester_transaction_history rows have article = 'Ordered article'",
-      "sql": "SELECT 1 FROM tester_transaction_history WHERE _fivetran_active = 1 AND (article IS NULL OR article <> 'Ordered article')"
+      "sql": "SELECT 1 AS x FROM tester_transaction_history WHERE _fivetran_active = 1 AND (article IS NULL OR article <> 'Ordered article')"
     },
     {
       "name": "active tester_transaction_history rows have desc = NULL (DropColumnInHistoryMode soft-drop)",
-      "sql": "SELECT 1 FROM tester_transaction_history WHERE _fivetran_active = 1 AND \"desc\" IS NOT NULL"
+      "sql": "SELECT 1 AS x FROM tester_transaction_history WHERE _fivetran_active = 1 AND \"desc\" IS NOT NULL"
     },
     {
       "name": "tester_new_transaction_history has 6 rows after MigrateHistoryToSoftDelete",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_new_transaction_history) t WHERE t.c <> 6"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_new_transaction_history) t WHERE t.c <> 6"
     },
     {
       "name": "tester_new_transaction_history has _fivetran_deleted column (soft-delete mode)",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_new_transaction_history' AND columnname = '_fivetran_deleted') t WHERE t.c <> 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_new_transaction_history' AND columnname = '_fivetran_deleted') t WHERE t.c <> 1"
     },
     {
       "name": "tester_new_transaction_history has no _fivetran_start column anymore (soft-delete mode)",
-      "sql": "SELECT 1 FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_new_transaction_history' AND columnname = '_fivetran_start'"
+      "sql": "SELECT 1 AS x FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_new_transaction_history' AND columnname = '_fivetran_start'"
     },
     {
       "name": "all tester_new_transaction_history rows are not deleted (_fivetran_deleted=0)",
-      "sql": "SELECT 1 FROM tester_new_transaction_history WHERE _fivetran_deleted <> 0"
+      "sql": "SELECT 1 AS x FROM tester_new_transaction_history WHERE _fivetran_deleted <> 0"
     }
   ]
 }

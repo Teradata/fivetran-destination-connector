@@ -9,23 +9,23 @@
   "assertions": [
     {
       "name": "tester_transaction exists with at least one row",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c < 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c < 1"
     },
     {
       "name": "tester_campaign exists with at least one row",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_campaign) t WHERE t.c < 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_campaign) t WHERE t.c < 1"
     },
     {
       "name": "tester_composite_table exists with at least one row",
-      "sql": "SELECT 1 FROM (SELECT COUNT(*) AS c FROM tester_composite_table) t WHERE t.c < 1"
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_composite_table) t WHERE t.c < 1"
     },
     {
       "name": "no tester_transaction rows have _fivetran_deleted=1 (deleted rows must be hard-deleted unless soft-delete mode)",
-      "sql": "SELECT 1 FROM tester_transaction WHERE _fivetran_deleted = 1 AND id NOT IN (SELECT id FROM tester_transaction WHERE _fivetran_deleted = 0)"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE _fivetran_deleted = 1 AND id NOT IN (SELECT id FROM tester_transaction WHERE _fivetran_deleted = 0)"
     },
     {
       "name": "all tester_transaction rows have _fivetran_synced populated",
-      "sql": "SELECT 1 FROM tester_transaction WHERE _fivetran_synced IS NULL"
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE _fivetran_synced IS NULL"
     }
   ]
 }
