@@ -437,11 +437,13 @@ def run_tester(cfg, combo, input_filename, generated_dir):
 # ---------------------------------------------------------------------------
 
 def compile_assertions(cfg, expectation):
-    """Build a single BTEQ script that runs every assertion in ONE SELECT
-    with UNION ALL, so column titles print once and the regex parser
-    has the cleanest possible output to scan.
+    """Build a BTEQ script that runs each assertion as its own SELECT
+    statement. One bad assertion (compile error, missing column, etc.)
+    therefore can't kill the others - BTEQ continues to the next
+    statement and the matching ones still emit their MATRIXASSERT_NNN
+    rows for the parser to scan.
 
-    Each row of the result emits a 'MATRIXASSERT_NNN' tag followed by
+    Each assertion's row pattern: 'MATRIXASSERT_NNN' tag followed by
     the bad-row count for that assertion.
     """
     db = cfg["teradata_resolved"]["database"]
@@ -455,16 +457,13 @@ def compile_assertions(cfg, expectation):
         "DATABASE \"{}\";".format(db),
     ]
     assertions = expectation.get("assertions", []) or []
-    if assertions:
-        union_parts = []
-        for i, a in enumerate(assertions):
-            tag = "{}_{:03d}".format(ASSERT_TAG_PREFIX, i + 1)
-            sql = a["sql"].strip().rstrip(";")
-            union_parts.append(
-                "SELECT '{}' AS tag_, "
-                "(SELECT COUNT(*) FROM ({}) bad_) AS cnt_".format(tag, sql)
-            )
-        lines.append("\nUNION ALL\n".join(union_parts) + ";")
+    for i, a in enumerate(assertions):
+        tag = "{}_{:03d}".format(ASSERT_TAG_PREFIX, i + 1)
+        sql = a["sql"].strip().rstrip(";")
+        lines.append(
+            "SELECT '{}' AS tag_, "
+            "(SELECT COUNT(*) FROM ({}) bad_) AS cnt_;".format(tag, sql)
+        )
     lines.append(".LOGOFF")
     lines.append(".QUIT")
     return "\n".join(lines) + "\n"
