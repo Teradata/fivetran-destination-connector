@@ -290,8 +290,14 @@ def drop_tester_tables(cfg, combo_id, generated_dir):
 # ---------------------------------------------------------------------------
 
 def write_configuration_json(cfg, combo, generated_dir):
-    """Write C:\\Fivetran\\configuration.json (the tester reads this) plus an
-    archive copy under generated_dir/configurations/<combo_id>.json.
+    """Write <docker.mount_source>/configuration.json (the tester reads this
+    via the bind mount) plus an archive copy under
+    generated_dir/configurations/<combo_id>.json.
+
+    Goes to docker.mount_source, NOT canonical_inputs_dir, since canonical
+    inputs are vendored in the repo and must stay clean. The mount source
+    directory is created if it doesn't exist (docker can't bind-mount a
+    missing path on Windows).
     """
     td = cfg["teradata_resolved"]
     contents = dict(cfg["configuration_template"])
@@ -302,8 +308,9 @@ def write_configuration_json(cfg, combo, generated_dir):
     contents["tmode"] = combo["tmode"]
     contents["use.fastload"] = "true" if combo["fastload"] else "false"
 
-    canonical_dir = Path(cfg["paths"]["canonical_inputs_dir"])
-    live_path = canonical_dir / "configuration.json"
+    mount_source = Path(cfg["docker"]["mount_source"])
+    mount_source.mkdir(parents=True, exist_ok=True)
+    live_path = mount_source / "configuration.json"
     live_path.write_text(json.dumps(contents, indent=4), encoding="utf-8")
 
     archive_dir = generated_dir / "configurations"
@@ -696,6 +703,14 @@ def main():
 
     generated_dir = Path(cfg["paths"]["generated_dir"])
     generated_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure the docker bind-mount source exists. Docker on Windows refuses
+    # to bind-mount a non-existent host path - on a fresh checkout the
+    # `C:\Fivetran` directory may not exist yet. Create it now so the
+    # container can mount it; per-combo writes (configuration.json, patched
+    # input JSONs) land here.
+    mount_source = Path(cfg["docker"]["mount_source"])
+    mount_source.mkdir(parents=True, exist_ok=True)
 
     if args.dry_run:
         print("Dry run - would execute {} combo(s):".format(len(combos)))
