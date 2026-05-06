@@ -471,8 +471,10 @@ def compile_assertions(cfg, expectation):
 
 
 _TAG_RE = re.compile(
-    r"^\s*" + ASSERT_TAG_PREFIX + r"_(\d{3})\s+(\d+)\s*$",
-    re.MULTILINE,
+    # Tolerant matcher: anywhere on a line, MATRIXASSERT_NNN followed by any
+    # whitespace and then digits. BTEQ sometimes pads the literal column to
+    # CHAR(N), wraps the count in spaces, etc. - all fine.
+    ASSERT_TAG_PREFIX + r"_(\d{3})\s+(\d+)\b",
 )
 
 
@@ -538,13 +540,17 @@ def run_combo(cfg, combo, generated_dir, idx, total):
         n_found = sum(1 for r in results if r["found"])
         if assertions and n_found == 0:
             sys.stderr.write(
-                "    !! validation parsed 0 of {} assertions — BTEQ rc={}\n"
+                "    !! validation parsed 0 of {} assertions - BTEQ rc={}\n"
                 "    !! see {}/bteq/{}__assert.log\n"
-                "    !! tail of BTEQ output:\n".format(
+                "    !! tail of BTEQ stdout:\n".format(
                     len(assertions), rc, generated_dir, combo["id"]))
-            tail_lines = (out or "").splitlines()[-30:]
+            tail_lines = (out or "").splitlines()[-40:]
             for line in tail_lines:
                 sys.stderr.write("        {}\n".format(line))
+            if err and err.strip():
+                sys.stderr.write("    !! BTEQ stderr:\n")
+                for line in err.splitlines()[-20:]:
+                    sys.stderr.write("        {}\n".format(line))
     else:
         results = []
         validate_pass = tester_rc == 0
