@@ -125,11 +125,13 @@ def load_config(path):
             problems.append("teradata.{} not set in config".format(env_key))
             continue
         val = os.environ.get(env_var)
-        if not val:
+        if val is None or val.strip() == "":
             problems.append("env var ${} not set (referenced by teradata.{})"
                             .format(env_var, env_key))
             continue
-        resolved_td[key] = val
+        # Strip whitespace - guards against `set FOO= bar` accidentally
+        # putting a leading space into the value (BTEQ .LOGON rejects it).
+        resolved_td[key] = val.strip()
     cfg["teradata_resolved"] = resolved_td
 
     matrix = cfg.get("matrix", {}) or {}
@@ -435,8 +437,12 @@ def run_tester(cfg, combo, input_filename, generated_dir):
 # ---------------------------------------------------------------------------
 
 def compile_assertions(cfg, expectation):
-    """Build a single BTEQ script that runs every assertion. Each assertion
-    emits one row tagged 'MATRIXASSERT_NNN' followed by the bad-row count.
+    """Build a single BTEQ script that runs every assertion in ONE SELECT
+    with UNION ALL, so column titles print once and the regex parser
+    has the cleanest possible output to scan.
+
+    Each row of the result emits a 'MATRIXASSERT_NNN' tag followed by
+    the bad-row count for that assertion.
     """
     db = cfg["teradata_resolved"]["database"]
     lines = [
@@ -444,17 +450,21 @@ def compile_assertions(cfg, expectation):
         ".SET FORMAT OFF",
         ".SET FOLDLINE OFF",
         ".SET TITLEDASHES OFF",
+        ".SET RTITLE OFF",
         bteq_logon_block(cfg).rstrip("\n"),
         "DATABASE \"{}\";".format(db),
     ]
     assertions = expectation.get("assertions", []) or []
-    for i, a in enumerate(assertions):
-        tag = "{}_{:03d}".format(ASSERT_TAG_PREFIX, i + 1)
-        sql = a["sql"].strip().rstrip(";")
-        lines.append(
-            "SELECT '{}' AS tag_, "
-            "(SELECT COUNT(*) FROM ({}) bad_) AS cnt_;".format(tag, sql)
-        )
+    if assertions:
+        union_parts = []
+        for i, a in enumerate(assertions):
+            tag = "{}_{:03d}".format(ASSERT_TAG_PREFIX, i + 1)
+            sql = a["sql"].strip().rstrip(";")
+            union_parts.append(
+                "SELECT '{}' AS tag_, "
+                "(SELECT COUNT(*) FROM ({}) bad_) AS cnt_".format(tag, sql)
+            )
+        lines.append("\nUNION ALL\n".join(union_parts) + ";")
     lines.append(".LOGOFF")
     lines.append(".QUIT")
     return "\n".join(lines) + "\n"
@@ -514,14 +524,27 @@ def run_combo(cfg, combo, generated_dir, idx, total):
     assertions = expectation.get("assertions", []) or []
     if assertions:
         sql = compile_assertions(cfg, expectation)
-        rc, out, _err = bteq_run(cfg, sql, "{}__assert".format(combo["id"]),
-                                 generated_dir)
+        rc, out, err = bteq_run(cfg, sql, "{}__assert".format(combo["id"]),
+                                generated_dir)
         if rc == BTEQ_RC_CONNECTION:
             sys.stderr.write("ERROR: BTEQ logon failed during validation.\n")
             sys.exit(2)
         results = parse_assertion_results(out, assertions)
         validate_pass = all(r["ok"] and r["found"] for r in results)
         validate_rc = rc
+        # If BTEQ ran but we found ZERO assertion rows, dump diagnostics.
+        # Most likely: bad logon (e.g. whitespace in user), missing privs
+        # on the database, or a SQL error before any UNION-ALL row emitted.
+        n_found = sum(1 for r in results if r["found"])
+        if assertions and n_found == 0:
+            sys.stderr.write(
+                "    !! validation parsed 0 of {} assertions — BTEQ rc={}\n"
+                "    !! see {}/bteq/{}__assert.log\n"
+                "    !! tail of BTEQ output:\n".format(
+                    len(assertions), rc, generated_dir, combo["id"]))
+            tail_lines = (out or "").splitlines()[-30:]
+            for line in tail_lines:
+                sys.stderr.write("        {}\n".format(line))
     else:
         results = []
         validate_pass = tester_rc == 0
