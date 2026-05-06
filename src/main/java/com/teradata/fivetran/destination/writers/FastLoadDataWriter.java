@@ -191,7 +191,18 @@ public class FastLoadDataWriter {
                     createTempTableSQL , e);
         }
 
-        String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL", outputTableName, errorTable1, errorTable2);
+        // Qualify temp + ERR table names with the target database. The FastLoad
+        // session (lsnConnection) is opened without a default-database setting,
+        // so its default database is the JDBC user's home. When `database` config
+        // points elsewhere (e.g. configurationMap.database != user-home), an
+        // unqualified BEGIN LOADING resolves to the wrong table and Teradata
+        // rejects it with Error 3614 ("Statement permitted only during FastLoad
+        // or MLoad") because the LSN reservation was made for a table in the
+        // configured database.
+        String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL",
+                TeradataJDBCUtil.escapeTable(database, outputTableName),
+                TeradataJDBCUtil.escapeTable(database, errorTable1),
+                TeradataJDBCUtil.escapeTable(database, errorTable2));
         String endLoading = "END LOADING";
 
         String lsnUrl = "jdbc:teradata://" + dbsHost
@@ -363,9 +374,17 @@ public class FastLoadDataWriter {
              Logger.logMessage(Logger.LogLevel.INFO,"\nTASM Governed: " + governedValue);
             boolean isGoverned = "true".equals(governedValue);
 
-            // Build check workload statement
-            String checkWorkload = CHECK_WORKLOAD + SQL_BEGIN_LOADING + " " + outputTableName
-                    + " ERRORFILES " + errorTable1 + ", " + errorTable2;
+            // Build check workload statement. Qualify table names with the
+            // target database for the same reason as BEGIN LOADING above:
+            // unqualified names resolve against the JDBC user's home database,
+            // which is wrong when the connector is configured to use a
+            // different database via configurationMap.database.
+            String checkWorkload = CHECK_WORKLOAD + SQL_BEGIN_LOADING + " "
+                    + TeradataJDBCUtil.escapeTable(database, outputTableName)
+                    + " ERRORFILES "
+                    + TeradataJDBCUtil.escapeTable(database, errorTable1)
+                    + ", "
+                    + TeradataJDBCUtil.escapeTable(database, errorTable2);
 
             String checkWorkloadEnd = (!isGoverned ? "{fn teradata_failfast}" : "") + CHECK_WORKLOAD_END;
 
