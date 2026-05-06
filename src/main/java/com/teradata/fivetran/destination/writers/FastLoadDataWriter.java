@@ -673,11 +673,18 @@ public class FastLoadDataWriter {
      * @return USING INSERT SQL statement, or null if no valid columns found
      */
     private static String getusingInsertSQL(Connection con, String database, String outputTableName, List<String> header) {
+        // Qualify the temp-table name for any SQL prepared/executed on this
+        // FastLoad LSN session. Mirrors the BEGIN LOADING / CHECK WORKLOAD
+        // fix: the LSN session has no default database set, so unqualified
+        // references resolve to the JDBC user's home DB and fail with 3807
+        // when `database` config points elsewhere.
+        String qualifiedOutputTable = TeradataJDBCUtil.escapeTable(database, outputTableName);
         try {
             Statement stmt = con.createStatement();
-            Logger.logMessage(Logger.LogLevel.INFO,"Query: " + "select count(*) from dbc.ColumnsV where tablename='" + database + "." + outputTableName + "';");
-            ResultSet res = stmt
-                    .executeQuery("select count(*) from dbc.columns where tablename='" + database + "." + outputTableName + "';");
+            String countQuery = "select count(*) from dbc.ColumnsV where databasename='" + database
+                    + "' and tablename='" + outputTableName + "'";
+            Logger.logMessage(Logger.LogLevel.INFO, "Query: " + countQuery);
+            ResultSet res = stmt.executeQuery(countQuery);
             res.next();
             Logger.logMessage(Logger.LogLevel.INFO,"Total columns in table " + outputTableName + ": " + res.getInt(1));
 
@@ -695,7 +702,8 @@ public class FastLoadDataWriter {
             if (availableColumns.isEmpty()) {
                 Logger.logMessage(Logger.debugLogLevel, "No columns found in table: " + outputTableName);
                 Thread.sleep(10000); // wait for 10 seconds before retrying
-                res = stmt.executeQuery("select columnName from dbc.columns where tablename='" + outputTableName + "';");
+                res = stmt.executeQuery("select columnName from dbc.ColumnsV where databasename='" + database
+                        + "' and tablename='" + outputTableName + "'");
                 while (res.next()) {
                     Logger.logMessage(Logger.LogLevel.INFO, "Found column in table after wait: " + res.getString("columnName"));
                     availableColumns.add(res.getString("columnName").trim());
@@ -730,7 +738,7 @@ public class FastLoadDataWriter {
                 colNames[i] = "\"" + orderedColumns.get(i) + "\"";
             }
 
-            TeradataColumnDesc[] fieldDescs = getColumnDesc(outputTableName, colNames, con);
+            TeradataColumnDesc[] fieldDescs = getColumnDesc(qualifiedOutputTable, colNames, con);
             String[] fieldTypes4Using = new String[fieldDescs.length];
             String[] fieldNames = new String[fieldDescs.length];
 
@@ -768,7 +776,7 @@ public class FastLoadDataWriter {
 
             Logger.logMessage(Logger.LogLevel.INFO,"Field Names: " + Arrays.toString(fieldNames));
             Logger.logMessage(Logger.LogLevel.INFO,"Field Types: " + Arrays.toString(fieldTypes4Using));
-            return getUsingSQL(outputTableName, fieldNames, fieldTypes4Using, "UTF-8");
+            return getUsingSQL(qualifiedOutputTable, fieldNames, fieldTypes4Using, "UTF-8");
         } catch (SQLException sqle) {
             sqle.printStackTrace();
         } catch (InterruptedException e) {
