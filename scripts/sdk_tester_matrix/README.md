@@ -36,9 +36,18 @@ so no JVM restart is needed.
    TERADATA_DATABASE   target database (BTEQ uses it for cleanup + assertions;
                        also passed to the connector so tables land in the same DB)
    ```
-6. **The 4 canonical input JSONs** placed at `C:\Fivetran\` (or whichever
-   `paths.canonical_inputs_dir` points to in `config.json`). Source:
-   <https://github.com/fivetran/fivetran_partner_sdk/tree/main/tools/destination-connector-tester/input-files>
+6. **Canonical input JSONs are vendored** in `scripts/sdk_tester_matrix/inputs/`
+   (4 files copied from
+   <https://github.com/fivetran/fivetran_partner_sdk/tree/main/tools/destination-connector-tester/input-files>).
+   No download step needed. Adding a new test case = drop a new JSON in that
+   folder + add an expectation file + add an entry to `matrix.inputs` in
+   `config.json`.
+
+   Note: `C:\Fivetran\` (the value of `docker.mount_source` in `config.json`)
+   is still used as the **docker bind-mount source** — patched copies of the
+   inputs and a per-combo `configuration.json` are written there at runtime
+   so the tester container reads them via its `/data` mount. The directory
+   is created automatically by the orchestrator.
 
 ## Usage
 

@@ -340,11 +340,16 @@ def _strip_lob_columns(node, lob_names):
     return node
 
 
-def patch_input(combo, expectation, generated_dir):
+def patch_input(cfg, combo, expectation, generated_dir):
     """Read the canonical input JSON, fix the upstream `[B@xxx` byte[].toString()
     junk via patch_tester_inputs, optionally strip LOB columns, and write to
-    canonical_inputs_dir/<combo_id>.json so docker sees it via the bind mount.
-    Returns the file name (relative to canonical_inputs_dir) for --input-file.
+    docker.mount_source/<combo_id>.json so docker sees it via the bind mount.
+    Returns the file name (relative to mount target) for --input-file.
+
+    Canonical inputs are vendored under scripts/sdk_tester_matrix/inputs/ and
+    therefore checked into the repo - this function MUST NOT write back to
+    that directory. The patched copy goes into the docker bind-mount source
+    on the host filesystem instead.
     """
     src = combo["input_path"]
     if not src.is_file():
@@ -361,16 +366,18 @@ def patch_input(combo, expectation, generated_dir):
     if lob and combo["fastload"]:
         patched = _strip_lob_columns(patched, lob)
 
-    # Archive the patched copy under generated/inputs/, AND drop it next to
-    # the canonical so docker's bind mount sees it.
+    # Archive the patched copy under generated/inputs/ for post-mortem.
     inputs_archive = generated_dir / "inputs"
     inputs_archive.mkdir(parents=True, exist_ok=True)
     archive_path = inputs_archive / "{}.json".format(combo["id"])
     archive_path.write_text(json.dumps(patched, indent=2), encoding="utf-8")
 
-    canonical_dir = src.parent
+    # Drop the patched copy into the docker bind-mount source so the
+    # tester (running inside the container) reads it via the mount.
+    mount_source = Path(cfg["docker"]["mount_source"])
+    mount_source.mkdir(parents=True, exist_ok=True)
     live_name = "{}.json".format(combo["id"])
-    live_path = canonical_dir / live_name
+    live_path = mount_source / live_name
     live_path.write_text(json.dumps(patched, indent=2), encoding="utf-8")
 
     return live_name, counter[0]
@@ -514,7 +521,7 @@ def run_combo(cfg, combo, generated_dir, idx, total):
 
     drop_tester_tables(cfg, combo["id"], generated_dir)
     write_configuration_json(cfg, combo, generated_dir)
-    input_filename, junk_replaced = patch_input(combo, expectation, generated_dir)
+    input_filename, junk_replaced = patch_input(cfg, combo, expectation, generated_dir)
     if junk_replaced:
         sys.stderr.write("    (patched {} byte[].toString() junk values)\n"
                          .format(junk_replaced))

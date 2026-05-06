@@ -21,7 +21,7 @@
     "extra_args": ["--disable-operation-delay"]
   },
   "paths": {
-    "canonical_inputs_dir": "C:\\Fivetran",
+    "canonical_inputs_dir": "scripts/sdk_tester_matrix/inputs",
     "generated_dir": "C:\\Fivetran\\generated",
     "expectations_dir": "scripts/sdk_tester_matrix/expectations"
   },
