@@ -1,9 +1,9 @@
 {
   "teradata": {
-    "host_env": "TD_HOST",
-    "user_env": "TD_USER",
-    "password_env": "TD_PASSWORD",
-    "database_env": "TD_DATABASE"
+    "host_env": "TERADATA_HOST",
+    "user_env": "TERADATA_USER",
+    "password_env": "TERADATA_PASSWORD",
+    "database_env": "TERADATA_DATABASE"
   },
   "connector": {
     "host": "host.docker.internal",

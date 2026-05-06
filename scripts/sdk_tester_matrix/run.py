@@ -19,7 +19,8 @@ Prereqs
 -------
   * `bteq` and `docker` on PATH
   * Connector JAR running on port 50052 (in another terminal)
-  * Env vars: TD_HOST, TD_USER, TD_PASSWORD, TD_DATABASE
+  * Env vars: TERADATA_HOST, TERADATA_USER, TERADATA_PASSWORD, TERADATA_DATABASE
+    (same names IntegrationTestBase already uses)
   * The 4 canonical input JSONs in C:\\Fivetran (or whichever
     paths.canonical_inputs_dir is set to in config.json)
 
@@ -295,6 +296,7 @@ def write_configuration_json(cfg, combo, generated_dir):
     contents["host"] = td["host"]
     contents["user"] = td["user"]
     contents["td2password"] = td["password"]
+    contents["database"] = td["database"]
     contents["tmode"] = combo["tmode"]
     contents["use.fastload"] = "true" if combo["fastload"] else "false"
 

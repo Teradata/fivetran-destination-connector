@@ -26,12 +26,15 @@ so no JVM restart is needed.
    ```
    java -jar build/libs/TeradataDestination.jar
    ```
-5. **Env vars** for the Teradata connection (nothing sensitive in `config.json`):
+5. **Env vars** for the Teradata connection (nothing sensitive in `config.json`).
+   These match the names `IntegrationTestBase` already uses, so the same
+   environment that runs `gradle test` runs this:
    ```
-   TD_HOST       Teradata host (IP or DNS, optionally :port)
-   TD_USER       Teradata username
-   TD_PASSWORD   Teradata password
-   TD_DATABASE   target database name (used by BTEQ for cleanup + assertions)
+   TERADATA_HOST       Teradata host (IP or DNS, optionally :port)
+   TERADATA_USER       Teradata username
+   TERADATA_PASSWORD   Teradata password
+   TERADATA_DATABASE   target database (BTEQ uses it for cleanup + assertions;
+                       also passed to the connector so tables land in the same DB)
    ```
 6. **The 4 canonical input JSONs** placed at `C:\Fivetran\` (or whichever
    `paths.canonical_inputs_dir` points to in `config.json`). Source:
@@ -138,7 +141,7 @@ the orchestrator strip those columns from the input JSON before docker.
   running. Start it in another terminal.
 - **`ERROR: 'bteq' not on PATH`** — install Teradata Tools and Utilities.
 - **`ERROR: 'docker' not on PATH`** — install Docker Desktop / docker-ce.
-- **`ERROR: env var $TD_PASSWORD not set`** — export the env vars first.
+- **`ERROR: env var $TERADATA_PASSWORD not set`** — export the env vars first.
 - **Combo passes the tester but fails validation** — open
   `<generated_dir>/bteq/<combo_id>__assert.log`. Look for the
   `MATRIXASSERT_NNN <count>` rows; any count > 0 names a bad assertion.
