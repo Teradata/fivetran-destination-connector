@@ -191,7 +191,18 @@ public class FastLoadDataWriter {
                     createTempTableSQL , e);
         }
 
-        String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL", outputTableName, errorTable1, errorTable2);
+        // Qualify temp + ERR table names with the target database. The FastLoad
+        // session (lsnConnection) is opened without a default-database setting,
+        // so its default database is the JDBC user's home. When `database` config
+        // points elsewhere (e.g. configurationMap.database != user-home), an
+        // unqualified BEGIN LOADING resolves to the wrong table and Teradata
+        // rejects it with Error 3614 ("Statement permitted only during FastLoad
+        // or MLoad") because the LSN reservation was made for a table in the
+        // configured database.
+        String beginLoading = String.format("BEGIN LOADING %s ERRORFILES %s, %s WITH INTERVAL",
+                TeradataJDBCUtil.escapeTable(database, outputTableName),
+                TeradataJDBCUtil.escapeTable(database, errorTable1),
+                TeradataJDBCUtil.escapeTable(database, errorTable2));
         String endLoading = "END LOADING";
 
         String lsnUrl = "jdbc:teradata://" + dbsHost
@@ -363,9 +374,17 @@ public class FastLoadDataWriter {
              Logger.logMessage(Logger.LogLevel.INFO,"\nTASM Governed: " + governedValue);
             boolean isGoverned = "true".equals(governedValue);
 
-            // Build check workload statement
-            String checkWorkload = CHECK_WORKLOAD + SQL_BEGIN_LOADING + " " + outputTableName
-                    + " ERRORFILES " + errorTable1 + ", " + errorTable2;
+            // Build check workload statement. Qualify table names with the
+            // target database for the same reason as BEGIN LOADING above:
+            // unqualified names resolve against the JDBC user's home database,
+            // which is wrong when the connector is configured to use a
+            // different database via configurationMap.database.
+            String checkWorkload = CHECK_WORKLOAD + SQL_BEGIN_LOADING + " "
+                    + TeradataJDBCUtil.escapeTable(database, outputTableName)
+                    + " ERRORFILES "
+                    + TeradataJDBCUtil.escapeTable(database, errorTable1)
+                    + ", "
+                    + TeradataJDBCUtil.escapeTable(database, errorTable2);
 
             String checkWorkloadEnd = (!isGoverned ? "{fn teradata_failfast}" : "") + CHECK_WORKLOAD_END;
 
@@ -654,11 +673,18 @@ public class FastLoadDataWriter {
      * @return USING INSERT SQL statement, or null if no valid columns found
      */
     private static String getusingInsertSQL(Connection con, String database, String outputTableName, List<String> header) {
+        // Qualify the temp-table name for any SQL prepared/executed on this
+        // FastLoad LSN session. Mirrors the BEGIN LOADING / CHECK WORKLOAD
+        // fix: the LSN session has no default database set, so unqualified
+        // references resolve to the JDBC user's home DB and fail with 3807
+        // when `database` config points elsewhere.
+        String qualifiedOutputTable = TeradataJDBCUtil.escapeTable(database, outputTableName);
         try {
             Statement stmt = con.createStatement();
-            Logger.logMessage(Logger.LogLevel.INFO,"Query: " + "select count(*) from dbc.ColumnsV where tablename='" + database + "." + outputTableName + "';");
-            ResultSet res = stmt
-                    .executeQuery("select count(*) from dbc.columns where tablename='" + database + "." + outputTableName + "';");
+            String countQuery = "select count(*) from dbc.ColumnsV where databasename='" + database
+                    + "' and tablename='" + outputTableName + "'";
+            Logger.logMessage(Logger.LogLevel.INFO, "Query: " + countQuery);
+            ResultSet res = stmt.executeQuery(countQuery);
             res.next();
             Logger.logMessage(Logger.LogLevel.INFO,"Total columns in table " + outputTableName + ": " + res.getInt(1));
 
@@ -676,7 +702,8 @@ public class FastLoadDataWriter {
             if (availableColumns.isEmpty()) {
                 Logger.logMessage(Logger.debugLogLevel, "No columns found in table: " + outputTableName);
                 Thread.sleep(10000); // wait for 10 seconds before retrying
-                res = stmt.executeQuery("select columnName from dbc.columns where tablename='" + outputTableName + "';");
+                res = stmt.executeQuery("select columnName from dbc.ColumnsV where databasename='" + database
+                        + "' and tablename='" + outputTableName + "'");
                 while (res.next()) {
                     Logger.logMessage(Logger.LogLevel.INFO, "Found column in table after wait: " + res.getString("columnName"));
                     availableColumns.add(res.getString("columnName").trim());
@@ -711,7 +738,7 @@ public class FastLoadDataWriter {
                 colNames[i] = "\"" + orderedColumns.get(i) + "\"";
             }
 
-            TeradataColumnDesc[] fieldDescs = getColumnDesc(outputTableName, colNames, con);
+            TeradataColumnDesc[] fieldDescs = getColumnDesc(qualifiedOutputTable, colNames, con);
             String[] fieldTypes4Using = new String[fieldDescs.length];
             String[] fieldNames = new String[fieldDescs.length];
 
@@ -749,7 +776,7 @@ public class FastLoadDataWriter {
 
             Logger.logMessage(Logger.LogLevel.INFO,"Field Names: " + Arrays.toString(fieldNames));
             Logger.logMessage(Logger.LogLevel.INFO,"Field Types: " + Arrays.toString(fieldTypes4Using));
-            return getUsingSQL(outputTableName, fieldNames, fieldTypes4Using, "UTF-8");
+            return getUsingSQL(qualifiedOutputTable, fieldNames, fieldTypes4Using, "UTF-8");
         } catch (SQLException sqle) {
             sqle.printStackTrace();
         } catch (InterruptedException e) {

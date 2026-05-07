@@ -1,0 +1,46 @@
+{
+  "_comment": "Expectations after schema_migrations_input_dml.json. From manual session: 8 DML migrations on tester_transaction — CopyColumn(desc->desc_detailed), UpdateColumnValue(amount=202.57), AddColumnWithDefaultValue(operation_time=2005-05-28T20:57:00Z), SetColumnToNull(desc), CopyTable(transaction->transaction_new), RenameColumn(amount->amount_renamed), RenameTable(transaction_new->transaction_renamed), DropTable(transaction_drop). End state: tester_transaction has 6 rows with amount_renamed=202.57, desc=NULL, desc_detailed populated; tester_transaction_renamed exists; tester_transaction_drop and tester_transaction_new are gone.",
+  "tables_required": [
+    "tester_transaction",
+    "tester_transaction_renamed"
+  ],
+  "lob_columns_to_strip": [],
+  "assertions": [
+    {
+      "name": "tester_transaction has exactly 6 rows",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c <> 6"
+    },
+    {
+      "name": "every tester_transaction row has amount_renamed = 202.57 (UpdateColumnValue)",
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE amount_renamed <> 202.57 OR amount_renamed IS NULL"
+    },
+    {
+      "name": "every tester_transaction row has desc = NULL (SetColumnToNull)",
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE \"desc\" IS NOT NULL"
+    },
+    {
+      "name": "every tester_transaction row has operation_time = 2005-05-28 20:57:00 (AddColumnWithDefaultValue)",
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE operation_time <> TIMESTAMP '2005-05-28 20:57:00'"
+    },
+    {
+      "name": "tester_transaction_renamed exists (RenameTable)",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_renamed') t WHERE t.c <> 1"
+    },
+    {
+      "name": "tester_transaction_drop is dropped (DropTable)",
+      "sql": "SELECT 1 AS x FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_drop'"
+    },
+    {
+      "name": "tester_transaction_new is dropped (was renamed away)",
+      "sql": "SELECT 1 AS x FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction_new'"
+    },
+    {
+      "name": "desc_detailed preserved original desc values via CopyColumn (id=10 -> 'three')",
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE id = 10 AND desc_detailed <> 'three'"
+    },
+    {
+      "name": "desc_detailed preserved original desc values via CopyColumn (id=20 -> 'money')",
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE id = 20 AND desc_detailed <> 'money'"
+    }
+  ]
+}

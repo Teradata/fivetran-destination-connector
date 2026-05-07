@@ -6,3 +6,7 @@
 # Snyk scan artifacts (scripts/snyk_scan.py writes into --out; CLI default is repo root)
 /snyk-*-report.json
 /snyk-*-report.sarif.json
+
+# Python bytecode (scripts/sdk_tester_matrix/run.py imports patch_tester_inputs)
+__pycache__/
+*.pyc

@@ -1,0 +1,31 @@
+{
+  "_comment": "Expectations after running input.json under TMODE=ANSI or TMODE=TERA. Each assertion's bad-rows count must be 0. Conservative: focuses on tables existing and core invariants. Tighten as the canonical input.json's exact post-state stabilises.",
+  "tables_required": [
+    "tester_transaction",
+    "tester_campaign",
+    "tester_composite_table"
+  ],
+  "lob_columns_to_strip": [],
+  "assertions": [
+    {
+      "name": "tester_transaction exists with at least one row",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c < 1"
+    },
+    {
+      "name": "tester_campaign exists with at least one row",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_campaign) t WHERE t.c < 1"
+    },
+    {
+      "name": "tester_composite_table exists with at least one row",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_composite_table) t WHERE t.c < 1"
+    },
+    {
+      "name": "tester_transaction is in history mode (has _fivetran_active column)",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = '_fivetran_active') t WHERE t.c <> 1"
+    },
+    {
+      "name": "all tester_transaction rows have _fivetran_synced populated",
+      "sql": "SELECT 1 AS x FROM tester_transaction WHERE _fivetran_synced IS NULL"
+    }
+  ]
+}
