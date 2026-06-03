@@ -55,3 +55,18 @@ Follow the steps in this guide to connect Teradata Vantage to Fivetran.
 9. Click **Save & Test**.
 
 Fivetran tests and validates the Teradata Vantage connection configuration. Once the connection configuration test is successful, you can sync your data using Fivetran connectors to the Teradata Vantage destination.
+
+---
+
+## Troubleshooting
+
+### BLOB/CLOB primary key error
+
+**Error:** *"Teradata does not support BLOB/CLOB as primary keys. Column '<name>' (BINARY, size=N) exceeds the 64KB limit for VARBYTE."*
+
+**Cause:** The source table (e.g., SAP RAW, Oracle, BigQuery) defines a BLOB or CLOB column as a primary key. Teradata does not support LOB types as primary keys.
+
+**Resolution:**
+- If the column data is ≤ 64,000 bytes, ensure the source schema reports the column size so the connector can auto-convert it to `VARBYTE`.
+- If the column data exceeds 64KB, modify the source schema to use a different primary key (e.g., a hash or surrogate key).
+- Contact your database administrator to adjust the primary key definition at the source.

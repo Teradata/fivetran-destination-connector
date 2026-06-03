@@ -327,6 +327,14 @@ public class TeradataJDBCUtil {
                                 .setStringByteLength(columnsRS.getInt("CHAR_OCTET_LENGTH"))
                                 .build());
                     }
+                    if (c.getType() == DataType.BINARY) {
+                        int columnSize = columnsRS.getInt("COLUMN_SIZE");
+                        if (columnSize > 0) {
+                            c.setParams(DataTypeParams.newBuilder()
+                                    .setStringByteLength(columnSize)
+                                    .build());
+                        }
+                    }
                     columns.add(c.build());
                 }
             }
@@ -367,6 +375,8 @@ public class TeradataJDBCUtil {
             case "BIT":
             case "BINARY":
             case "VARBINARY":
+            case "BYTE":
+            case "VARBYTE":
             case "TINYBLOB":
             case "MEDIUMBLOB":
             case "BLOB":
@@ -443,13 +453,46 @@ public class TeradataJDBCUtil {
     }
 
     /**
+     * Maximum byte length for VARBYTE columns used as primary keys.
+     * Teradata does not support BLOB as a primary key; BINARY PK columns
+     * are auto-converted to VARBYTE if their size is within this limit.
+     */
+    static final int MAX_VARBYTE_PK_SIZE = 64000;
+
+    /**
      * Generates the column definition for a single column.
+     * When a BINARY column is a primary key, it is auto-converted to VARBYTE
+     * if its size (from getStringByteLength) is ≤ 64KB. If the size exceeds
+     * 64KB or is unknown, an exception is thrown.
      *
      * @param col The column.
      * @return The column definition.
+     * @throws IllegalArgumentException If a BINARY PK column exceeds the VARBYTE size limit.
      */
     static String getColumnDefinition(Column col) {
-        String definition = String.format("%s %s", escapeIdentifier(col.getName()), mapDataTypes(col.getType(), col.getParams()));
+        String sqlType;
+
+        if (col.getPrimaryKey() && col.getType() == DataType.BINARY) {
+            int byteLength = col.getParams() != null ? col.getParams().getStringByteLength() : 0;
+            if (byteLength > 0 && byteLength <= MAX_VARBYTE_PK_SIZE) {
+                sqlType = String.format("VARBYTE(%d)", byteLength);
+                Logger.logMessage(Logger.LogLevel.INFO,
+                        String.format("Auto-converting primary key column '%s' from BLOB to VARBYTE(%d) — Teradata does not support BLOB as PK.",
+                                col.getName(), byteLength));
+            } else {
+                String errorMsg = String.format(
+                        "Teradata does not support BLOB/CLOB as primary keys. Column '%s' (BINARY, size=%d) %s. " +
+                        "Alternative: Use VARBYTE with a size ≤ 64000 bytes for primary key columns.",
+                        col.getName(), byteLength,
+                        byteLength == 0 ? "has unknown size" : "exceeds the 64KB limit for VARBYTE");
+                Logger.logMessage(Logger.LogLevel.SEVERE, errorMsg);
+                throw new IllegalArgumentException(errorMsg);
+            }
+        } else {
+            sqlType = mapDataTypes(col.getType(), col.getParams());
+        }
+
+        String definition = String.format("%s %s", escapeIdentifier(col.getName()), sqlType);
 
         if (col.getPrimaryKey()) {
             definition += " NOT NULL";
@@ -499,10 +542,13 @@ public class TeradataJDBCUtil {
                 return "TIME(0)";
             case NAIVE_DATE:
                 return "DATE FORMAT 'YYYY-MM-DD'";
+
             case NAIVE_DATETIME:
             case UTC_DATETIME:
                 return "TIMESTAMP(6)";
             case BINARY:
+                int blobByteLength = params != null ? params.getStringByteLength() : 0;
+                Logger.logMessage(Logger.LogLevel.INFO, "Got BLOB Size (stringByteLength): " + blobByteLength);
                 return "BLOB";
             case JSON:
                 return "JSON";
@@ -527,13 +573,17 @@ public class TeradataJDBCUtil {
 
                 if (params != null && params.getStringByteLength() != 0) {
                     int stringByteLength = params.getStringByteLength();
+                    Logger.logMessage(Logger.LogLevel.INFO, "Got STRING Size (stringByteLength): " + stringByteLength);
                     if (stringByteLength <= 256) {
+                        Logger.logMessage(Logger.LogLevel.INFO, "Because stringByteLength is <=256, setting VARCHAR size to " + stringByteLength);
                         return "VARCHAR(" + stringByteLength + ") CHARACTER SET " + varcharCharacterSet;
                     }
                     else {
+                        Logger.logMessage(Logger.LogLevel.INFO, "Because stringByteLength is >256, Default VARCHAR size to " + defaultVarcharSize);
                         return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet;
                     }
                 }
+                Logger.logMessage(Logger.LogLevel.INFO, "No STRING Size (stringByteLength) provided, defaulting VARCHAR size to " + defaultVarcharSize);
                 return "VARCHAR(" + defaultVarcharSize + ") CHARACTER SET " + varcharCharacterSet;
         }
     }

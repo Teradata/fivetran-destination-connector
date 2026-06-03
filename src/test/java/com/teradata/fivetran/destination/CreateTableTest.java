@@ -209,4 +209,132 @@ public class CreateTableTest extends IntegrationTestBase {
             assertEquals(256, columns.get(4).getParams().getStringByteLength());
         }
     }
+
+    // Test that a BINARY PK column with size ≤ 64KB is auto-converted to VARBYTE
+    @Test
+    public void binaryPrimaryKey_autoConvertsToVarbyte() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "binaryPkTable";
+
+        Table t = Table.newBuilder().setName("binaryPkTable").addAllColumns(Arrays.asList(
+                Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build(),
+                Column.newBuilder().setName("hash_key").setType(DataType.BINARY).setPrimaryKey(true)
+                        .setParams(DataTypeParams.newBuilder().setStringByteLength(500).build()).build(),
+                Column.newBuilder().setName("data").setType(DataType.STRING).setPrimaryKey(false).build()
+        )).build();
+
+        CreateTableRequest request = CreateTableRequest.newBuilder()
+                .setSchemaName(IntegrationTestBase.schema).setTable(t).build();
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+
+            // Verify the generated SQL uses VARBYTE, not BLOB
+            assertTrue(query.contains("VARBYTE(500)"), "Expected VARBYTE(500) in DDL but got: " + query);
+            assertFalse(query.contains("BLOB"), "BLOB should not appear in DDL for PK column");
+
+            // Execute and verify the table was created successfully
+            stmt.execute(query);
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, result.getName());
+
+            List<Column> columns = result.getColumnsList();
+            assertEquals("id", columns.get(0).getName());
+            assertTrue(columns.get(0).getPrimaryKey());
+
+            assertEquals("hash_key", columns.get(1).getName());
+            assertTrue(columns.get(1).getPrimaryKey());
+        }
+    }
+
+    // Test that a BINARY PK column at the max boundary (64000 bytes) is accepted
+    @Test
+    public void binaryPrimaryKey_maxBoundary_convertsToVarbyte() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "binaryPkMaxTable";
+
+        Table t = Table.newBuilder().setName("binaryPkMaxTable").addAllColumns(Arrays.asList(
+                Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build(),
+                Column.newBuilder().setName("large_hash").setType(DataType.BINARY).setPrimaryKey(true)
+                        .setParams(DataTypeParams.newBuilder().setStringByteLength(64000).build()).build()
+        )).build();
+
+        CreateTableRequest request = CreateTableRequest.newBuilder()
+                .setSchemaName(IntegrationTestBase.schema).setTable(t).build();
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+
+            // Verify the generated SQL uses VARBYTE(64000)
+            assertTrue(query.contains("VARBYTE(64000)"), "Expected VARBYTE(64000) in DDL but got: " + query);
+
+            // Execute and verify the table was created successfully on Teradata
+            stmt.execute(query);
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, result.getName());
+
+            List<Column> columns = result.getColumnsList();
+            assertEquals("large_hash", columns.get(1).getName());
+            assertTrue(columns.get(1).getPrimaryKey());
+        }
+    }
+
+    // Test that a BINARY PK column exceeding 64KB fails gracefully
+    @Test
+    public void binaryPrimaryKey_exceedingLimit_failsGracefully() {
+        Table t = Table.newBuilder().setName("blobPkTooLarge").addAllColumns(Arrays.asList(
+                Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build(),
+                Column.newBuilder().setName("large_blob").setType(DataType.BINARY).setPrimaryKey(true)
+                        .setParams(DataTypeParams.newBuilder().setStringByteLength(100000).build()).build()
+        )).build();
+
+        CreateTableRequest request = CreateTableRequest.newBuilder()
+                .setSchemaName(IntegrationTestBase.schema).setTable(t).build();
+
+        Exception ex = assertThrows(Exception.class, () -> {
+            try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+                 Statement stmt = conn.createStatement()) {
+                TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+            }
+        });
+
+        assertTrue(ex.getMessage().contains("BLOB/CLOB"),
+                "Error should mention BLOB/CLOB but got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("large_blob"),
+                "Error should mention the column name");
+    }
+
+    // Test that a non-PK BINARY column still maps to BLOB
+    @Test
+    public void binaryNonPk_remainsBlob() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "blobNonPkTable";
+
+        Table t = Table.newBuilder().setName("blobNonPkTable").addAllColumns(Arrays.asList(
+                Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build(),
+                Column.newBuilder().setName("content").setType(DataType.BINARY).setPrimaryKey(false)
+                        .setParams(DataTypeParams.newBuilder().setStringByteLength(1000).build()).build()
+        )).build();
+
+        CreateTableRequest request = CreateTableRequest.newBuilder()
+                .setSchemaName(IntegrationTestBase.schema).setTable(t).build();
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+
+            // Non-PK BINARY should remain BLOB
+            assertTrue(query.contains("BLOB"), "Non-PK BINARY should map to BLOB but got: " + query);
+            assertFalse(query.contains("VARBYTE"), "Non-PK BINARY should not be VARBYTE");
+
+            // Execute and verify table creation
+            stmt.execute(query);
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            assertEquals(tableName, result.getName());
+            assertEquals(DataType.BINARY, result.getColumnsList().get(1).getType());
+            assertFalse(result.getColumnsList().get(1).getPrimaryKey());
+        }
+    }
 }
