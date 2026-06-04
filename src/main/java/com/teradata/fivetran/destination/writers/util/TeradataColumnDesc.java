@@ -392,6 +392,11 @@ public class TeradataColumnDesc {
             case java.sql.Types.VARBINARY:
                 string += "VARBYTE(" + length + ")";
                 break;
+            case java.sql.Types.LONGVARBINARY:
+                // Teradata JDBC reports VARBYTE(>8000) as LONGVARBINARY.
+                // FastLoad USING clause needs VARBYTE(length), not the raw typeName.
+                string += "VARBYTE(" + length + ")";
+                break;
 
             /* DATE TIME related types */
             case java.sql.Types.DATE:
@@ -529,7 +534,6 @@ public class TeradataColumnDesc {
             case java.sql.Types.BOOLEAN:
             case java.sql.Types.JAVA_OBJECT:
             case java.sql.Types.REF:
-            case java.sql.Types.LONGVARBINARY:
             default:
                 string += typeName;
                 break;
