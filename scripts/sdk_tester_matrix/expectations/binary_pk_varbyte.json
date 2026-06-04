@@ -1,0 +1,27 @@
+{
+  "_comment": "Validates BINARY PK auto-conversion to VARBYTE. The input defines hash_key as BINARY(500) PK — the connector should create it as VARBYTE(500) in Teradata since BLOB cannot be a primary key. Verifies: table created, PK column is VARBYTE not BLOB, data inserted/updated/deleted correctly.",
+  "tables_required": ["tester_transaction"],
+  "lob_columns_to_strip": [],
+  "assertions": [
+    {
+      "name": "tester_transaction exists",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.tablesv WHERE databasename = DATABASE AND tablename = 'tester_transaction') t WHERE t.c <> 1"
+    },
+    {
+      "name": "hash_key column exists and is VARBYTE (not BLOB)",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'hash_key' AND columntype = 'BV') t WHERE t.c <> 1"
+    },
+    {
+      "name": "hash_key column is NOT BLOB",
+      "sql": "SELECT 1 AS x FROM dbc.columnsv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'hash_key' AND columntype = 'BO'"
+    },
+    {
+      "name": "tester_transaction has expected row count after upsert+update+delete (2 rows remain)",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM tester_transaction) t WHERE t.c <> 2"
+    },
+    {
+      "name": "hash_key is indexed as primary key (unique primary index)",
+      "sql": "SELECT 1 AS x FROM (SELECT COUNT(*) AS c FROM dbc.indicesv WHERE databasename = DATABASE AND tablename = 'tester_transaction' AND columnname = 'hash_key' AND indextype = 'K') t WHERE t.c <> 1"
+    }
+  ]
+}

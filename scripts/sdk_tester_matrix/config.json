@@ -11,7 +11,7 @@
   },
   "docker": {
     "image": "us-docker.pkg.dev/build-286712/public-docker-us/sdktesters-v2/sdk-tester",
-    "tag": "2.26.0410.001",
+    "tag": "2.26.0601.001",
     "memory": "12g",
     "java_tool_options": "-Xmx8g -Xms1g",
     "mount_source": "C:\\Fivetran",
@@ -47,6 +47,11 @@
         "name": "sync_modes",
         "file": "schema_migrations_input_sync_modes.json",
         "expectations": "schema_migrations_input_sync_modes.json"
+      },
+      {
+        "name": "binary_pk",
+        "file": "binary_pk_varbyte.json",
+        "expectations": "binary_pk_varbyte.json"
       }
     ],
     "configs": [
