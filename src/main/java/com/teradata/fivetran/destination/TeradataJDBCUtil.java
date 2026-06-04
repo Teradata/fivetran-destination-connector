@@ -462,8 +462,8 @@ public class TeradataJDBCUtil {
     /**
      * Generates the column definition for a single column.
      * When a BINARY column is a primary key, it is auto-converted to VARBYTE
-     * if its size (from getStringByteLength) is ≤ 64KB. If the size exceeds
-     * 64KB or is unknown, an exception is thrown.
+     * if its size (from getStringByteLength) is ≤ 64,000 bytes. If the size exceeds
+     * 64,000 bytes or is unknown, an exception is thrown.
      *
      * @param col The column.
      * @return The column definition.
@@ -484,7 +484,7 @@ public class TeradataJDBCUtil {
                         "Teradata does not support BLOB/CLOB as primary keys. Column '%s' (BINARY, size=%d) %s. " +
                         "Alternative: Use VARBYTE with a size ≤ 64000 bytes for primary key columns.",
                         col.getName(), byteLength,
-                        byteLength == 0 ? "has unknown size" : "exceeds the 64KB limit for VARBYTE");
+                        byteLength == 0 ? "has unknown size" : "exceeds the 64,000 bytes limit for VARBYTE");
                 Logger.logMessage(Logger.LogLevel.SEVERE, errorMsg);
                 throw new IllegalArgumentException(errorMsg);
             }
@@ -548,7 +548,7 @@ public class TeradataJDBCUtil {
                 return "TIMESTAMP(6)";
             case BINARY:
                 int blobByteLength = params != null ? params.getStringByteLength() : 0;
-                Logger.logMessage(Logger.LogLevel.INFO, "Got BLOB Size (stringByteLength): " + blobByteLength);
+                Logger.logMessage(Logger.LogLevel.INFO, "Got BINARY Size (stringByteLength): " + blobByteLength);
                 return "BLOB";
             case JSON:
                 return "JSON";

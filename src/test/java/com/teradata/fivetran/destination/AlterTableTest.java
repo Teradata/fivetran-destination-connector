@@ -537,6 +537,9 @@ public class AlterTableTest extends IntegrationTestBase {
              Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
 
+            // Clean up if table exists from a previous failed run
+            try { stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)); } catch (Exception ignored) {}
+
             // Step 1: Create table using the connector's flow (BINARY PK → VARBYTE(500))
             Table createTableDef = Table.newBuilder().setName("varbytePkAlter")
                     .addAllColumns(Arrays.asList(
@@ -606,6 +609,9 @@ public class AlterTableTest extends IntegrationTestBase {
 
             assertEquals("age", columns.get(2).getName());
             assertEquals(DataType.INT, columns.get(2).getType());
+
+            // Cleanup
+            stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
         }
     }
 

@@ -11,8 +11,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests for BLOB/CLOB primary key auto-conversion to VARBYTE.
  * Teradata does not support BLOB as a primary key column.
- * When a BINARY-typed column is a PK with size ≤ 64KB, it is auto-converted to VARBYTE.
- * When size > 64KB or unknown, the connector fails with a clear error.
+ * When a BINARY-typed column is a PK with size ≤ 64,000 bytes, it is auto-converted to VARBYTE.
+ * When size > 64,000 bytes or unknown, the connector fails with a clear error.
  */
 public class BlobPrimaryKeyTest {
 
@@ -60,7 +60,7 @@ public class BlobPrimaryKeyTest {
 
         assertTrue(ex.getMessage().contains("large_pk"), "Error should reference column name");
         assertTrue(ex.getMessage().contains("BLOB/CLOB"), "Error should mention BLOB/CLOB");
-        assertTrue(ex.getMessage().contains("64"), "Error should mention the 64KB limit");
+        assertTrue(ex.getMessage().contains("64,000"), "Error should mention the 64,000 bytes limit");
     }
 
     @Test

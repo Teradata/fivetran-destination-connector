@@ -210,7 +210,7 @@ public class CreateTableTest extends IntegrationTestBase {
         }
     }
 
-    // Test that a BINARY PK column with size ≤ 64KB is auto-converted to VARBYTE
+    // Test that a BINARY PK column with size ≤ 64,000 bytes is auto-converted to VARBYTE
     @Test
     public void binaryPrimaryKey_autoConvertsToVarbyte() throws Exception {
         String tableName = IntegrationTestBase.schema + "_" + "binaryPkTable";
@@ -281,7 +281,7 @@ public class CreateTableTest extends IntegrationTestBase {
         }
     }
 
-    // Test that a BINARY PK column exceeding 64KB fails gracefully
+    // Test that a BINARY PK column exceeding 64,000 bytes fails gracefully
     @Test
     public void binaryPrimaryKey_exceedingLimit_failsGracefully() {
         Table t = Table.newBuilder().setName("blobPkTooLarge").addAllColumns(Arrays.asList(

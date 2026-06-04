@@ -72,6 +72,6 @@ Teradata does not support BLOB or CLOB data types as primary key columns. This i
 **Recommended alternatives:**
 
 If you encounter the error *"Teradata does not support BLOB/CLOB as primary keys"*, consider:
-- Reducing the source column size to ≤ 64KB so the connector can auto-convert to `VARBYTE`
+- Reducing the source column size to ≤ 64,000 bytes so the connector can auto-convert to `VARBYTE`
 - Removing the BLOB/CLOB column from the primary key at the source
 - Using a hash or surrogate key instead of the LOB column as primary key
