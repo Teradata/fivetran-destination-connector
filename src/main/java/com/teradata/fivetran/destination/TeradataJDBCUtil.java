@@ -461,13 +461,14 @@ public class TeradataJDBCUtil {
 
     /**
      * Generates the column definition for a single column.
-     * When a BINARY column is a primary key, it is auto-converted to VARBYTE
-     * if its size (from getStringByteLength) is ≤ 64,000 bytes. If the size exceeds
-     * 64,000 bytes or is unknown, an exception is thrown.
+     * When a BINARY column is a primary key, it is auto-converted to VARBYTE:
+     * - size ≤ 64,000 → VARBYTE(size)
+     * - size 64,001–65,536 → VARBYTE(64000) with WARNING (clamped; Fivetran rounds to power of 2)
+     * - size > 65,536 or unknown → throws IllegalArgumentException
      *
      * @param col The column.
      * @return The column definition.
-     * @throws IllegalArgumentException If a BINARY PK column exceeds the VARBYTE size limit.
+     * @throws IllegalArgumentException If a BINARY PK column exceeds the supported size or has unknown size.
      */
     static String getColumnDefinition(Column col) {
         String sqlType;
@@ -479,12 +480,21 @@ public class TeradataJDBCUtil {
                 Logger.logMessage(Logger.LogLevel.INFO,
                         String.format("Auto-converting primary key column '%s' from BLOB to VARBYTE(%d) — Teradata does not support BLOB as PK.",
                                 col.getName(), byteLength));
+            } else if (byteLength > MAX_VARBYTE_PK_SIZE && byteLength <= 65536) {
+                // Fivetran platform rounds string_byte_length to next power of 2.
+                // Source columns in the 32,769–64,000 byte range arrive as 65,536.
+                // Clamp to Teradata's max VARBYTE size rather than rejecting.
+                sqlType = String.format("VARBYTE(%d)", MAX_VARBYTE_PK_SIZE);
+                Logger.logMessage(Logger.LogLevel.WARNING,
+                        String.format("Primary key column '%s' has byte length %d (likely rounded up from source). " +
+                                "Clamping to VARBYTE(%d) — Teradata maximum.",
+                                col.getName(), byteLength, MAX_VARBYTE_PK_SIZE));
             } else {
                 String errorMsg = String.format(
                         "Teradata does not support BLOB/CLOB as primary keys. Column '%s' (BINARY, size=%d) %s. " +
                         "Alternative: Use VARBYTE with a size ≤ 64000 bytes for primary key columns.",
                         col.getName(), byteLength,
-                        byteLength == 0 ? "has unknown size" : "exceeds the 64,000 bytes limit for VARBYTE");
+                        byteLength == 0 ? "has unknown size" : "exceeds the maximum supported size for VARBYTE");
                 Logger.logMessage(Logger.LogLevel.SEVERE, errorMsg);
                 throw new IllegalArgumentException(errorMsg);
             }

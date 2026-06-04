@@ -60,7 +60,41 @@ public class BlobPrimaryKeyTest {
 
         assertTrue(ex.getMessage().contains("large_pk"), "Error should reference column name");
         assertTrue(ex.getMessage().contains("BLOB/CLOB"), "Error should mention BLOB/CLOB");
-        assertTrue(ex.getMessage().contains("64,000"), "Error should mention the 64,000 bytes limit");
+    }
+
+    @Test
+    public void binaryPkWithRoundedSize_clampsTo64000() {
+        // Fivetran rounds 32769 → 65536. Connector should clamp to 64000.
+        Column blobPk = Column.newBuilder()
+                .setName("rounded_pk")
+                .setType(DataType.BINARY)
+                .setPrimaryKey(true)
+                .setParams(DataTypeParams.newBuilder().setStringByteLength(65536).build())
+                .build();
+
+        String definition = TeradataJDBCUtil.getColumnDefinition(blobPk);
+
+        assertTrue(definition.contains("VARBYTE(64000)"), "Expected VARBYTE(64000) but got: " + definition);
+        assertTrue(definition.contains("NOT NULL"), "PK column should have NOT NULL");
+        assertFalse(definition.contains("VARBYTE(65536)"), "Should not use the rounded size");
+    }
+
+    @Test
+    public void binaryPkJustAboveClampRange_throwsError() {
+        // 65537 is above the 65536 clamp threshold — genuinely too large
+        Column blobPk = Column.newBuilder()
+                .setName("too_large_pk")
+                .setType(DataType.BINARY)
+                .setPrimaryKey(true)
+                .setParams(DataTypeParams.newBuilder().setStringByteLength(65537).build())
+                .build();
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
+            TeradataJDBCUtil.getColumnDefinition(blobPk);
+        });
+
+        assertTrue(ex.getMessage().contains("too_large_pk"), "Error should reference column name");
+        assertTrue(ex.getMessage().contains("BLOB/CLOB"), "Error should mention BLOB/CLOB");
     }
 
     @Test
