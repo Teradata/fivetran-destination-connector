@@ -1,0 +1,64 @@
+{
+   "create_table": {
+      "transaction": {
+         "columns": {
+            "hash_key": {
+               "type": "BINARY",
+               "string_byte_length": 500
+            },
+            "name": "STRING",
+            "amount": "DOUBLE",
+            "created_at": "UTC_DATETIME"
+         },
+         "primary_key": ["hash_key"]
+      }
+   },
+   "ops": [
+      {
+         "upsert": {
+            "transaction": [
+               {
+                  "hash_key": "AQIDBAU=",
+                  "name": "Row 1",
+                  "amount": 100.50,
+                  "created_at": "2024-01-15T10:00:00.000Z"
+               },
+               {
+                  "hash_key": "BgcICQo=",
+                  "name": "Row 2",
+                  "amount": 200.75,
+                  "created_at": "2024-01-16T11:00:00.000Z"
+               },
+               {
+                  "hash_key": "CwwNDg8=",
+                  "name": "Row 3",
+                  "amount": 300.25,
+                  "created_at": "2024-01-17T12:00:00.000Z"
+               }
+            ]
+         }
+      },
+      {
+         "update": {
+            "transaction": [
+               {
+                  "hash_key": "AQIDBAU=",
+                  "amount": 150.99
+               }
+            ]
+         }
+      },
+      {
+         "delete": {
+            "transaction": [
+               {
+                  "hash_key": "BgcICQo="
+               }
+            ]
+         }
+      }
+   ],
+   "describe_table": [
+      "transaction"
+   ]
+}

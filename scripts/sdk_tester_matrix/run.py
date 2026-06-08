@@ -221,6 +221,64 @@ def require_port_or_fail(cfg, label):
 
 
 # ---------------------------------------------------------------------------
+# Docker daemon check / auto-start
+# ---------------------------------------------------------------------------
+
+def _docker_daemon_running():
+    """Return True if `docker info` succeeds (daemon is responsive)."""
+    try:
+        proc = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def ensure_docker_running(timeout=60):
+    """If Docker daemon is not running, attempt to start Docker Desktop (Windows)
+    or the docker service (Linux). Waits up to `timeout` seconds for it to respond.
+    Hard-fails (exit 2) if it cannot be started.
+    """
+    if _docker_daemon_running():
+        return
+
+    sys.stderr.write("Docker daemon not running — attempting to start...\n")
+
+    if sys.platform == "win32":
+        # Try common Docker Desktop install paths
+        docker_desktop_paths = [
+            os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                         "Docker", "Docker", "Docker Desktop.exe"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                         "Docker", "Docker Desktop.exe"),
+        ]
+        started = False
+        for path in docker_desktop_paths:
+            if os.path.isfile(path):
+                subprocess.Popen([path], creationflags=0x00000008)  # DETACHED_PROCESS
+                started = True
+                break
+        if not started:
+            sys.stderr.write("ERROR: Docker Desktop not found. Start it manually.\n")
+            sys.exit(2)
+    else:
+        # Linux: try systemctl
+        subprocess.run(["sudo", "systemctl", "start", "docker"],
+                       capture_output=True, timeout=15)
+
+    # Wait for daemon to become responsive
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _docker_daemon_running():
+            sys.stderr.write("Docker daemon is ready.\n")
+            return
+        time.sleep(3)
+
+    sys.stderr.write("ERROR: Docker daemon did not start within {}s. "
+                     "Start it manually.\n".format(timeout))
+    sys.exit(2)
+
+
+# ---------------------------------------------------------------------------
 # BTEQ runner
 # ---------------------------------------------------------------------------
 
@@ -724,6 +782,7 @@ def main():
         return 0
 
     find_tool("docker", "install Docker Desktop or docker-ce")
+    ensure_docker_running()
     find_tool("bteq", "install Teradata Tools and Utilities")
     require_port_or_fail(cfg, "startup")
 

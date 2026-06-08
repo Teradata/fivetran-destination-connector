@@ -527,5 +527,93 @@ public class AlterTableTest extends IntegrationTestBase {
         }
     }
 
+    // Test: ALTER TABLE adding a non-PK column to a table that has a VARBYTE PK
+    // (created via BINARY PK auto-conversion). Verifies that getTable() correctly
+    // reads back the VARBYTE column as BINARY and no spurious table recreation occurs.
+    @Test
+    public void alterTable_addColumnToTableWithVarbytePK() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_varbytePkAlter";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+
+            // Clean up if table exists from a previous failed run
+            try { stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)); } catch (Exception ignored) {}
+
+            // Step 1: Create table using the connector's flow (BINARY PK → VARBYTE(500))
+            Table createTableDef = Table.newBuilder().setName("varbytePkAlter")
+                    .addAllColumns(Arrays.asList(
+                            Column.newBuilder()
+                                    .setName("id")
+                                    .setType(DataType.BINARY)
+                                    .setPrimaryKey(true)
+                                    .setParams(DataTypeParams.newBuilder().setStringByteLength(500).build())
+                                    .build(),
+                            Column.newBuilder()
+                                    .setName("name")
+                                    .setType(DataType.STRING)
+                                    .build()
+                    ))
+                    .build();
+
+            String createSql = TeradataJDBCUtil.generateCreateTableQuery(database, tableName, createTableDef);
+            stmt.execute(createSql);
+            conn.commit();
+
+            // Step 2: Send an ALTER TABLE request that adds a new non-PK column
+            Table alterTableDef = Table.newBuilder().setName("varbytePkAlter")
+                    .addAllColumns(Arrays.asList(
+                            Column.newBuilder()
+                                    .setName("id")
+                                    .setType(DataType.BINARY)
+                                    .setPrimaryKey(true)
+                                    .setParams(DataTypeParams.newBuilder().setStringByteLength(500).build())
+                                    .build(),
+                            Column.newBuilder()
+                                    .setName("name")
+                                    .setType(DataType.STRING)
+                                    .build(),
+                            Column.newBuilder()
+                                    .setName("age")
+                                    .setType(DataType.INT)
+                                    .build()
+                    ))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema)
+                    .setTable(alterTableDef)
+                    .build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries2 =
+                    TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            assertNotNull(queries2);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries2) {
+                q.execute(conn);
+                conn.commit();
+            }
+
+            // Step 3: Verify the table still has the VARBYTE PK + new column
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+
+            assertEquals(3, columns.size());
+            assertEquals("id", columns.get(0).getName());
+            assertEquals(DataType.BINARY, columns.get(0).getType());
+            assertTrue(columns.get(0).getPrimaryKey());
+            assertTrue(columns.get(0).getParams().getStringByteLength() > 0);
+
+            assertEquals("name", columns.get(1).getName());
+            assertEquals(DataType.STRING, columns.get(1).getType());
+
+            assertEquals("age", columns.get(2).getName());
+            assertEquals(DataType.INT, columns.get(2).getType());
+
+            // Cleanup
+            stmt.execute("DROP TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName));
+        }
+    }
+
 
 }

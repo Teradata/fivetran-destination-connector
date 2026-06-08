@@ -55,3 +55,23 @@ The table below demonstrates how Fivetran data types are converted into Teradata
 | Add column                    | ✔       | When Fivetran detects the addition of a column in your source, it automatically adds that column to your Teradata Vantage destination.                                                                                                                                                                                              |
 | Change column type            | ✔       | When Fivetran detects a change in the column type in the data source, it automatically changes the column type in your Teradata Vantage destination. To change the column type, Fivetran creates a new column, copies the data from the existing column to the new column, deletes the existing column, and renames the new column. |
 | Change primary key or key column type | ✔       | Changing a primary key is not supported in Teradata Vantage. When Fivetran detects a change in a primary key, it creates a new table with the updated primary key, copies the data from the existing table to the new one, deletes the existing table, and renames the new table.                                                                           |
+
+----
+
+## Primary key limitations
+
+Teradata does not support BLOB or CLOB data types as primary key columns. This is a Teradata database limitation that affects sources such as SAP RAW, Oracle, and BigQuery where BLOB/CLOB columns may be defined as primary keys.
+
+**Connector behavior:**
+
+| Source PK Type | Size | Teradata Handling |
+|----------------|------|-------------------|
+| BLOB/BINARY | ≤ 64,000 bytes | Auto-converted to `VARBYTE(size)` |
+| BLOB/BINARY | > 64,000 bytes or unknown | Sync fails with an actionable error message |
+
+**Recommended alternatives:**
+
+If you encounter the error *"Teradata does not support BLOB/CLOB as primary keys"*, consider:
+- Reducing the source column size to ≤ 64,000 bytes so the connector can auto-convert to `VARBYTE`
+- Removing the BLOB/CLOB column from the primary key at the source
+- Using a hash or surrogate key instead of the LOB column as primary key
