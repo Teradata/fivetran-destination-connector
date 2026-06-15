@@ -600,17 +600,26 @@ public class TeradataJDBCUtil {
 
     /**
      * Formats an ISO date-time string for use in SQL queries.
+     * Ensures exactly 6 fractional second digits (microsecond precision).
      *
      * @param dateTime The ISO date-time string.
-     * @return The formatted date-time string.
+     * @return The formatted date-time string with exactly 6 fractional seconds.
      */
     public static String formatISODateTime(String dateTime) {
         dateTime = dateTime.replace("T", " ").replace("Z", "");
         int dotPos = dateTime.indexOf(".", 0);
-        if (dotPos != -1 && dotPos + 6 < dateTime.length()) {
-            return dateTime.substring(0, dotPos + 6 + 1);
+        if (dotPos != -1) {
+            int endPos = Math.min(dotPos + 7, dateTime.length());
+            String result = dateTime.substring(0, endPos);
+            // Pad with zeros to ensure exactly 6 fractional digits
+            while (result.length() < dotPos + 7) {
+                result += "0";
+            }
+            return result;
+        } else {
+            // No fractional seconds, add .000000
+            return dateTime + ".000000";
         }
-        return dateTime;
     }
 
     public static Timestamp getTimestampFromObject(Object object) {
