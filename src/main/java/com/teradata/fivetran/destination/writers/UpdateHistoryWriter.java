@@ -136,27 +136,41 @@ public class UpdateHistoryWriter extends Writer {
     private void insertNewRow(List<String> row) throws SQLException {
         Logger.logMessage(Logger.debugLogLevel, "#########################UpdateHistoryWriter.insertNewRow#########################");
         Logger.logMessage(Logger.debugLogLevel, "Inserting new row: " + row);
-        StringBuilder insertQuery = new StringBuilder(String.format(
-                "INSERT INTO %s SELECT ",
-                TeradataJDBCUtil.escapeTable(database, table)));
+        // Build an explicit target column list alongside the SELECT projection.
+        // Without it, Teradata maps the projected values positionally onto the
+        // table's PHYSICAL column order. Fivetran's request column order does not
+        // necessarily match the physical order, so a non-timestamp value could
+        // land in a TIMESTAMP(6) column and raise Error 5407 ("Invalid operation
+        // for DateTime or Interval"). Naming the target columns makes the mapping
+        // by name and order-independent.
+        StringBuilder columnList = new StringBuilder();
+        StringBuilder selectList = new StringBuilder();
 
         boolean firstColumn = true;
         for (Column c : columns) {
             if (!firstColumn) {
-                insertQuery.append(", ");
+                columnList.append(", ");
+                selectList.append(", ");
             }
+
+            columnList.append(TeradataJDBCUtil.escapeIdentifier(c.getName()));
 
             Integer pos = nameToHeaderPos.get(c.getName());
             if (pos == null || row.get(pos).equals(params.getUnmodifiedString())) {
-                insertQuery.append(TeradataJDBCUtil.escapeIdentifier(c.getName()));
+                selectList.append(TeradataJDBCUtil.escapeIdentifier(c.getName()));
             } else {
-                insertQuery.append("?");
+                selectList.append("?");
             }
 
             firstColumn = false;
         }
 
-        insertQuery.append(String.format(" FROM %s WHERE _fivetran_active = 1 ", TeradataJDBCUtil.escapeTable(database, table)));
+        StringBuilder insertQuery = new StringBuilder(String.format(
+                "INSERT INTO %s (%s) SELECT %s FROM %s WHERE _fivetran_active = 1 ",
+                TeradataJDBCUtil.escapeTable(database, table),
+                columnList,
+                selectList,
+                TeradataJDBCUtil.escapeTable(database, table)));
 
         for (Column c : columns) {
             if (c.getPrimaryKey() && !c.getName().equals("_fivetran_start")) {
