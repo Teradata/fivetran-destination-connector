@@ -22,6 +22,27 @@ public class TeradataJDBCUtil {
     private static final Pattern HOST_PATTERN =
             Pattern.compile("^[A-Za-z0-9._\\-\\[\\]:]+$");
 
+    // Per the Fivetran partner SDK history-mode batch file contract,
+    // "_fivetran_earliest" is a transient marker that may appear in history-mode
+    // batch-file headers and request column lists. History writers skip its value
+    // positionally, and it must never be materialized as a physical destination
+    // column.
+    public static final String FIVETRAN_EARLIEST_COLUMN = "_fivetran_earliest";
+
+    /**
+     * Returns {@code columns} with the transient {@link #FIVETRAN_EARLIEST_COLUMN}
+     * marker removed, if present. This is the single place that encodes the rule
+     * that the column must never be materialized/targeted as a physical
+     * destination column; every DDL- or DML-column-list call site (createTable,
+     * alterTable, the PK-change recreate path, writeHistoryBatch, etc.) should
+     * route through this helper rather than re-implementing the filter.
+     */
+    static List<Column> withoutEarliestColumn(List<Column> columns) {
+        return columns.stream()
+                .filter(column -> !FIVETRAN_EARLIEST_COLUMN.equals(column.getName()))
+                .collect(Collectors.toList());
+    }
+
     static void validateHost(String host) {
         if (host == null || host.isEmpty() || !HOST_PATTERN.matcher(host).matches()) {
             throw new IllegalArgumentException("Invalid Teradata host: " + host);
@@ -409,7 +430,8 @@ public class TeradataJDBCUtil {
      * @return The SQL query to create the table.
      */
     static String generateCreateTableQuery(String database, String tableName, Table table) {
-        String columnDefinitions = getColumnDefinitions(table.getColumnsList());
+        List<Column> columns = withoutEarliestColumn(table.getColumnsList());
+        String columnDefinitions = getColumnDefinitions(columns);
         return String.format("CREATE MULTISET TABLE %s (%s)", escapeTable(database, tableName), columnDefinitions);
     }
 
@@ -745,7 +767,7 @@ public class TeradataJDBCUtil {
         List<Column> columnsToDrop = new ArrayList<>();
         List<Column> commonColumns = new ArrayList<>();
 
-        for (Column column : newTable.getColumnsList()) {
+        for (Column column : withoutEarliestColumn(newTable.getColumnsList())) {
             Column oldColumn = oldColumns.get(column.getName());
             if (oldColumn == null) {
                 columnsToAdd.add(column);
@@ -775,6 +797,24 @@ public class TeradataJDBCUtil {
                     }
                 }
             }
+        }
+
+        // Self-heal: tables created by older, buggy versions of the connector may
+        // already have _fivetran_earliest physically materialized. Fivetran always
+        // includes this name in the request's column list, so it would never be
+        // picked up by the regular dropColumns detection above; drop it here
+        // unconditionally (it's nullable, never part of the PK, and must never
+        // exist as a real column per the history-mode batch file contract).
+        //
+        // This is a deliberate, singular exception to request.getDropColumns():
+        // every other drop in this method is gated by that flag, but this one is
+        // destructive DDL we intentionally run regardless of it. It only triggers
+        // when an AlterTable request arrives for the table; a table that is never
+        // altered again keeps the stray column indefinitely (harmless — it's
+        // nullable and, since the DML-layer fix, no longer targeted by writes).
+        if (oldColumns.containsKey(FIVETRAN_EARLIEST_COLUMN)
+                && columnsToDrop.stream().noneMatch(c -> FIVETRAN_EARLIEST_COLUMN.equals(c.getName()))) {
+            columnsToDrop.add(oldColumns.get(FIVETRAN_EARLIEST_COLUMN));
         }
 
         if (pkChanged) {

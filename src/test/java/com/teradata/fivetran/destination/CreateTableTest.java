@@ -306,6 +306,65 @@ public class CreateTableTest extends IntegrationTestBase {
                 "Error should mention the column name");
     }
 
+    // IDE-26747: "_fivetran_earliest" is a transient history-mode batch-file
+    // marker column (per the Fivetran partner SDK contract) and must never be
+    // materialized as a physical destination column, even if Fivetran includes
+    // it in a CreateTableRequest's column list.
+    //
+    // This is a pure string-building check against generateCreateTableQuery's
+    // 3-arg overload (no DB connection/config needed), kept deliberately
+    // independent of any live-table assertions already covered below by
+    // createTableExcludesFivetranEarliestColumn().
+    @Test
+    public void createTableQueryExcludesFivetranEarliestColumn() {
+        Table table = Table.newBuilder().setName("earliestPureCreate").addAllColumns(Arrays.asList(
+                Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build(),
+                Column.newBuilder().setName("name").setType(DataType.STRING).setPrimaryKey(false).build(),
+                Column.newBuilder().setName("_fivetran_earliest").setType(DataType.BOOLEAN).setPrimaryKey(false).build()
+        )).build();
+
+        String query = TeradataJDBCUtil.generateCreateTableQuery("test_database", "earliestPureCreate", table);
+
+        assertFalse(query.contains("_fivetran_earliest"),
+                "Generated CREATE TABLE DDL should never reference _fivetran_earliest but got: " + query);
+        assertTrue(query.contains("\"id\""));
+        assertTrue(query.contains("\"name\""));
+    }
+
+    // IDE-26747: "_fivetran_earliest" is a transient history-mode batch-file
+    // marker column (per the Fivetran partner SDK contract) and must never be
+    // materialized as a physical destination column, even if Fivetran includes
+    // it in a CreateTableRequest's column list.
+    @Test
+    public void createTableExcludesFivetranEarliestColumn() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "earliestCreateTable";
+
+        Table t = Table.newBuilder().setName("earliestCreateTable").addAllColumns(Arrays.asList(
+                Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build(),
+                Column.newBuilder().setName("name").setType(DataType.STRING).setPrimaryKey(false).build(),
+                Column.newBuilder().setName("_fivetran_earliest").setType(DataType.BOOLEAN).setPrimaryKey(false).build()
+        )).build();
+
+        CreateTableRequest request = CreateTableRequest.newBuilder()
+                .setSchemaName(IntegrationTestBase.schema).setTable(t).build();
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            String query = TeradataJDBCUtil.generateCreateTableQuery(conf, stmt, request);
+
+            assertFalse(query.contains("_fivetran_earliest"),
+                    "Generated CREATE TABLE DDL should never reference _fivetran_earliest but got: " + query);
+
+            stmt.execute(query);
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals(2, columns.size(), "_fivetran_earliest must not be persisted as a physical column");
+            assertEquals("id", columns.get(0).getName());
+            assertEquals("name", columns.get(1).getName());
+        }
+    }
+
     // Test that a non-PK BINARY column still maps to BLOB
     @Test
     public void binaryNonPk_remainsBlob() throws Exception {

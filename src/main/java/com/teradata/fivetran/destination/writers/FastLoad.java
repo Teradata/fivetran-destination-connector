@@ -34,6 +34,7 @@ public class FastLoad {
     int batchSize;
     boolean loadCompleteStatus = false;
     private List<Column> headerColumns;
+    private List<Integer> headerColumnRowIndices;
     private String columnNames;
     private List<Column> matchingCols;
     private List<Column> columns;
@@ -120,15 +121,17 @@ public class FastLoad {
     public void setHeader(List<String> header) throws SQLException {
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("Setting header with columns: %s", header));
-        headerColumns = new ArrayList<>();
         matchingCols = columns.stream()
                 .filter(Column::getPrimaryKey)
                 .collect(Collectors.toList());
-        Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, col -> col));
 
-        for (String name : header) {
-            headerColumns.add(nameToColumn.get(name));
-        }
+        // Header names not found among the physical columns (e.g. the transient
+        // _fivetran_earliest marker, see IDE-26747) are skipped here; rowIndices
+        // lets writeRow still read each surviving value from its original
+        // position in the CSV row.
+        Writer.HeaderMapping mapping = Writer.resolveHeaderColumns(header, columns);
+        headerColumns = mapping.matchedColumns;
+        headerColumnRowIndices = mapping.rowIndices;
 
         columnNames = headerColumns.stream()
                 .map(Column::getName)
@@ -141,120 +144,122 @@ public class FastLoad {
     public void writeRow(List<String> row) throws Exception {
         Logger.logMessage(Logger.debugLogLevel, "#########################LoadDataWriter.writeRow#########################");
         try {
-            for (int i = 0; i < row.size(); i++) {
-                String columnName = headerColumns.get(i).getName();
-                DataType type = headerColumns.get(i).getType();
+            for (int j = 0; j < headerColumns.size(); j++) {
+                int i = headerColumnRowIndices.get(j);
+                String columnName = headerColumns.get(j).getName();
+                DataType type = headerColumns.get(j).getType();
                 String value = row.get(i);
+                int paramIndex = j + 1;
 
                 if (value == null || value.equals("null") || value.equals(params.getNullString())) {
-                    preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
+                    preparedStatement.setNull(paramIndex, getSqlTypeFromDataType(type));
                     Logger.logMessage(Logger.debugLogLevel,
-                            String.format("Set parameter at index %d to NULL (DataType: %s)", i + 1, type));
+                            String.format("Set parameter at index %d to NULL (DataType: %s)", paramIndex, type));
                     continue;
                 }
 
                 switch (type) {
                     case BOOLEAN:
                         if (value.equalsIgnoreCase("true")) {
-                            preparedStatement.setByte(i + 1, (byte) 1);
+                            preparedStatement.setByte(paramIndex, (byte) 1);
                             Logger.logMessage(Logger.debugLogLevel,
-                                    String.format("Set BOOLEAN parameter at index %d: %s (as byte 1)", i + 1, value));
+                                    String.format("Set BOOLEAN parameter at index %d: %s (as byte 1)", paramIndex, value));
                         } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setByte(i + 1, (byte) 0);
+                            preparedStatement.setByte(paramIndex, (byte) 0);
                             Logger.logMessage(Logger.debugLogLevel,
-                                    String.format("Set BOOLEAN parameter at index %d: %s (as byte 0)", i + 1, value));
+                                    String.format("Set BOOLEAN parameter at index %d: %s (as byte 0)", paramIndex, value));
                         }
                         break;
 
                     case SHORT:
-                        preparedStatement.setShort(i + 1, Short.parseShort(value));
+                        preparedStatement.setShort(paramIndex, Short.parseShort(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: SHORT) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: SHORT) at index %d: %s", paramIndex, value));
                         break;
                     case INT:
-                        preparedStatement.setInt(i + 1, Integer.parseInt(value));
+                        preparedStatement.setInt(paramIndex, Integer.parseInt(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: INT) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: INT) at index %d: %s", paramIndex, value));
                         break;
 
                     case LONG:
-                        preparedStatement.setLong(i + 1, Long.parseLong(value));
+                        preparedStatement.setLong(paramIndex, Long.parseLong(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: LONG) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: LONG) at index %d: %s", paramIndex, value));
                         break;
 
                     case DECIMAL:
                         int scale = decimalScales.get(columnName.toLowerCase());
                         BigDecimal bd = new BigDecimal(value).setScale(scale, RoundingMode.HALF_UP);
-                        preparedStatement.setBigDecimal(i + 1, bd);
+                        preparedStatement.setBigDecimal(paramIndex, bd);
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: DECIMAL) at index %d: %s", i + 1, bd.toString()));
+                                String.format("Set parameter (DataType: DECIMAL) at index %d: %s", paramIndex, bd.toString()));
                         break;
 
                     case FLOAT:
-                        preparedStatement.setFloat(i + 1, Float.parseFloat(value));
+                        preparedStatement.setFloat(paramIndex, Float.parseFloat(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: FLOAT) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: FLOAT) at index %d: %s", paramIndex, value));
                         break;
 
                     case DOUBLE:
-                        preparedStatement.setDouble(i + 1, Double.parseDouble(value));
+                        preparedStatement.setDouble(paramIndex, Double.parseDouble(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: DOUBLE) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: DOUBLE) at index %d: %s", paramIndex, value));
                         break;
 
                     case NAIVE_TIME:
-                        preparedStatement.setTime(i + 1, Time.valueOf(value));
+                        preparedStatement.setTime(paramIndex, Time.valueOf(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: NAIVE_TIME) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: NAIVE_TIME) at index %d: %s", paramIndex, value));
                         break;
 
                     case NAIVE_DATE:
-                        preparedStatement.setDate(i + 1, Date.valueOf(value));
+                        preparedStatement.setDate(paramIndex, Date.valueOf(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: NAIVE_DATE) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: NAIVE_DATE) at index %d: %s", paramIndex, value));
                         break;
 
                     case NAIVE_DATETIME:
                     case UTC_DATETIME:
                         Timestamp ts = TeradataJDBCUtil.getTimestampFromObject(
                                 TeradataJDBCUtil.formatISODateTime(value));
-                        preparedStatement.setTimestamp(i + 1, ts);
+                        preparedStatement.setTimestamp(paramIndex, ts);
                         Logger.logMessage(Logger.debugLogLevel,
                                 String.format("Set parameter (DataType: NAIVE_DATETIME/UTC_DATETIME) at index %d: %s (Formatted: %s)",
-                                        i + 1, value, ts));
+                                        paramIndex, value, ts));
                         break;
 
                     case BINARY:
-                        preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
+                        preparedStatement.setBytes(paramIndex, Base64.getDecoder().decode(value));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: BINARY) at index %d (Base64-decoded)", i + 1));
+                                String.format("Set parameter (DataType: BINARY) at index %d (Base64-decoded)", paramIndex));
                         break;
 
                     case XML:
                         SQLXML sqlxml = preparedStatement.getConnection().createSQLXML();
                         sqlxml.setString(value);
-                        preparedStatement.setSQLXML(i + 1, sqlxml);
+                        preparedStatement.setSQLXML(paramIndex, sqlxml);
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: XML) at index %d", i + 1));
+                                String.format("Set parameter (DataType: XML) at index %d", paramIndex));
                         break;
 
                     case STRING:
-                        preparedStatement.setString(i + 1, value);
+                        preparedStatement.setString(paramIndex, value);
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: STRING) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: STRING) at index %d: %s", paramIndex, value));
                         break;
 
                     case JSON:
-                        preparedStatement.setObject(i + 1, new JSONStruct("JSON", new Object[]{value}));
+                        preparedStatement.setObject(paramIndex, new JSONStruct("JSON", new Object[]{value}));
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: JSON) at index %d: %s", i + 1, value));
+                                String.format("Set parameter (DataType: JSON) at index %d: %s", paramIndex, value));
                         break;
 
                     default:
-                        preparedStatement.setObject(i + 1, value);
+                        preparedStatement.setObject(paramIndex, value);
                         Logger.logMessage(Logger.debugLogLevel,
-                                String.format("Set parameter (DataType: %s) at index %d: %s", type, i + 1, value));
+                                String.format("Set parameter (DataType: %s) at index %d: %s", type, paramIndex, value));
                         break;
                 }
             }

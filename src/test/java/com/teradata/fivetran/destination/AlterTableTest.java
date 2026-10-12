@@ -52,6 +52,85 @@ public class AlterTableTest extends IntegrationTestBase {
         }
     }
 
+    // IDE-26747: Fivetran includes "_fivetran_earliest" in the AlterTableRequest
+    // column list ahead of an incremental history-mode writeHistoryBatch call.
+    // It is a transient batch-file marker column only (read positionally by
+    // EarliestStartHistoryWriter) and must never be added as a real column.
+    @Test
+    public void alterTableExcludesFivetranEarliestColumn() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_earliestAlterTable";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + "(a INT)");
+
+            Table table = Table.newBuilder().setName("earliestAlterTable")
+                    .addAllColumns(Arrays.asList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build(),
+                            Column.newBuilder().setName("b").setType(DataType.INT).build(),
+                            Column.newBuilder().setName("_fivetran_earliest").setType(DataType.BOOLEAN).build()))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                assertFalse(q.getQuery().contains("_fivetran_earliest"),
+                        "Generated ALTER TABLE DDL should never reference _fivetran_earliest but got: " + q.getQuery());
+                stmt.execute(q.getQuery());
+            }
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals(2, columns.size(), "_fivetran_earliest must not be persisted as a physical column");
+            assertEquals("a", columns.get(0).getName());
+            assertEquals("b", columns.get(1).getName());
+        }
+    }
+
+    // IDE-26747: Tables created by older, buggy connector versions may already
+    // have "_fivetran_earliest" physically materialized. Because Fivetran
+    // always includes this name in the AlterTableRequest's column list, the
+    // regular dropColumns-based detection would never catch it, so
+    // generateAlterTableQuery must unconditionally self-heal by dropping it
+    // whenever it is found on the existing physical table.
+    @Test
+    public void alterTableSelfHealsPreexistingFivetranEarliestColumn() throws SQLException, Exception {
+        String tableName = IntegrationTestBase.schema + "_earliestSelfHeal";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement();) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName)
+                    + "(a INT, \"_fivetran_earliest\" BYTEINT)");
+
+            Table table = Table.newBuilder().setName("earliestSelfHeal")
+                    .addAllColumns(Arrays.asList(
+                            Column.newBuilder().setName("a").setType(DataType.INT).build(),
+                            Column.newBuilder().setName("_fivetran_earliest").setType(DataType.BOOLEAN).build()))
+                    .build();
+
+            AlterTableRequest request = AlterTableRequest.newBuilder().putAllConfiguration(confMap)
+                    .setSchemaName(IntegrationTestBase.schema).setTable(table).build();
+
+            List<TeradataJDBCUtil.QueryWithCleanup> queries = TeradataJDBCUtil.generateAlterTableQuery(request, testWarningHandle);
+            assertNotNull(queries, "Expected a DROP COLUMN query to self-heal the stray physical column");
+
+            boolean sawDropFivetranEarliest = false;
+            for (TeradataJDBCUtil.QueryWithCleanup q : queries) {
+                if (q.getQuery().contains("DROP") && q.getQuery().contains("_fivetran_earliest")) {
+                    sawDropFivetranEarliest = true;
+                }
+                stmt.execute(q.getQuery());
+            }
+            assertTrue(sawDropFivetranEarliest,
+                    "Expected generated ALTER TABLE DDL to drop the pre-existing _fivetran_earliest column");
+
+            Table result = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            List<Column> columns = result.getColumnsList();
+            assertEquals(1, columns.size(), "_fivetran_earliest should have been dropped by self-heal logic");
+            assertEquals("a", columns.get(0).getName());
+        }
+    }
+
     // Test for changing the data type of a column
     @Test
     public void changeDataType() throws SQLException, Exception {

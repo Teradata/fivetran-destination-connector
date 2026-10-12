@@ -51,9 +51,21 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .setPlaceholder("your_host_details")
                 .build();
 
-        FormField user = FormField.newBuilder()
+        // The Fivetran SDK validates field-name uniqueness across the whole flattened form,
+        // and VisibilityCondition cannot match more than one value. A field shared by two
+        // mutually exclusive conditional groups therefore needs a distinct name in each group.
+        // TeradataConfiguration coalesces these back into a single user value.
+        FormField td2User = FormField.newBuilder()
                 .setRequired(true)
-                .setName("user")
+                .setName("td2user")
+                .setLabel("User")
+                .setTextField(TextField.PlainText)
+                .setPlaceholder("user_name")
+                .build();
+
+        FormField ldapUser = FormField.newBuilder()
+                .setRequired(true)
+                .setName("ldapuser")
                 .setLabel("User")
                 .setTextField(TextField.PlainText)
                 .setPlaceholder("user_name")
@@ -108,6 +120,8 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 .build();
 
         FormField TD2Logmech = FormField.newBuilder()
+                .setName("logmech.td2")
+                .setLabel("TD2 Credentials")
                 .setConditionalFields(
                         ConditionalFields.newBuilder()
                                 .setCondition(VisibilityCondition.newBuilder()
@@ -115,11 +129,13 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .setStringValue("TD2")
                                         .build()
                                 )
-                                .addAllFields(Arrays.asList(user, td2Password))
+                                .addAllFields(Arrays.asList(td2User, td2Password))
                                 .build()
                 ).build();
 
         FormField LDAPLogmech = FormField.newBuilder()
+                .setName("logmech.ldap")
+                .setLabel("LDAP Credentials")
                 .setConditionalFields(
                         ConditionalFields.newBuilder()
                                 .setCondition(VisibilityCondition.newBuilder()
@@ -127,7 +143,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .setStringValue("LDAP")
                                         .build()
                                 )
-                                .addAllFields(Arrays.asList(user, ldapPassword))
+                                .addAllFields(Arrays.asList(ldapUser, ldapPassword))
                                 .build()
                 ).build();
 
@@ -283,55 +299,82 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 )
                 .build();
 
-        FormField sslcrc = FormField.newBuilder()
-                .setName("ssl.crc")
+        // Split per VERIFY-CA / VERIFY-FULL branch so each name is unique in the flattened
+        // form; TeradataConfiguration coalesces them back into a single ssl.crc value.
+        DescriptiveDropDownFields sslCrcOptions = DescriptiveDropDownFields.newBuilder()
+                .addDescriptiveDropdownField(
+                        DescriptiveDropDownField.newBuilder()
+                                .setLabel("ALLOW")
+                                .setValue("ALLOW")
+                                .setDescription("Performs CRC for SSLMODE or OIDC_SSLMODE VERIFY-CA and VERIFY-FULL, and provides soft fail CRC for VERIFY-CA and VERIFY-FULL to ignore CRC communication failures. (Default)")
+                                .build()
+                )
+                .addDescriptiveDropdownField(
+                        DescriptiveDropDownField.newBuilder()
+                                .setLabel("PREFER")
+                                .setValue("PREFER")
+                                .setDescription("Performs CRC for all HTTPS connections, and provides soft fail CRC for VERIFY-CA and VERIFY-FULL to ignore CRC communication failures.")
+                                .build()
+                )
+                .addDescriptiveDropdownField(
+                        DescriptiveDropDownField.newBuilder()
+                                .setLabel("REQUIRE")
+                                .setValue("REQUIRE")
+                                .setDescription("Performs CRC for all HTTPS connections, and requires CRC for VERIFY-CA and VERIFY-FULL.")
+                                .build()
+                ).build();
+
+        String sslCrcDescription = "Controls TLS certificate revocation checking (CRC) for HTTPS/TLS connections.";
+
+        FormField sslCrcVerifyCa = FormField.newBuilder()
+                .setName("ssl.crc.verify.ca")
                 .setLabel("SSLCRC")
                 .setRequired(false)
-                .setDescriptiveDropdownFields(
-                        DescriptiveDropDownFields.newBuilder()
-                                .addDescriptiveDropdownField(
-                                        DescriptiveDropDownField.newBuilder()
-                                                .setLabel("ALLOW")
-                                                .setValue("ALLOW")
-                                                .setDescription("Performs CRC for SSLMODE or OIDC_SSLMODE VERIFY-CA and VERIFY-FULL, and provides soft fail CRC for VERIFY-CA and VERIFY-FULL to ignore CRC communication failures. (Default)")
-                                                .build()
-                                )
-                                .addDescriptiveDropdownField(
-                                        DescriptiveDropDownField.newBuilder()
-                                                .setLabel("PREFER")
-                                                .setValue("PREFER")
-                                                .setDescription("Performs CRC for all HTTPS connections, and provides soft fail CRC for VERIFY-CA and VERIFY-FULL to ignore CRC communication failures.")
-                                                .build()
-                                )
-                                .addDescriptiveDropdownField(
-                                        DescriptiveDropDownField.newBuilder()
-                                                .setLabel("REQUIRE")
-                                                .setValue("REQUIRE")
-                                                .setDescription("Performs CRC for all HTTPS connections, and requires CRC for VERIFY-CA and VERIFY-FULL.")
-                                                .build()
-                                ).build())
-                .setDescription("Controls TLS certificate revocation checking (CRC) for HTTPS/TLS connections.")
+                .setDescriptiveDropdownFields(sslCrcOptions)
+                .setDescription(sslCrcDescription)
+                .build();
+
+        FormField sslCrcVerifyFull = FormField.newBuilder()
+                .setName("ssl.crc.verify.full")
+                .setLabel("SSLCRC")
+                .setRequired(false)
+                .setDescriptiveDropdownFields(sslCrcOptions)
+                .setDescription(sslCrcDescription)
                 .build();
 
 
-        FormField serverCert = FormField.newBuilder()
-                .setName("ssl.server.cert")
+        String serverCertDescription =
+                "Upload the server's certificate file.<br />" +
+                        "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.<br />" +
+                        "The file must contain Certificate Authority (CA) certificates.<br />" +
+                        "Please upload the raw certificate file directly — no base64url encoding is required.<br />";
+
+        UploadField serverCertUpload = UploadField.newBuilder()
+                .setMaxFileSizeBytes(1048576) // 1 MB
+                .addAllAllowedFileType(Arrays.asList(".txt", ".pem", ".crt"))
+                .build();
+
+        // Split per branch for the same reason as ssl.crc; both remain required within
+        // their own branch so VERIFY-CA / VERIFY-FULL still mandate a certificate.
+        FormField serverCertVerifyCa = FormField.newBuilder()
+                .setName("ssl.server.cert.verify.ca")
                 .setLabel("SSL Server's Certificate").setRequired(true)
-                .setDescription(
-                        "Upload the server's certificate file.<br />" +
-                                "Supported formats: PEM (.pem), Text (.txt), and Certificate (.crt) files.<br />" +
-                                "The file must contain Certificate Authority (CA) certificates.<br />" +
-                                "Please upload the raw certificate file directly — no base64url encoding is required.<br />"
-                )
-                .setUploadField(UploadField.newBuilder()
-                        .setMaxFileSizeBytes(1048576) // 1 MB
-                        .addAllAllowedFileType(Arrays.asList(".txt", ".pem", ".crt"))
-                        .build())
+                .setDescription(serverCertDescription)
+                .setUploadField(serverCertUpload)
+                .build();
+
+        FormField serverCertVerifyFull = FormField.newBuilder()
+                .setName("ssl.server.cert.verify.full")
+                .setLabel("SSL Server's Certificate").setRequired(true)
+                .setDescription(serverCertDescription)
+                .setUploadField(serverCertUpload)
                 .build();
 
 
 
         FormField sslVerifyCa = FormField.newBuilder()
+                .setName("ssl.verify.ca")
+                .setLabel("VERIFY-CA Settings")
                 .setConditionalFields(
                         ConditionalFields.newBuilder()
                                 .setCondition(VisibilityCondition.newBuilder()
@@ -340,13 +383,15 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .build()
                                 )
                                 .addAllFields(
-                                        Collections.singletonList(serverCert))
+                                        Collections.singletonList(serverCertVerifyCa))
                                 .addAllFields(
-                                        Collections.singletonList(sslcrc))
+                                        Collections.singletonList(sslCrcVerifyCa))
                                 .build())
                 .build();
 
         FormField sslVerifyFull = FormField.newBuilder()
+                .setName("ssl.verify.full")
+                .setLabel("VERIFY-FULL Settings")
                 .setConditionalFields(
                         ConditionalFields.newBuilder()
                                 .setCondition(VisibilityCondition.newBuilder()
@@ -355,9 +400,9 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                                         .build()
                                 )
                                 .addAllFields(
-                                        Collections.singletonList(serverCert))
+                                        Collections.singletonList(serverCertVerifyFull))
                                 .addAllFields(
-                                        Collections.singletonList(sslcrc))
+                                        Collections.singletonList(sslCrcVerifyFull))
                                 .build())
                 .build();
 
@@ -827,15 +872,26 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
 
             setTimeZoneToUTCIfNeeded(conn);
 
+            // _fivetran_earliest is a transient marker that may appear in
+            // history-mode batch-file headers and request column lists (not just
+            // the earliest-start file — see the end-to-end update-file regression
+            // in UpdateHistoryWriterTest). It is never materialized as a physical
+            // destination column (see TeradataJDBCUtil DDL generation), so it
+            // must be excluded here too — otherwise writers that build explicit
+            // column lists from the full request column set (e.g.
+            // UpdateHistoryWriter#insertNewRow) would reference a column that
+            // does not exist on the table and fail.
+            List<Column> historyColumns = TeradataJDBCUtil.withoutEarliestColumn(request.getTable().getColumnsList());
+
             Logger.logMessage(Logger.LogLevel.INFO,"********************************In EarliestStartHistoryWriter**********************************");
-            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, table, historyColumns,
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be written with earliest start: " + request.getEarliestStartFilesList().size());
             for (String file : request.getEarliestStartFilesList()) {
                 e.write(file);
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In UpdateHistoryWriter**********************************");
-            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
+            UpdateHistoryWriter u = new UpdateHistoryWriter(conn, database, table, historyColumns,
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be updated with history: " + request.getUpdateFilesList().size());
             for (String file : request.getUpdateFilesList()) {
@@ -843,7 +899,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In LoadDataWriter**********************************");
             if (conf.useFastLoad()) {
-                fw = new FastLoadDataWriter(conf, conn, database, table, request.getTable().getColumnsList(),
+                fw = new FastLoadDataWriter(conf, conn, database, table, historyColumns,
                         request.getFileParams(), request.getKeysMap(), conf.batchSize());
                 fw.writeData(request.getReplaceFilesList());
                 if (!request.getReplaceFilesList().isEmpty()) {
@@ -852,7 +908,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                     fw.dropErrorTables();
                 }
             } else {
-                w = new LoadDataWriter(conn, database, table, request.getTable().getColumnsList(),
+                w = new LoadDataWriter(conn, database, table, historyColumns,
                         request.getFileParams(), request.getKeysMap(), conf.batchSize(),
                         new WriteBatchWarningHandler(responseObserver));
                 for (String file : request.getReplaceFilesList()) {
@@ -864,7 +920,7 @@ public class TeradataDestinationServiceImpl extends DestinationConnectorGrpc.Des
                 }
             }
             Logger.logMessage(Logger.LogLevel.INFO, "********************************In DeleteHistoryWriter**********************************");
-            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, request.getTable().getColumnsList(),
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, table, historyColumns,
                     request.getFileParams(), request.getKeysMap(), conf.batchSize());
             Logger.logMessage(Logger.LogLevel.INFO, "No. of files to be deleted with history: " + request.getDeleteFilesList().size());
             for (String file : request.getDeleteFilesList()) {

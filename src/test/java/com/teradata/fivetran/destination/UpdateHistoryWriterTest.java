@@ -1,16 +1,27 @@
 package com.teradata.fivetran.destination;
 
 import com.teradata.fivetran.destination.writers.UpdateHistoryWriter;
+import fivetran_sdk.v2.Column;
+import fivetran_sdk.v2.DataType;
 import fivetran_sdk.v2.FileParams;
 import fivetran_sdk.v2.Table;
+import fivetran_sdk.v2.WriteBatchResponse;
+import fivetran_sdk.v2.WriteHistoryBatchRequest;
+import io.grpc.stub.StreamObserver;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test class for UpdateHistoryWriter.
@@ -154,5 +165,131 @@ public class UpdateHistoryWriterTest extends IntegrationTestBase {
                 Arrays.asList("3", "3", "c", "c", "0", "2005-05-24 20:57:00.0", "2005-05-26 20:56:59.0"),
                 Arrays.asList("3", "3", "c", "c", "1", "2005-05-26 20:57:00.0", "9999-12-31 23:59:59.999999")
         ));
+    }
+
+    /**
+     * Regression test for IDE-26747: _fivetran_earliest is never materialized as a physical
+     * column (see TeradataJDBCUtil DDL filtering), but Fivetran still includes it in the
+     * WriteHistoryBatchRequest's column list and in the update batch file's header. This drives
+     * the real TeradataDestinationServiceImpl#writeHistoryBatch entry point end-to-end (rather
+     * than re-implementing its filtering locally), so a regression in the service's own
+     * _fivetran_earliest exclusion would fail this test: without it, UpdateHistoryWriter's
+     * explicit target column list would reference a column that does not exist on the table
+     * and the incremental update would fail.
+     *
+     * @throws Exception If an error occurs during the test.
+     */
+    @Test
+    public void writeHistoryBatchExcludesFivetranEarliestFromUpdateDml() throws Exception {
+        writeHistoryBatchExcludesFivetranEarliest("earliestServiceTestTrailing",
+                "id,data,_fivetran_start,_fivetran_earliest",
+                "1,f,2005-05-25T20:57:00Z,0");
+    }
+
+    /**
+     * Same regression as {@link #writeHistoryBatchExcludesFivetranEarliestFromUpdateDml()},
+     * but with _fivetran_earliest placed in the middle of the update file header rather than
+     * last, confirming the positional header handling isn't accidentally relying on the marker
+     * always being the final column.
+     *
+     * @throws Exception If an error occurs during the test.
+     */
+    @Test
+    public void writeHistoryBatchExcludesFivetranEarliestFromUpdateDml_midHeader() throws Exception {
+        writeHistoryBatchExcludesFivetranEarliest("earliestServiceTestMidHeader",
+                "id,_fivetran_earliest,data,_fivetran_start",
+                "1,0,f,2005-05-25T20:57:00Z");
+    }
+
+    /**
+     * Regression test for IDE-26747: _fivetran_earliest is never materialized as a physical
+     * column (see TeradataJDBCUtil DDL filtering), but Fivetran still includes it in the
+     * WriteHistoryBatchRequest's column list and in the update batch file's header. This drives
+     * the real TeradataDestinationServiceImpl#writeHistoryBatch entry point end-to-end (rather
+     * than re-implementing its filtering locally), so a regression in the service's own
+     * _fivetran_earliest exclusion would fail this test: without it, UpdateHistoryWriter's
+     * explicit target column list would reference a column that does not exist on the table
+     * and the incremental update would fail.
+     *
+     * @param logicalTable  The (unique) table name to use for this test run.
+     * @param updateHeader  The update batch file's CSV header line.
+     * @param updateRow     The update batch file's single CSV data line.
+     * @throws Exception If an error occurs during the test.
+     */
+    private void writeHistoryBatchExcludesFivetranEarliest(String logicalTable, String updateHeader, String updateRow)
+            throws Exception {
+        String schemaName = "e2e";
+        String tableName = TeradataJDBCUtil.getTableName(schemaName, logicalTable);
+
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            // Physical table WITHOUT _fivetran_earliest, as the fixed connector creates it.
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) + "(" +
+                    "id INT NOT NULL, " +
+                    "data VARCHAR(10), " +
+                    "_fivetran_active BYTEINT, " +
+                    "_fivetran_start TIMESTAMP(6) NOT NULL, " +
+                    "_fivetran_end TIMESTAMP(6), " +
+                    "PRIMARY KEY(id, _fivetran_start))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                    " VALUES(1, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+        }
+
+        // Update batch file: Fivetran still emits _fivetran_earliest positionally in the header.
+        Path updateFile = Files.createTempFile("ide26747-update", ".csv");
+        try {
+            Files.write(updateFile, Arrays.asList(updateHeader, updateRow));
+
+            // Simulate the WriteHistoryBatchRequest's Table.columns: Fivetran still sends
+            // _fivetran_earliest ahead of writeHistoryBatch, even though the connector never
+            // materializes it physically.
+            Table table = Table.newBuilder()
+                    .setName(logicalTable)
+                    .addColumns(Column.newBuilder().setName("id").setType(DataType.INT).setPrimaryKey(true).build())
+                    .addColumns(Column.newBuilder().setName("data").setType(DataType.STRING).build())
+                    .addColumns(Column.newBuilder().setName("_fivetran_active").setType(DataType.BOOLEAN).build())
+                    .addColumns(Column.newBuilder().setName("_fivetran_start").setType(DataType.NAIVE_DATETIME).setPrimaryKey(true).build())
+                    .addColumns(Column.newBuilder().setName("_fivetran_end").setType(DataType.NAIVE_DATETIME).build())
+                    .addColumns(Column.newBuilder().setName("_fivetran_earliest").setType(DataType.BOOLEAN).build())
+                    .build();
+
+            WriteHistoryBatchRequest request = WriteHistoryBatchRequest.newBuilder()
+                    .putAllConfiguration(confMap)
+                    .setSchemaName(schemaName)
+                    .setTable(table)
+                    .setFileParams(FileParams.newBuilder().setNullString("NULL").setUnmodifiedString("unm").build())
+                    .addUpdateFiles(updateFile.toString())
+                    .build();
+
+            AtomicReference<WriteBatchResponse> captured = new AtomicReference<>();
+            new TeradataDestinationServiceImpl().writeHistoryBatch(request, new StreamObserver<WriteBatchResponse>() {
+                @Override
+                public void onNext(WriteBatchResponse value) {
+                    captured.set(value);
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    throw new IllegalStateException(t);
+                }
+
+                @Override
+                public void onCompleted() {
+                }
+            });
+
+            WriteBatchResponse response = captured.get();
+            assertNotNull(response, "writeHistoryBatch did not emit a response");
+            assertTrue(response.getSuccess(),
+                    "writeHistoryBatch failed (likely referencing the non-materialized _fivetran_earliest column): "
+                            + response.getTask().getMessage());
+
+            checkResult("SELECT id, data, _fivetran_active FROM " + TeradataJDBCUtil.escapeTable(conf.database(), tableName) +
+                    " WHERE _fivetran_active = 1 ORDER BY id", Arrays.asList(
+                    Arrays.asList("1", "f", "1")
+            ));
+        } finally {
+            Files.deleteIfExists(updateFile);
+        }
     }
 }

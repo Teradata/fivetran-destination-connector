@@ -22,6 +22,7 @@ public class LoadDataWriter extends Writer {
     private String table;
     private String temp_table;
     private List<Column> headerColumns;
+    private List<Integer> headerColumnRowIndices;
     private String columnNames;
     private Map<String, ColumnMetadata> varcharColumnLengths;
     private final WarningHandler warningHandler;
@@ -60,15 +61,17 @@ public class LoadDataWriter extends Writer {
     public void setHeader(List<String> header) throws SQLException {
         Logger.logMessage(Logger.LogLevel.INFO,
                 String.format("Setting header with columns: %s", header));
-        headerColumns = new ArrayList<>();
         matchingCols = columns.stream()
                 .filter(Column::getPrimaryKey)
                 .collect(Collectors.toList());
-        Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, col -> col));
 
-        for (String name : header) {
-            headerColumns.add(nameToColumn.get(name));
-        }
+        // Header names not found among the physical columns (e.g. the transient
+        // _fivetran_earliest marker, see IDE-26747) are skipped here; rowIndices
+        // lets writeRow still read each surviving value from its original
+        // position in the CSV row.
+        HeaderMapping mapping = resolveHeaderColumns(header, columns);
+        headerColumns = mapping.matchedColumns;
+        headerColumnRowIndices = mapping.rowIndices;
 
         columnNames = headerColumns.stream()
                 .map(Column::getName)
@@ -142,59 +145,61 @@ public class LoadDataWriter extends Writer {
     public void writeRow(List<String> row) throws Exception {
         Logger.logMessage(Logger.debugLogLevel, "#########################LoadDataWriter.writeRow#########################");
         try {
-            for (int i = 0; i < row.size(); i++) {
-                DataType type = headerColumns.get(i).getType();
+            for (int j = 0; j < headerColumns.size(); j++) {
+                int i = headerColumnRowIndices.get(j);
+                DataType type = headerColumns.get(j).getType();
                 String value = row.get(i);
+                int paramIndex = j + 1;
                 if (value == null || value.equals("null") || value.equals(params.getNullString())) {
-                    preparedStatement.setNull(i + 1, getSqlTypeFromDataType(type));
-                    Logger.logMessage(Logger.debugLogLevel, String.format("Set parameter at index %d to NULL", i + 1));
+                    preparedStatement.setNull(paramIndex, getSqlTypeFromDataType(type));
+                    Logger.logMessage(Logger.debugLogLevel, String.format("Set parameter at index %d to NULL", paramIndex));
                     continue;
                 }
                 switch (type) {
                     case BOOLEAN:
                         if (value.equalsIgnoreCase("true")) {
-                            preparedStatement.setByte(i + 1, (byte) 1);
+                            preparedStatement.setByte(paramIndex, (byte) 1);
                         } else if (value.equalsIgnoreCase("false")) {
-                            preparedStatement.setByte(i + 1, (byte) 0);
+                            preparedStatement.setByte(paramIndex, (byte) 0);
                         }
                         break;
                     case SHORT:
                     case INT:
-                        preparedStatement.setInt(i + 1, Integer.parseInt(value));
+                        preparedStatement.setInt(paramIndex, Integer.parseInt(value));
                         break;
                     case LONG:
-                        preparedStatement.setLong(i + 1, Long.parseLong(value));
+                        preparedStatement.setLong(paramIndex, Long.parseLong(value));
                         break;
                     case DECIMAL:
-                        preparedStatement.setBigDecimal(i + 1, new BigDecimal(value));
+                        preparedStatement.setBigDecimal(paramIndex, new BigDecimal(value));
                         break;
                     case FLOAT:
-                        preparedStatement.setFloat(i + 1, Float.parseFloat(value));
+                        preparedStatement.setFloat(paramIndex, Float.parseFloat(value));
                         break;
                     case DOUBLE:
-                        preparedStatement.setDouble(i + 1, Double.parseDouble(value));
+                        preparedStatement.setDouble(paramIndex, Double.parseDouble(value));
                         break;
                     case NAIVE_TIME:
-                        preparedStatement.setTime(i + 1, Time.valueOf(value));
+                        preparedStatement.setTime(paramIndex, Time.valueOf(value));
                         break;
                     case NAIVE_DATE:
-                        preparedStatement.setDate(i + 1, Date.valueOf(value));
+                        preparedStatement.setDate(paramIndex, Date.valueOf(value));
                         break;
                     case NAIVE_DATETIME:
                     case UTC_DATETIME:
-                        preparedStatement.setTimestamp(i + 1, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
+                        preparedStatement.setTimestamp(paramIndex, TeradataJDBCUtil.getTimestampFromObject(TeradataJDBCUtil.formatISODateTime(value)));
                         break;
                     case BINARY:
-                        preparedStatement.setBytes(i + 1, Base64.getDecoder().decode(value));
+                        preparedStatement.setBytes(paramIndex, Base64.getDecoder().decode(value));
                         break;
                     case XML:
                         SQLXML sqlxml = preparedStatement.getConnection().createSQLXML();
                         sqlxml.setString(value);
-                        preparedStatement.setSQLXML(i + 1, sqlxml);
+                        preparedStatement.setSQLXML(paramIndex, sqlxml);
                         break;
                     case STRING:
                         int valueLength = value.length();
-                        String columnName = headerColumns.get(i).getName();
+                        String columnName = headerColumns.get(j).getName();
                         ColumnMetadata meta = varcharColumnLengths.get(columnName);
                         int maxAllowed = meta.getMaxAllowedLength();
                         int currentLen = meta.getLength();
@@ -204,16 +209,16 @@ public class LoadDataWriter extends Writer {
                             TeradataJDBCUtil.resizeVarcharColumn(conn, database, table, temp_table, columnName, currentLen, safeLength);
                             varcharColumnLengths.put(columnName, new ColumnMetadata(safeLength, meta.isUnicode() ? 2 : 1));
                         }
-                        preparedStatement.setString(i + 1, value);
+                        preparedStatement.setString(paramIndex, value);
                         break;
                     case JSON:
-                        preparedStatement.setObject(i + 1, new JSONStruct("JSON", new Object[]{value}));
+                        preparedStatement.setObject(paramIndex, new JSONStruct("JSON", new Object[]{value}));
                         break;
                     default:
-                        preparedStatement.setObject(i + 1, value);
+                        preparedStatement.setObject(paramIndex, value);
                         break;
                 }
-                Logger.logMessage(Logger.debugLogLevel, String.format("Set parameter at index %d: %s", i + 1, value));
+                Logger.logMessage(Logger.debugLogLevel, String.format("Set parameter at index %d: %s", paramIndex, value));
             }
 
             preparedStatement.addBatch();

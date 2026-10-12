@@ -148,4 +148,43 @@ public class DeleteHistoryWriterTest extends IntegrationTestBase {
                 Arrays.asList("3", "3", "c", "1", "2005-05-24 20:57:00.0", "9999-12-31 23:59:59.999999")
         ));
     }
+
+    /**
+     * Regression test for IDE-26747: _fivetran_earliest may appear positionally in a delete
+     * batch file's header, in the middle rather than at the end. DeleteHistoryWriter's
+     * full-width, name-driven header handling must not mis-align subsequent header
+     * positions (here "_fivetran_end") when skipping it.
+     *
+     * @throws Exception If an error occurs during the test.
+     */
+    @Test
+    public void midHeaderFivetranEarliestIsIgnored() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "midHeaderEarliestDelete";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(" +
+                    "id INT NOT NULL, " +
+                    "data VARCHAR(10), " +
+                    "_fivetran_active BYTEINT, " +
+                    "_fivetran_start TIMESTAMP(6) NOT NULL," +
+                    "_fivetran_end TIMESTAMP(6)," +
+                    "PRIMARY KEY(id, _fivetran_start))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 'a', 1, '2005-05-24 20:57:00.000000', '9999-12-31 23:59:59.999999')");
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            FileParams params = FileParams.newBuilder().setNullString("NULL")
+                    .setUnmodifiedString("unm").build();
+
+            // "_fivetran_earliest" sits between "id" and "_fivetran_end" rather than at the
+            // header's end, as the DDL-filtering fix does not control Fivetran's file layout.
+            DeleteHistoryWriter d = new DeleteHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            d.setHeader(Arrays.asList("id", "_fivetran_earliest", "_fivetran_end"));
+            d.writeRow(Arrays.asList("1", "0", "2005-05-25T20:57:00Z"));
+            d.commit();
+        }
+
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id, _fivetran_start", Arrays.asList(
+                Arrays.asList("1", "a", "0", "2005-05-24 20:57:00.0", "2005-05-25 20:57:00.0")
+        ));
+    }
 }

@@ -26,7 +26,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
+
+import com.teradata.fivetran.destination.Logger;
+import com.teradata.fivetran.destination.TeradataJDBCUtil;
 
 public abstract class Writer {
 
@@ -75,6 +79,62 @@ public abstract class Writer {
      * @throws Exception If an error occurs while writing the row.
      */
     public abstract void writeRow(List<String> row) throws Exception;
+
+    /**
+     * The result of matching a CSV batch file header against the physical column
+     * set: the resolved Column for each header name that exists in {@code columns},
+     * and the original header position it came from, so values can still be read
+     * out of each CSV row by index even when some header names are skipped.
+     */
+    public static final class HeaderMapping {
+        public final List<Column> matchedColumns;
+        public final List<Integer> rowIndices;
+
+        private HeaderMapping(List<Column> matchedColumns, List<Integer> rowIndices) {
+            this.matchedColumns = matchedColumns;
+            this.rowIndices = rowIndices;
+        }
+    }
+
+    /**
+     * Resolves a CSV batch file header against the physical column set, skipping
+     * any header name that does not correspond to a physical column (e.g. a
+     * transient Fivetran marker such as _fivetran_earliest, which is deliberately
+     * excluded from the table's DDL/DML but may still appear positionally in a
+     * batch file header). Row-processing writers must use the returned
+     * {@code rowIndices} to look up each row value by its original header
+     * position, rather than assuming the filtered column list lines up 1:1 with
+     * the raw row.
+     *
+     * @param header  The CSV batch file header (column names in file order).
+     * @param columns The physical column set to match header names against.
+     * @return A HeaderMapping pairing each matched Column with its header index.
+     */
+    public static HeaderMapping resolveHeaderColumns(List<String> header, List<Column> columns) {
+        Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, c -> c));
+        List<Column> matchedColumns = new ArrayList<>();
+        List<Integer> rowIndices = new ArrayList<>();
+        for (int i = 0; i < header.size(); i++) {
+            String name = header.get(i);
+            Column column = nameToColumn.get(name);
+            if (column != null) {
+                matchedColumns.add(column);
+                rowIndices.add(i);
+            } else if (TeradataJDBCUtil.FIVETRAN_EARLIEST_COLUMN.equals(name)) {
+                // Transient Fivetran marker column: deliberately excluded from the
+                // table's DDL/DML, but may still appear positionally in a batch
+                // file header. This is the only header name we tolerate being
+                // absent from the physical column set.
+                Logger.logMessage(Logger.LogLevel.WARNING,
+                        String.format("Header column '%s' is a transient Fivetran marker column; skipping it.", name));
+            } else {
+                throw new IllegalStateException(String.format(
+                        "Header column '%s' is not a physical column of the table and is not a recognized " +
+                        "transient Fivetran marker column; refusing to silently drop its values.", name));
+            }
+        }
+        return new HeaderMapping(matchedColumns, rowIndices);
+    }
 
     /**
      * Reads the initialization vector (IV) from the input stream.

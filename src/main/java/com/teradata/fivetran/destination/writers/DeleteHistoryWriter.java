@@ -45,6 +45,16 @@ public class DeleteHistoryWriter extends Writer {
     /**
      * Sets the header for the writer.
      *
+     * <p>Unlike {@link Writer#resolveHeaderColumns}, this intentionally keeps
+     * {@code headerColumns} full-width (one entry per header position,
+     * {@code null} for any name with no matching physical column) rather than
+     * compacting and fail-fast rejecting unknown names. That strictness isn't
+     * needed here: {@link #writeRow} only acts on a header position when its
+     * resolved {@code Column} is non-null, so an unrecognized header name (e.g.
+     * the transient {@code _fivetran_earliest} marker) is simply ignored, never
+     * silently mis-assigned to the wrong column the way a positionally-compacted,
+     * every-column writer like {@link LoadDataWriter} could.
+     *
      * @param header The list of header column names.
      * @throws SQLException If an SQL error occurs.
      * @throws IOException If an I/O error occurs.

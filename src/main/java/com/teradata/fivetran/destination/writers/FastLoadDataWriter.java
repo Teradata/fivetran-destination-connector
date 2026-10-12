@@ -148,13 +148,13 @@ public class FastLoadDataWriter {
         matchingCols = columns.stream()
                 .filter(Column::getPrimaryKey)
                 .collect(Collectors.toList());
-        Map<String, Column> nameToColumn = columns.stream().collect(Collectors.toMap(Column::getName, col -> col));
 
         Logger.logMessage(Logger.LogLevel.INFO, "Header: " + header);
-        headerColumns = new ArrayList<>();
-        for (String name : header) {
-            headerColumns.add(nameToColumn.get(name));
-        }
+        // Header names not found among the physical columns (e.g. the transient
+        // _fivetran_earliest marker, see IDE-26747) are skipped; this writer only
+        // uses headerColumns to build the temp table's DDL/column list, so no
+        // row-index tracking is needed beyond this point.
+        headerColumns = Writer.resolveHeaderColumns(header, columns).matchedColumns;
 
         columnNames = headerColumns.stream()
                 .map(Column::getName)

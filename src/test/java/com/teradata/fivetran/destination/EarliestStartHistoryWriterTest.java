@@ -146,4 +146,44 @@ public class EarliestStartHistoryWriterTest extends IntegrationTestBase {
                 Arrays.asList("3", "3", "c", "1", "2005-05-24 20:57:00.0", "9999-12-31 23:59:59.999999")
         ));
     }
+
+    /**
+     * Regression test for IDE-26747: _fivetran_earliest may appear positionally in an
+     * earliest-start batch file's header before "_fivetran_start" rather than after it.
+     * EarliestStartHistoryWriter locates "_fivetran_start" purely by scanning the header, so
+     * this confirms it isn't accidentally relying on a fixed/trailing position for the marker.
+     *
+     * @throws Exception If an error occurs during the test.
+     */
+    @Test
+    public void midHeaderFivetranEarliestIsIgnored() throws Exception {
+        String tableName = IntegrationTestBase.schema + "_" + "midHeaderEarliestStart";
+        try (Connection conn = TeradataJDBCUtil.createConnection(conf);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + "(" +
+                    "id INT NOT NULL, " +
+                    "data VARCHAR(10), " +
+                    "_fivetran_active BYTEINT, " +
+                    "_fivetran_start TIMESTAMP(6) NOT NULL," +
+                    "_fivetran_end TIMESTAMP(6)," +
+                    "PRIMARY KEY(id, _fivetran_start))");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 'a', 1, '2005-05-24 20:57:00.0', '9999-12-31 23:59:59.999999')");
+            stmt.execute("INSERT INTO " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " VALUES(1, 'd', 0, '2005-05-23 20:57:00.0', '2005-05-24 20:56:59.999999')");
+
+            Table t = TeradataJDBCUtil.getTable(conf, database, tableName, tableName, testWarningHandle);
+            FileParams params = FileParams.newBuilder().setNullString("NULL")
+                    .setUnmodifiedString("unm").build();
+
+            // "_fivetran_earliest" sits between "id" and "_fivetran_start" rather than at the
+            // header's end, as the DDL-filtering fix does not control Fivetran's file layout.
+            EarliestStartHistoryWriter e = new EarliestStartHistoryWriter(conn, database, t.getName(), t.getColumnsList(), params, null, 123);
+            e.setHeader(Arrays.asList("id", "_fivetran_earliest", "_fivetran_start"));
+            e.writeRow(Arrays.asList("1", "0", "2005-05-23T21:57:00Z"));
+            e.commit();
+        }
+
+        checkResult("SELECT * FROM " + TeradataJDBCUtil.escapeTable(conf.database(),tableName) + " ORDER BY id, _fivetran_start", Arrays.asList(
+                Arrays.asList("1", "d", "0", "2005-05-23 20:57:00.0", "2005-05-24 20:56:59.999999")
+        ));
+    }
 }

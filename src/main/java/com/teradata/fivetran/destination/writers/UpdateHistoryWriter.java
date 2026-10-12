@@ -53,6 +53,18 @@ public class UpdateHistoryWriter extends Writer {
     /**
      * Sets the header for the writer.
      *
+     * <p>Unlike {@link Writer#resolveHeaderColumns}, this intentionally keeps
+     * {@code headerColumns} full-width (one entry per header position,
+     * {@code null} for any name with no matching physical column) rather than
+     * compacting and fail-fast rejecting unknown names. That strictness isn't
+     * needed here: every consumer below only acts on a header position when its
+     * resolved {@code Column} is non-null (and, for row construction, only
+     * values matched back to a named physical column via {@code nameToHeaderPos}
+     * are ever read) — so an unrecognized header name (e.g. the transient
+     * {@code _fivetran_earliest} marker) is simply ignored, never silently
+     * mis-assigned to the wrong column the way a positionally-compacted,
+     * every-column writer like {@link LoadDataWriter} could.
+     *
      * @param header The list of header column names.
      */
     @Override

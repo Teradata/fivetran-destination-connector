@@ -33,17 +33,24 @@ dependencies {
 
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.2'
-    implementation "com.fasterxml.jackson.core:jackson-core:2.21.2"
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.7'
+    implementation "com.fasterxml.jackson.core:jackson-core:2.21.7"
     implementation "commons-cli:commons-cli:1.5.0"
     implementation 'commons-logging:commons-logging:1.2'
-    implementation 'com.github.luben:zstd-jni:1.5.5-11'
-    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.2'
+    implementation 'com.github.luben:zstd-jni:1.5.7-14'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.21.7'
     implementation 'com.teradata.jdbc:terajdbc:20.00.00.46'
-    implementation 'org.slf4j:slf4j-api:2.0.12'
-    implementation 'ch.qos.logback:logback-core:1.5.25'
-    implementation 'ch.qos.logback:logback-classic:1.5.25'
+    implementation 'org.slf4j:slf4j-api:2.0.19'
+    implementation 'ch.qos.logback:logback-core:1.6.5'
+    implementation 'ch.qos.logback:logback-classic:1.6.5'
     implementation 'com.opencsv:opencsv:5.12.0'
+
+    // Pin transitive guava (pulled in by grpc) to a release fixing SNYK-JAVA-COMGOOGLEGUAVA-20825054
+    constraints {
+        implementation('com.google.guava:guava:33.7.2-jre') {
+            because 'Snyk fixes this only in the -jre flavor (33.7.2-jre+); runtime is Java 11+'
+        }
+    }
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
